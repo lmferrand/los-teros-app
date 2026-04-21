@@ -26,7 +26,7 @@ export default function Clientes() {
   }
 
   async function cargarClientes() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('clientes')
       .select('*')
       .order('created_at', { ascending: false })
@@ -40,27 +40,32 @@ export default function Clientes() {
       nombre, direccion, telefono, email, notas
     })
     if (!error) {
-      setNombre(''); setDireccion(''); setTelefono('')
-      setEmail(''); setNotas('')
+      setNombre('')
+      setDireccion('')
+      setTelefono('')
+      setEmail('')
+      setNotas('')
       setMostrarForm(false)
       cargarClientes()
     }
   }
 
   async function eliminarCliente(id: string) {
-    if (!confirm('¿Eliminar este cliente?')) return
+    if (!confirm('Eliminar este cliente?')) return
     await supabase.from('clientes').delete().eq('id', id)
     cargarClientes()
   }
 
-  const mapUrl = (dir: string) =>
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}`
+  function abrirMaps(dir: string) {
+    const url = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir)
+    window.open(url, '_blank')
+  }
 
   return (
     <div className="min-h-screen bg-gray-950">
       <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">← Dashboard</a>
+          <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
           <h1 className="text-xl font-bold text-white">Clientes</h1>
         </div>
         <button
@@ -77,7 +82,7 @@ export default function Clientes() {
             <h2 className="text-white font-semibold mb-4">Nuevo cliente</h2>
             <form onSubmit={guardarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Nombre *</label>
+                <label className="text-gray-400 text-xs uppercase mb-1 block">Nombre</label>
                 <input
                   value={nombre}
                   onChange={e => setNombre(e.target.value)}
@@ -96,7 +101,7 @@ export default function Clientes() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Direccion completa</label>
+                <label className="text-gray-400 text-xs uppercase mb-1 block">Direccion</label>
                 <input
                   value={direccion}
                   onChange={e => setDireccion(e.target.value)}
@@ -124,7 +129,7 @@ export default function Clientes() {
               </div>
               <div className="md:col-span-2 flex gap-3">
                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
-                  Guardar cliente
+                  Guardar
                 </button>
                 <button type="button" onClick={() => setMostrarForm(false)} className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm">
                   Cancelar
@@ -138,7 +143,7 @@ export default function Clientes() {
           <p className="text-gray-400">Cargando...</p>
         ) : clientes.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
-            <div className="text-4xl mb-3">🏢</div>
+            <p className="text-4xl mb-3">🏢</p>
             <p>No hay clientes. Añade el primero.</p>
           </div>
         ) : (
@@ -161,13 +166,12 @@ export default function Clientes() {
                     <td className="px-4 py-3 text-gray-400 text-xs">{c.direccion || '—'}</td>
                     <td className="px-4 py-3">
                       {c.direccion && (
-                        
-                          href={mapUrl(c.direccion)}
-                          target="_blank"
+                        <button
+                          onClick={() => abrirMaps(c.direccion)}
                           className="text-blue-400 hover:text-blue-300 text-xs"
                         >
-                          📍 Maps
-                        </a>
+                          Maps
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
