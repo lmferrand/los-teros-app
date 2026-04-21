@@ -13,10 +13,9 @@ export default function Ordenes() {
   const [filtroEstado, setFiltroEstado] = useState('')
   const router = useRouter()
 
-  const [codigo, setCodigo] = useState('')
   const [tipo, setTipo] = useState('limpieza')
   const [clienteId, setClienteId] = useState('')
-  const [tecnicoId, setTecnicoId] = useState('')
+  const [tecnicosSeleccionados, setTecnicosSeleccionados] = useState<string[]>([])
   const [fecha, setFecha] = useState('')
   const [prioridad, setPrioridad] = useState('normal')
   const [estado, setEstado] = useState('pendiente')
@@ -35,7 +34,7 @@ export default function Ordenes() {
 
   async function cargarDatos() {
     const [ords, clis, tecs] = await Promise.all([
-      supabase.from('ordenes').select('*, clientes(nombre), perfiles(nombre)').order('created_at', { ascending: false }),
+      supabase.from('ordenes').select('*, clientes(nombre)').order('created_at', { ascending: false }),
       supabase.from('clientes').select('*').order('nombre'),
       supabase.from('perfiles').select('*').order('nombre'),
     ])
@@ -43,6 +42,12 @@ export default function Ordenes() {
     if (clis.data) setClientes(clis.data)
     if (tecs.data) setTecnicos(tecs.data)
     setLoading(false)
+  }
+
+  function toggleTecnico(id: string) {
+    setTecnicosSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
+    )
   }
 
   async function generarCodigo(tipo: string) {
@@ -59,7 +64,8 @@ export default function Ordenes() {
       codigo: nuevoCodigo,
       tipo,
       cliente_id: clienteId,
-      tecnico_id: tecnicoId || null,
+      tecnico_id: tecnicosSeleccionados[0] || null,
+      tecnicos_ids: tecnicosSeleccionados,
       fecha_programada: fecha,
       prioridad,
       estado,
@@ -71,7 +77,7 @@ export default function Ordenes() {
       setDescripcion('')
       setObservaciones('')
       setClienteId('')
-      setTecnicoId('')
+      setTecnicosSeleccionados([])
       cargarDatos()
     }
   }
@@ -85,6 +91,11 @@ export default function Ordenes() {
     if (!confirm('Eliminar esta orden?')) return
     await supabase.from('ordenes').delete().eq('id', id)
     cargarDatos()
+  }
+
+  function getNombresTecnicos(ids: string[]) {
+    if (!ids || ids.length === 0) return 'Sin asignar'
+    return ids.map(id => tecnicos.find(t => t.id === id)?.nombre || '').filter(Boolean).join(', ')
   }
 
   const ESTADOS: any = {
@@ -165,18 +176,29 @@ export default function Ordenes() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Trabajador</label>
-                <select
-                  value={tecnicoId}
-                  onChange={e => setTecnicoId(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
-                  <option value="">Sin asignar</option>
+              <div className="md:col-span-2">
+                <label className="text-gray-400 text-xs uppercase mb-2 block">Trabajadores asignados</label>
+                <div className="flex flex-wrap gap-2">
                   {tecnicos.map(t => (
-                    <option key={t.id} value={t.id}>{t.nombre}</option>
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => toggleTecnico(t.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                        tecnicosSeleccionados.includes(t.id)
+                          ? 'bg-blue-600 border-blue-500 text-white'
+                          : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'
+                      }`}
+                    >
+                      {t.nombre}
+                    </button>
                   ))}
-                </select>
+                </div>
+                {tecnicosSeleccionados.length > 0 && (
+                  <p className="text-blue-400 text-xs mt-2">
+                    Seleccionados: {getNombresTecnicos(tecnicosSeleccionados)}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Fecha programada</label>
@@ -260,7 +282,7 @@ export default function Ordenes() {
               <div key={o.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="flex items-start justify-between flex-wrap gap-3">
                   <div>
-                    <div className="flex items-center gap-3 mb-1">
+                    <div className="flex items-center gap-3 mb-1 flex-wrap">
                       <span className="text-blue-400 font-mono text-sm">{o.codigo}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${ESTADOS[o.estado] || 'bg-gray-800 text-gray-400'}`}>
                         {o.estado.replace('_', ' ')}
@@ -271,9 +293,10 @@ export default function Ordenes() {
                     </div>
                     <p className="text-white font-medium">{o.clientes?.nombre || '—'}</p>
                     <p className="text-gray-400 text-sm mt-1">{o.descripcion}</p>
-                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                      <span>Trabajador: {o.perfiles?.nombre || 'Sin asignar'}</span>
+                    <div className="flex gap-4 mt-2 text-xs text-gray-500 flex-wrap">
+                      <span>Trabajadores: {getNombresTecnicos(o.tecnicos_ids || [])}</span>
                       <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '—'}</span>
+                      <span>Tipo: {o.tipo}</span>
                     </div>
                   </div>
                   <div className="flex gap-2 flex-wrap">
