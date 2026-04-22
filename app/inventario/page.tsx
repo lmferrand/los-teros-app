@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import QRCode from 'qrcode'
 
 export default function Inventario() {
   const [materiales, setMateriales] = useState<any[]>([])
@@ -72,9 +73,15 @@ export default function Inventario() {
       setFotoUrl(mat.foto_url || '')
     } else {
       setEditando(null)
-      setNombre(''); setReferencia(''); setCategoria('limpieza')
-      setUnidad('unidad'); setStock('0'); setMinimo('5')
-      setUbicacion(''); setNotas(''); setFotoUrl('')
+      setNombre('')
+      setReferencia('')
+      setCategoria('limpieza')
+      setUnidad('unidad')
+      setStock('0')
+      setMinimo('5')
+      setUbicacion('')
+      setNotas('')
+      setFotoUrl('')
     }
     setMostrarForm(true)
   }
@@ -112,6 +119,45 @@ export default function Inventario() {
     cargarMateriales()
   }
 
+  async function generarQR(mat: any) {
+    const datos = JSON.stringify({ tipo: 'material', id: mat.id, nombre: mat.nombre })
+    const url = await QRCode.toDataURL(datos, { width: 300, margin: 2 })
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(`
+        <html>
+        <head>
+          <title>QR - ${mat.nombre}</title>
+          <style>
+            body { font-family: sans-serif; text-align: center; padding: 30px; background: #fff; }
+            .etiqueta { border: 2px solid #000; padding: 20px; display: inline-block; margin: 10px; border-radius: 8px; }
+            h2 { margin: 10px 0 5px; font-size: 18px; }
+            p { margin: 4px 0; font-size: 13px; color: #444; }
+            .ref { font-size: 11px; color: #888; font-family: monospace; }
+            .footer { font-size: 10px; color: #999; margin-top: 8px; }
+            @media print { button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="etiqueta">
+            <img src="${url}" style="width:200px;height:200px">
+            <h2>${mat.nombre}</h2>
+            <p class="ref">Ref: ${mat.referencia || '—'}</p>
+            <p>Ubicacion: ${mat.ubicacion || '—'}</p>
+            <p>Stock actual: ${mat.stock || 0} ${mat.unidad || ''}</p>
+            <p class="footer">Los Teros — Escanea para registrar salida</p>
+          </div>
+          <br>
+          <button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#2563eb;color:#fff;border:none;border-radius:8px;margin-top:10px">
+            Imprimir etiqueta
+          </button>
+        </body>
+        </html>
+      `)
+      win.document.close()
+    }
+  }
+
   const stockBajo = materiales.filter(m => (m.stock || 0) < (m.minimo || 0))
 
   return (
@@ -121,12 +167,20 @@ export default function Inventario() {
           <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
           <h1 className="text-xl font-bold text-white">Inventario</h1>
         </div>
-        <button
-          onClick={() => abrirForm()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
-        >
-          + Nuevo material
-        </button>
+        <div className="flex items-center gap-3">
+          
+            href="/escanear"
+            className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+          >
+            Escanear QR
+          </a>
+          <button
+            onClick={() => abrirForm()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
+          >
+            + Nuevo material
+          </button>
+        </div>
       </div>
 
       <div className="p-6">
@@ -153,30 +207,15 @@ export default function Inventario() {
             <form onSubmit={guardarMaterial} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Nombre</label>
-                <input
-                  value={nombre}
-                  onChange={e => setNombre(e.target.value)}
-                  required
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="Desengrasante industrial"
-                />
+                <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Desengrasante industrial" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Referencia</label>
-                <input
-                  value={referencia}
-                  onChange={e => setReferencia(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="REF-001"
-                />
+                <input value={referencia} onChange={e => setReferencia(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="REF-001" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Categoria</label>
-                <select
-                  value={categoria}
-                  onChange={e => setCategoria(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
+                <select value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
                   <option value="limpieza">Limpieza</option>
                   <option value="filtros">Filtros</option>
                   <option value="repuestos">Repuestos</option>
@@ -186,11 +225,7 @@ export default function Inventario() {
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Unidad</label>
-                <select
-                  value={unidad}
-                  onChange={e => setUnidad(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
+                <select value={unidad} onChange={e => setUnidad(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
                   <option value="unidad">Unidad</option>
                   <option value="litro">Litro</option>
                   <option value="kg">Kg</option>
@@ -201,52 +236,25 @@ export default function Inventario() {
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Stock actual</label>
-                <input
-                  type="number"
-                  value={stock}
-                  onChange={e => setStock(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                />
+                <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Stock minimo alerta</label>
-                <input
-                  type="number"
-                  value={minimo}
-                  onChange={e => setMinimo(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                />
+                <input type="number" value={minimo} onChange={e => setMinimo(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Ubicacion almacen</label>
-                <input
-                  value={ubicacion}
-                  onChange={e => setUbicacion(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="Estanteria A, balda 3"
-                />
+                <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Estanteria A, balda 3" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Notas</label>
-                <input
-                  value={notas}
-                  onChange={e => setNotas(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="Proveedor, especificaciones..."
-                />
+                <input value={notas} onChange={e => setNotas(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Proveedor, especificaciones..." />
               </div>
               <div className="md:col-span-2">
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Foto del material</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={subirFoto}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                />
+                <input type="file" accept="image/*" onChange={subirFoto} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
                 {subiendo && <p className="text-blue-400 text-xs mt-1">Subiendo foto...</p>}
-                {fotoUrl && (
-                  <img src={fotoUrl} alt="foto" className="mt-2 h-20 w-20 object-cover rounded-lg border border-gray-700" />
-                )}
+                {fotoUrl && <img src={fotoUrl} alt="foto" className="mt-2 h-20 w-20 object-cover rounded-lg border border-gray-700" />}
               </div>
               <div className="md:col-span-2 flex gap-3">
                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
@@ -288,9 +296,7 @@ export default function Inventario() {
                       {m.foto_url ? (
                         <img src={m.foto_url} alt={m.nombre} className="w-10 h-10 object-cover rounded-lg border border-gray-700" />
                       ) : (
-                        <div className="w-10 h-10 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center text-gray-600 text-xs">
-                          📦
-                        </div>
+                        <div className="w-10 h-10 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center text-gray-600 text-xs">📦</div>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -300,27 +306,20 @@ export default function Inventario() {
                     <td className="px-4 py-3 text-gray-400">{m.categoria}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => ajustarStock(m.id, -1)}
-                          className="w-6 h-6 bg-gray-800 hover:bg-gray-700 text-white rounded text-xs"
-                        >
-                          -
-                        </button>
+                        <button onClick={() => ajustarStock(m.id, -1)} className="w-6 h-6 bg-gray-800 hover:bg-gray-700 text-white rounded text-xs">-</button>
                         <span className={`font-mono font-bold ${(m.stock || 0) < (m.minimo || 0) ? 'text-red-400' : 'text-white'}`}>
                           {m.stock || 0} {m.unidad}
                         </span>
-                        <button
-                          onClick={() => ajustarStock(m.id, 1)}
-                          className="w-6 h-6 bg-gray-800 hover:bg-gray-700 text-white rounded text-xs"
-                        >
-                          +
-                        </button>
+                        <button onClick={() => ajustarStock(m.id, 1)} className="w-6 h-6 bg-gray-800 hover:bg-gray-700 text-white rounded text-xs">+</button>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-400 text-xs">{m.minimo || 0} {m.unidad}</td>
                     <td className="px-4 py-3 text-gray-400 text-xs">{m.ubicacion || '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex gap-2 justify-end">
+                        <button onClick={() => generarQR(m)} className="text-green-400 hover:text-green-300 text-xs">
+                          QR
+                        </button>
                         <button onClick={() => abrirForm(m)} className="text-blue-400 hover:text-blue-300 text-xs">
                           Editar
                         </button>

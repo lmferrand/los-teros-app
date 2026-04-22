@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import QRCode from 'qrcode'
 
 export default function Equipos() {
   const [equipos, setEquipos] = useState<any[]>([])
@@ -50,9 +51,13 @@ export default function Equipos() {
       setNotas(eq.notas || '')
     } else {
       setEditando(null)
-      setCodigo(''); setTipo('turbina'); setMarca('')
-      setModelo(''); setEstado('disponible')
-      setUbicacion(''); setNotas('')
+      setCodigo('')
+      setTipo('turbina')
+      setMarca('')
+      setModelo('')
+      setEstado('disponible')
+      setUbicacion('')
+      setNotas('')
     }
     setMostrarForm(true)
   }
@@ -81,6 +86,89 @@ export default function Equipos() {
     cargarEquipos()
   }
 
+  async function generarQREquipo(eq: any) {
+    const datos = JSON.stringify({ tipo: 'equipo', id: eq.id, codigo: eq.codigo })
+    const url = await QRCode.toDataURL(datos, { width: 300, margin: 2 })
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(`
+        <html>
+        <head>
+          <title>QR - ${eq.codigo}</title>
+          <style>
+            body { font-family: sans-serif; text-align: center; padding: 30px; background: #fff; }
+            .etiqueta { border: 2px solid #000; padding: 20px; display: inline-block; margin: 10px; border-radius: 8px; }
+            h2 { margin: 10px 0 5px; font-size: 18px; }
+            p { margin: 4px 0; font-size: 13px; color: #444; }
+            .cod { font-size: 14px; font-weight: bold; font-family: monospace; color: #1d4ed8; }
+            .footer { font-size: 10px; color: #999; margin-top: 8px; }
+            @media print { button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="etiqueta">
+            <img src="${url}" style="width:200px;height:200px">
+            <h2 class="cod">${eq.codigo}</h2>
+            <p>${eq.tipo.charAt(0).toUpperCase() + eq.tipo.slice(1).replace('_', ' ')}</p>
+            <p>${eq.marca || ''} ${eq.modelo || ''}</p>
+            <p>Ubicacion: ${eq.ubicacion || '—'}</p>
+            <p class="footer">Los Teros — Escanea para registrar movimiento</p>
+          </div>
+          <br>
+          <button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#2563eb;color:#fff;border:none;border-radius:8px;margin-top:10px">
+            Imprimir etiqueta
+          </button>
+        </body>
+        </html>
+      `)
+      win.document.close()
+    }
+  }
+
+  async function generarQRTodos() {
+    for (const eq of equipos) {
+      const datos = JSON.stringify({ tipo: 'equipo', id: eq.id, codigo: eq.codigo })
+      const url = await QRCode.toDataURL(datos, { width: 200, margin: 1 })
+      eq._qrUrl = url
+    }
+    const win = window.open('', '_blank')
+    if (win) {
+      win.document.write(`
+        <html>
+        <head>
+          <title>QR Todos los equipos - Los Teros</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; background: #fff; }
+            h1 { font-size: 20px; margin-bottom: 20px; }
+            .grid { display: flex; flex-wrap: wrap; gap: 15px; }
+            .etiqueta { border: 2px solid #000; padding: 12px; border-radius: 6px; text-align: center; width: 180px; }
+            h3 { margin: 6px 0 3px; font-size: 13px; font-family: monospace; color: #1d4ed8; }
+            p { margin: 2px 0; font-size: 10px; color: #555; }
+            @media print { button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <h1>Los Teros — QR de todos los equipos</h1>
+          <button onclick="window.print()" style="padding:10px 20px;font-size:14px;cursor:pointer;background:#2563eb;color:#fff;border:none;border-radius:6px;margin-bottom:20px">
+            Imprimir todos
+          </button>
+          <div class="grid">
+            ${equipos.map(eq => `
+              <div class="etiqueta">
+                <img src="${eq._qrUrl}" style="width:140px;height:140px">
+                <h3>${eq.codigo}</h3>
+                <p>${eq.tipo} ${eq.marca || ''}</p>
+                <p>${eq.modelo || ''}</p>
+              </div>
+            `).join('')}
+          </div>
+        </body>
+        </html>
+      `)
+      win.document.close()
+    }
+  }
+
   const ESTADOS: any = {
     disponible: { clase: 'bg-green-900 text-green-300', label: 'Disponible' },
     en_cliente: { clase: 'bg-yellow-900 text-yellow-300', label: 'En cliente' },
@@ -100,12 +188,20 @@ export default function Equipos() {
           <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
           <h1 className="text-xl font-bold text-white">Equipos de sustitucion</h1>
         </div>
-        <button
-          onClick={() => abrirForm()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
-        >
-          + Nuevo equipo
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={generarQRTodos}
+            className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+          >
+            QR todos los equipos
+          </button>
+          <button
+            onClick={() => abrirForm()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
+          >
+            + Nuevo equipo
+          </button>
+        </div>
       </div>
 
       <div className="p-6">
@@ -145,21 +241,11 @@ export default function Equipos() {
             <form onSubmit={guardarEquipo} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Codigo</label>
-                <input
-                  value={codigo}
-                  onChange={e => setCodigo(e.target.value)}
-                  required
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="TRB-001"
-                />
+                <input value={codigo} onChange={e => setCodigo(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="TRB-001" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Tipo</label>
-                <select
-                  value={tipo}
-                  onChange={e => setTipo(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
+                <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
                   <option value="turbina">Turbina</option>
                   <option value="motor">Motor</option>
                   <option value="caja_extraccion">Caja extraccion</option>
@@ -168,29 +254,15 @@ export default function Equipos() {
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Marca</label>
-                <input
-                  value={marca}
-                  onChange={e => setMarca(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="Soler&Palau"
-                />
+                <input value={marca} onChange={e => setMarca(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Soler&Palau" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Modelo</label>
-                <input
-                  value={modelo}
-                  onChange={e => setModelo(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="CVST-25/13"
-                />
+                <input value={modelo} onChange={e => setModelo(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="CVST-25/13" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Estado</label>
-                <select
-                  value={estado}
-                  onChange={e => setEstado(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
+                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
                   <option value="disponible">Disponible</option>
                   <option value="en_cliente">En cliente</option>
                   <option value="pendiente_limpieza">Pendiente limpieza</option>
@@ -200,22 +272,11 @@ export default function Equipos() {
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Ubicacion</label>
-                <input
-                  value={ubicacion}
-                  onChange={e => setUbicacion(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="Nave principal, zona A"
-                />
+                <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Nave principal, zona A" />
               </div>
               <div className="md:col-span-2">
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Notas tecnicas</label>
-                <textarea
-                  value={notas}
-                  onChange={e => setNotas(e.target.value)}
-                  rows={2}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="Caracteristicas, observaciones..."
-                />
+                <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
               </div>
               <div className="md:col-span-2 flex gap-3">
                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
@@ -234,7 +295,7 @@ export default function Equipos() {
         ) : equipos.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
             <p className="text-4xl mb-3">⚙️</p>
-            <p>No hay equipos registrados. Añade el primero.</p>
+            <p>No hay equipos registrados.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -253,46 +314,34 @@ export default function Equipos() {
                   </span>
                 </div>
                 {e.ubicacion && (
-                  <p className="text-gray-500 text-xs mb-3">📍 {e.ubicacion}</p>
+                  <p className="text-gray-500 text-xs mb-3">Ubicacion: {e.ubicacion}</p>
                 )}
                 {e.notas && (
                   <p className="text-gray-500 text-xs mb-3">{e.notas}</p>
                 )}
                 <div className="border-t border-gray-800 pt-3 flex flex-wrap gap-2">
-                  {e.estado === 'pendiente_limpieza' || e.estado === 'pendiente_revision' ? (
-                    <button
-                      onClick={() => cambiarEstado(e.id, 'disponible')}
-                      className="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1 rounded text-xs"
-                    >
+                  {(e.estado === 'pendiente_limpieza' || e.estado === 'pendiente_revision') && (
+                    <button onClick={() => cambiarEstado(e.id, 'disponible')} className="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1 rounded text-xs">
                       Marcar disponible
                     </button>
-                  ) : null}
+                  )}
                   {e.estado === 'disponible' && (
-                    <button
-                      onClick={() => cambiarEstado(e.id, 'en_cliente')}
-                      className="bg-yellow-900 hover:bg-yellow-800 text-yellow-300 px-3 py-1 rounded text-xs"
-                    >
+                    <button onClick={() => cambiarEstado(e.id, 'en_cliente')} className="bg-yellow-900 hover:bg-yellow-800 text-yellow-300 px-3 py-1 rounded text-xs">
                       Enviar a cliente
                     </button>
                   )}
                   {e.estado === 'en_cliente' && (
-                    <button
-                      onClick={() => cambiarEstado(e.id, 'pendiente_limpieza')}
-                      className="bg-purple-900 hover:bg-purple-800 text-purple-300 px-3 py-1 rounded text-xs"
-                    >
+                    <button onClick={() => cambiarEstado(e.id, 'pendiente_limpieza')} className="bg-purple-900 hover:bg-purple-800 text-purple-300 px-3 py-1 rounded text-xs">
                       Devolver
                     </button>
                   )}
-                  <button
-                    onClick={() => abrirForm(e)}
-                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-xs"
-                  >
+                  <button onClick={() => generarQREquipo(e)} className="bg-green-900 hover:bg-green-800 text-green-300 px-3 py-1 rounded text-xs">
+                    QR
+                  </button>
+                  <button onClick={() => abrirForm(e)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-xs">
                     Editar
                   </button>
-                  <button
-                    onClick={() => eliminarEquipo(e.id)}
-                    className="bg-gray-800 hover:bg-gray-700 text-red-400 px-3 py-1 rounded text-xs"
-                  >
+                  <button onClick={() => eliminarEquipo(e.id)} className="bg-gray-800 hover:bg-gray-700 text-red-400 px-3 py-1 rounded text-xs">
                     Eliminar
                   </button>
                 </div>

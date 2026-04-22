@@ -205,7 +205,7 @@ export default function Ordenes() {
           <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
           <h1 className="text-xl font-bold text-white">Ordenes de trabajo</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select
             value={filtroEstado}
             onChange={e => setFiltroEstado(e.target.value)}
@@ -217,10 +217,7 @@ export default function Ordenes() {
             <option value="completada">Completada</option>
             <option value="cancelada">Cancelada</option>
           </select>
-          <button
-            onClick={abrirFormNuevo}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
-          >
+          <button onClick={abrirFormNuevo} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
             + Nueva OT
           </button>
         </div>
@@ -353,6 +350,17 @@ export default function Ordenes() {
                   </div>
                 )}
 
+                <div className="bg-green-950 border border-green-800 rounded-xl p-4 mb-4">
+                  <p className="text-green-300 font-medium text-sm mb-2">Escanear material o equipo</p>
+                  <p className="text-green-400 text-xs mb-3">Escanea el QR de cualquier material o equipo para registrar su salida vinculada a esta OT automaticamente.</p>
+                  <button
+                    onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
+                    className="w-full bg-green-700 hover:bg-green-600 text-white px-4 py-3 rounded-lg text-sm font-medium"
+                  >
+                    Abrir escaner QR
+                  </button>
+                </div>
+
                 <div className="border-t border-gray-800 pt-4 mb-4">
                   <h3 className="text-white font-semibold mb-3">Fotos</h3>
                   {subiendo && <p className="text-blue-400 text-sm mb-3">Subiendo foto...</p>}
@@ -419,7 +427,7 @@ export default function Ordenes() {
         ) : (
           <div className="flex flex-col gap-3">
             {ordenesFiltradas.map(o => (
-              <div key={o.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5 cursor-pointer hover:border-gray-700 transition-colors" onClick={() => abrirDetalle(o)}>
+              <div key={o.id} onClick={() => abrirDetalle(o)} className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl p-5 cursor-pointer transition-colors">
                 <div className="flex items-start justify-between flex-wrap gap-3">
                   <div>
                     <div className="flex items-center gap-3 mb-1 flex-wrap">
