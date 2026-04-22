@@ -61,7 +61,7 @@ export default function Planificacion() {
     const mes = mesActual.getMonth()
     const primerDia = new Date(anio, mes, 1)
     const ultimoDia = new Date(anio, mes + 1, 0)
-    const dias = []
+    const dias: any[] = []
     let diaSemana = primerDia.getDay()
     diaSemana = diaSemana === 0 ? 6 : diaSemana - 1
     for (let i = 0; i < diaSemana; i++) dias.push(null)
@@ -113,11 +113,11 @@ export default function Planificacion() {
         </div>
         <div className="flex items-center gap-3">
           <button onClick={mesAnterior} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm">
-            ‹
+            Anterior
           </button>
           <span className="text-white font-mono font-bold text-sm min-w-40 text-center">{tituloMes}</span>
           <button onClick={mesSiguiente} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm">
-            ›
+            Siguiente
           </button>
         </div>
       </div>
@@ -131,7 +131,7 @@ export default function Planificacion() {
                   <span className="text-blue-400 font-mono text-sm">{ordenSeleccionada.codigo}</span>
                   <h2 className="text-white font-bold text-lg mt-1">{getNombreCliente(ordenSeleccionada.cliente_id)}</h2>
                 </div>
-                <button onClick={() => setOrdenSeleccionada(null)} className="text-gray-400 hover:text-white text-xl">✕</button>
+                <button onClick={() => setOrdenSeleccionada(null)} className="text-gray-400 hover:text-white text-xl">X</button>
               </div>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
@@ -148,7 +148,7 @@ export default function Planificacion() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Fecha</span>
-                  <span className="text-white">{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-white">{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Trabajadores</span>
@@ -168,12 +168,12 @@ export default function Planificacion() {
                 )}
               </div>
               <div className="mt-5 flex gap-3">
-                
-                  href="/ordenes"
+                <button
+                  onClick={() => router.push('/ordenes')}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
                 >
                   Ver todas las OT
-                </a>
+                </button>
                 <button
                   onClick={() => setOrdenSeleccionada(null)}
                   className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm"
@@ -228,7 +228,7 @@ export default function Planificacion() {
                 <div
                   key={o.id}
                   onClick={() => setOrdenSeleccionada(o)}
-                  className="flex items-start justify-between p-4 bg-gray-800 rounded-xl cursor-pointer hover:bg-gray-750 transition-colors"
+                  className="flex items-start justify-between p-4 bg-gray-800 rounded-xl cursor-pointer hover:bg-gray-700 transition-colors"
                 >
                   <div>
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
