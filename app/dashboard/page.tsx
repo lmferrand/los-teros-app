@@ -74,7 +74,7 @@ export default function Dashboard() {
 
     setMisOrdenes(misMisOrdenes)
 
-    const nuevasAlertas = []
+    const nuevasAlertas: { tipo: string; texto: string }[] = []
     stockBajo.forEach(m => {
       nuevasAlertas.push({ tipo: 'warning', texto: `Stock bajo: ${m.nombre} (${m.stock || 0} ${m.unidad || ''})` })
     })
