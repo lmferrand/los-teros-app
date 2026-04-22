@@ -239,6 +239,11 @@ export default function Dashboard() {
   <h2 className="text-white font-semibold">Albaranes</h2>
   <p className="text-gray-400 text-xs mt-1">Con fotos y firma</p>
 </a>
+<a href="/asistente" className="bg-gray-900 border border-green-900 hover:border-green-600 rounded-xl p-5 block transition-colors">
+  <div className="text-2xl mb-3">🤖</div>
+  <h2 className="text-white font-semibold">Asistente IA</h2>
+  <p className="text-gray-400 text-xs mt-1">Pregunta sobre la empresa</p>
+</a>
           {!esTecnico && (
             <a href="/trabajadores" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
               <div className="text-2xl mb-3">👷</div>
