@@ -113,11 +113,13 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-950">
       <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <div className="flex items-center gap-3">
-  <img src="/logo.png" alt="Los Teros" className="w-8 h-8 rounded" />
-  <h1 className="text-xl font-bold text-white">LOS TEROS</h1>
+          <div className="flex items-center gap-2">
+  <img src="/logo.png" alt="Los Teros" className="w-12 h-12 object-contain" style={{mixBlendMode: 'screen'}} />
+  <div>
+    <h1 className="text-lg font-bold text-white leading-tight">LOS TEROS</h1>
+    <p className="text-gray-400 text-xs">Gestion Operativa</p>
+  </div>
 </div>
-          <p className="text-gray-400 text-xs">Gestion Operativa</p>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
