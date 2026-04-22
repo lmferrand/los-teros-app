@@ -24,6 +24,8 @@ export default function Ordenes() {
   const [estado, setEstado] = useState('pendiente')
   const [descripcion, setDescripcion] = useState('')
   const [observaciones, setObservaciones] = useState('')
+  const [duracionHoras, setDuracionHoras] = useState('2')
+  const [horaFija, setHoraFija] = useState(false)
 
   useEffect(() => {
     verificarSesion()
@@ -71,6 +73,8 @@ export default function Ordenes() {
     setEstado('pendiente')
     setDescripcion('')
     setObservaciones('')
+    setDuracionHoras('2')
+    setHoraFija(false)
     setMostrarForm(true)
   }
 
@@ -84,6 +88,8 @@ export default function Ordenes() {
     setEstado(o.estado || 'pendiente')
     setDescripcion(o.descripcion || '')
     setObservaciones(o.observaciones || '')
+    setDuracionHoras(String(o.duracion_horas || 2))
+    setHoraFija(o.hora_fija || false)
     setMostrarForm(true)
     setOrdenDetalle(null)
   }
@@ -120,7 +126,10 @@ export default function Ordenes() {
   }
 
   async function generarCodigo(tipo: string) {
-    const prefijos: any = { limpieza: 'LIM', sustitucion: 'SUS', mantenimiento: 'MAN', instalacion: 'INS', revision: 'REV', otro: 'OTR' }
+    const prefijos: any = {
+      limpieza: 'LIM', sustitucion: 'SUS', mantenimiento: 'MAN',
+      instalacion: 'INS', revision: 'REV', otro: 'OTR'
+    }
     const { count } = await supabase.from('ordenes').select('*', { count: 'exact', head: true }).eq('tipo', tipo)
     const num = String((count || 0) + 1).padStart(4, '0')
     return `${prefijos[tipo] || 'OTR'}-${new Date().getFullYear()}-${num}`
@@ -138,6 +147,8 @@ export default function Ordenes() {
       estado,
       descripcion,
       observaciones,
+      duracion_horas: parseFloat(duracionHoras) || 2,
+      hora_fija: horaFija,
     }
     if (editandoId) {
       await supabase.from('ordenes').update(datos).eq('id', editandoId)
@@ -151,6 +162,8 @@ export default function Ordenes() {
     setObservaciones('')
     setClienteId('')
     setTecnicosSeleccionados([])
+    setDuracionHoras('2')
+    setHoraFija(false)
     cargarDatos()
   }
 
@@ -196,7 +209,9 @@ export default function Ordenes() {
     { key: 'albaran', label: 'Albaran' },
   ]
 
-  const ordenesFiltradas = filtroEstado ? ordenes.filter(o => o.estado === filtroEstado) : ordenes
+  const ordenesFiltradas = filtroEstado
+    ? ordenes.filter(o => o.estado === filtroEstado)
+    : ordenes
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -206,11 +221,7 @@ export default function Ordenes() {
           <h1 className="text-xl font-bold text-white">Ordenes de trabajo</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <select
-            value={filtroEstado}
-            onChange={e => setFiltroEstado(e.target.value)}
-            className="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2"
-          >
+          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
             <option value="">Todos los estados</option>
             <option value="pendiente">Pendiente</option>
             <option value="en_curso">En curso</option>
@@ -281,6 +292,27 @@ export default function Ordenes() {
                   <option value="cancelada">Cancelada</option>
                 </select>
               </div>
+              <div>
+                <label className="text-gray-400 text-xs uppercase mb-1 block">Duracion estimada</label>
+                <select value={duracionHoras} onChange={e => setDuracionHoras(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                  <option value="0.5">30 minutos</option>
+                  <option value="1">1 hora</option>
+                  <option value="1.5">1.5 horas</option>
+                  <option value="2">2 horas</option>
+                  <option value="2.5">2.5 horas</option>
+                  <option value="3">3 horas</option>
+                  <option value="4">4 horas</option>
+                  <option value="5">5 horas</option>
+                  <option value="6">6 horas</option>
+                  <option value="8">Jornada completa</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2 mt-auto">
+                <input type="checkbox" id="hora-fija" checked={horaFija} onChange={e => setHoraFija(e.target.checked)} className="w-4 h-4 accent-blue-500" />
+                <label htmlFor="hora-fija" className="text-gray-300 text-sm cursor-pointer">
+                  Hora fija con cliente
+                </label>
+              </div>
               <div className="md:col-span-2">
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Descripcion del trabajo</label>
                 <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Describe los trabajos a realizar..." />
@@ -329,6 +361,16 @@ export default function Ordenes() {
                     <p className="text-gray-400 text-xs mb-1">Fecha</p>
                     <p className="text-white text-sm">{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</p>
                   </div>
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-gray-400 text-xs mb-1">Duracion</p>
+                    <p className="text-white text-sm">{ordenDetalle.duracion_horas || 2} horas</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-gray-400 text-xs mb-1">Hora fija</p>
+                    <p className={`text-sm font-medium ${ordenDetalle.hora_fija ? 'text-yellow-400' : 'text-gray-400'}`}>
+                      {ordenDetalle.hora_fija ? 'Si — hora acordada con cliente' : 'No'}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="bg-gray-800 rounded-lg p-3 mb-4">
@@ -353,10 +395,7 @@ export default function Ordenes() {
                 <div className="bg-green-950 border border-green-800 rounded-xl p-4 mb-4">
                   <p className="text-green-300 font-medium text-sm mb-2">Escanear material o equipo</p>
                   <p className="text-green-400 text-xs mb-3">Escanea el QR de cualquier material o equipo para registrar su salida vinculada a esta OT automaticamente.</p>
-                  <button
-                    onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
-                    className="w-full bg-green-700 hover:bg-green-600 text-white px-4 py-3 rounded-lg text-sm font-medium"
-                  >
+                  <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)} className="w-full bg-green-700 hover:bg-green-600 text-white px-4 py-3 rounded-lg text-sm font-medium">
                     Abrir escaner QR
                   </button>
                 </div>
@@ -438,11 +477,15 @@ export default function Ordenes() {
                       <span className={`text-xs font-medium ${PRIORIDADES[o.prioridad] || 'text-gray-400'}`}>
                         {o.prioridad}
                       </span>
+                      {o.hora_fija && (
+                        <span className="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full">Hora fija</span>
+                      )}
                     </div>
                     <p className="text-white font-medium">{o.clientes?.nombre || '—'}</p>
                     <p className="text-gray-400 text-sm mt-1">{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
                     <div className="flex gap-4 mt-2 text-xs text-gray-500 flex-wrap">
                       <span>Trabajadores: {getNombresTecnicos(o.tecnicos_ids || [])}</span>
+                      <span>Duracion: {o.duracion_horas || 2}h</span>
                       <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '—'}</span>
                     </div>
                   </div>
