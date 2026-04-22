@@ -112,14 +112,12 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-950">
       <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-  <img src="/logo.png" alt="Los Teros" className="w-12 h-12 object-contain" style={{mixBlendMode: 'screen'}} />
-  <div>
-    <h1 className="text-lg font-bold text-white leading-tight">LOS TEROS</h1>
-    <p className="text-gray-400 text-xs">Gestion Operativa</p>
-  </div>
-</div>
+        <div className="flex items-center gap-2">
+          <img src="/logo.png" alt="Los Teros" className="w-12 h-12 object-contain" style={{mixBlendMode: 'screen'}} />
+          <div>
+            <h1 className="text-lg font-bold text-white leading-tight">LOS TEROS</h1>
+            <p className="text-gray-400 text-xs">Gestion Operativa</p>
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
@@ -162,7 +160,7 @@ export default function Dashboard() {
               ))}
             </div>
             <a href="/planificacion" className="block mt-3 text-blue-400 text-xs hover:text-blue-300">
-              Ver todas mis ordenes →
+              Ver todas mis ordenes
             </a>
           </div>
         )}
@@ -235,6 +233,11 @@ export default function Dashboard() {
             <div className="text-2xl mb-3">⚙️</div>
             <h2 className="text-white font-semibold">Equipos</h2>
             <p className="text-gray-400 text-xs mt-1">Turbinas y motores</p>
+          </a>
+          <a href="/presupuestos" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
+            <div className="text-2xl mb-3">📄</div>
+            <h2 className="text-white font-semibold">Presupuestos</h2>
+            <p className="text-gray-400 text-xs mt-1">Crear y gestionar</p>
           </a>
           {!esTecnico && (
             <a href="/trabajadores" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
