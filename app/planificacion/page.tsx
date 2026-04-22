@@ -19,6 +19,8 @@ export default function Planificacion() {
   const [fechaRuta, setFechaRuta] = useState(new Date().toISOString().slice(0, 10))
   const [resultadoRuta, setResultadoRuta] = useState<any>(null)
   const [calculando, setCalculando] = useState(false)
+  const [escaneando, setEscaneando] = useState(false)
+  const [datosEscaneados, setDatosEscaneados] = useState<any>(null)
   const router = useRouter()
 
   const [presClienteId, setPresClienteId] = useState('')
@@ -130,15 +132,12 @@ export default function Planificacion() {
   function optimizarRutaTecnico(otsDelDia: any[], tecnicoId: string) {
     const INICIO = 8 * 60
     const FIN = 16 * 60
-
     const otsTecnico = otsDelDia.filter(o =>
       o.tecnicos_ids?.includes(tecnicoId) || o.tecnico_id === tecnicoId
     )
-
     const otsConHora = otsTecnico
       .filter(o => o.hora_fija && o.fecha_programada)
       .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
-
     const otsSinHora = otsTecnico
       .filter(o => !o.hora_fija)
       .sort((a, b) => {
@@ -146,30 +145,23 @@ export default function Planificacion() {
         const zonaB = detectarZona(clientes.find((c: any) => c.id === b.cliente_id)?.direccion || '')
         return (ZONAS[zonaA]?.orden || 99) - (ZONAS[zonaB]?.orden || 99)
       })
-
     const ruta: any[] = []
     let horaActual = INICIO
     let zonaActual = 'elche'
-
     for (const ot of otsConHora) {
       const horaOT = new Date(ot.fecha_programada)
       const minutos = horaOT.getHours() * 60 + horaOT.getMinutes()
       const zona = detectarZona(clientes.find((c: any) => c.id === ot.cliente_id)?.direccion || '')
       const duracion = (ot.duracion_horas || 2) * 60
       ruta.push({
-        ot,
-        horaInicio: minutos,
-        horaFin: minutos + duracion,
-        zona,
-        horaFija: true,
-        traslado: 0,
+        ot, horaInicio: minutos, horaFin: minutos + duracion,
+        zona, horaFija: true, traslado: 0,
         fueraDeJornada: minutos + duracion > FIN,
         cliente: clientes.find((c: any) => c.id === ot.cliente_id),
       })
       horaActual = minutos + duracion
       zonaActual = zona
     }
-
     for (const ot of otsSinHora) {
       const zona = detectarZona(clientes.find((c: any) => c.id === ot.cliente_id)?.direccion || '')
       const tiempoTraslado = calcularTiempoEntreZonas(zonaActual, zona)
@@ -177,22 +169,15 @@ export default function Planificacion() {
       const horaInicio = horaActual + tiempoTraslado
       const horaFin = horaInicio + duracion
       ruta.push({
-        ot,
-        horaInicio,
-        horaFin,
-        zona,
-        horaFija: false,
-        traslado: tiempoTraslado,
-        fueraDeJornada: horaFin > FIN,
+        ot, horaInicio, horaFin, zona, horaFija: false,
+        traslado: tiempoTraslado, fueraDeJornada: horaFin > FIN,
         cliente: clientes.find((c: any) => c.id === ot.cliente_id),
       })
       horaActual = horaFin
       zonaActual = zona
     }
-
     const horasTotales = otsTecnico.reduce((acc, o) => acc + (o.duracion_horas || 2), 0)
     const cabeEnJornada = horaActual <= FIN
-
     return { ruta, horasTotales, cabeEnJornada, horaFinal: horaActual }
   }
 
@@ -204,33 +189,76 @@ export default function Planificacion() {
       return f.toISOString().slice(0, 10) === fechaRuta &&
         (o.estado === 'pendiente' || o.estado === 'en_curso')
     })
-
     if (otsDelDia.length === 0) {
       setResultadoRuta({ vacio: true })
       setCalculando(false)
       return
     }
-
     const tecnicosDelDia = tecnicos.filter(t =>
       otsDelDia.some(o => o.tecnicos_ids?.includes(t.id) || o.tecnico_id === t.id)
     )
-
     const resultados = tecnicosDelDia.map(t => ({
       tecnico: t,
       ...optimizarRutaTecnico(otsDelDia, t.id)
     }))
-
     const otsSinAsignar = otsDelDia.filter(o =>
       (!o.tecnicos_ids || o.tecnicos_ids.length === 0) && !o.tecnico_id
     )
-
-    setResultadoRuta({
-      resultados,
-      otsSinAsignar,
-      fecha: fechaRuta,
-      totalOTs: otsDelDia.length
-    })
+    setResultadoRuta({ resultados, otsSinAsignar, fecha: fechaRuta, totalOTs: otsDelDia.length })
     setCalculando(false)
+  }
+
+  function convertirFecha(fecha: string): string {
+    try {
+      const partes = fecha.split('/')
+      if (partes.length === 3) {
+        return `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`
+      }
+      return new Date().toISOString().slice(0, 10)
+    } catch {
+      return new Date().toISOString().slice(0, 10)
+    }
+  }
+
+  async function escanearPresupuesto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setEscaneando(true)
+    setDatosEscaneados(null)
+    try {
+      const reader = new FileReader()
+      reader.onload = async (ev) => {
+        const base64 = ev.target?.result as string
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imagen: base64 }),
+        })
+        const data = await res.json()
+        try {
+          const texto = data.respuesta
+          const json = JSON.parse(texto.replace(/```json|```/g, '').trim())
+          setDatosEscaneados(json)
+          setPresTitulo(json.descripcion || '')
+          setPresImporte(String(json.importe || 0))
+          setPresFecha(json.fecha ? convertirFecha(json.fecha) : new Date().toISOString().slice(0, 10))
+          setPresObs(`Presupuesto ${json.numero || ''} escaneado automaticamente`)
+          const clienteEncontrado = clientes.find(c =>
+            c.nombre.toLowerCase().includes((json.cliente || '').toLowerCase()) ||
+            (json.cliente || '').toLowerCase().includes(c.nombre.toLowerCase())
+          )
+          if (clienteEncontrado) setPresClienteId(clienteEncontrado.id)
+          setMostrarFormPres(true)
+        } catch {
+          alert('No se pudieron extraer los datos. Intentalo de nuevo con mejor iluminacion.')
+        }
+        setEscaneando(false)
+      }
+      reader.readAsDataURL(file)
+    } catch {
+      setEscaneando(false)
+      alert('Error al procesar la imagen.')
+    }
   }
 
   const misOrdenes = ordenes.filter(o =>
@@ -329,6 +357,7 @@ export default function Planificacion() {
     }
     setMostrarFormPres(false)
     setEditandoPres(null)
+    setDatosEscaneados(null)
     cargarDatos()
   }
 
@@ -410,7 +439,7 @@ export default function Planificacion() {
                 <div className="flex justify-between"><span className="text-gray-400">Fecha</span><span className="text-white text-xs">{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Trabajadores</span><span className="text-white text-right text-xs">{getNombresTecnicos(ordenSeleccionada.tecnicos_ids || [])}</span></div>
                 {ordenSeleccionada.descripcion && (
-                  <div><p className="text-gray-400 mb-1">Trabajos a realizar</p><p className="text-white bg-gray-800 rounded-lg p-3 text-xs leading-relaxed">{ordenSeleccionada.descripcion}</p></div>
+                  <div><p className="text-gray-400 mb-1">Trabajos</p><p className="text-white bg-gray-800 rounded-lg p-3 text-xs leading-relaxed">{ordenSeleccionada.descripcion}</p></div>
                 )}
                 {ordenSeleccionada.observaciones && (
                   <div><p className="text-gray-400 mb-1">Observaciones</p><p className="text-white bg-gray-800 rounded-lg p-3 text-xs leading-relaxed">{ordenSeleccionada.observaciones}</p></div>
@@ -450,7 +479,6 @@ export default function Planificacion() {
                 })}
               </div>
             </div>
-
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h2 className="text-white font-semibold mb-4">OT de esta semana</h2>
               {otsSemana.length === 0 ? (
@@ -556,6 +584,29 @@ export default function Planificacion() {
               </div>
             </div>
 
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
+              <p className="text-white font-semibold mb-1">Escanear o subir presupuesto</p>
+              <p className="text-gray-400 text-sm mb-4">Fotografía o sube el presupuesto de Holded y los datos se rellenaran automaticamente.</p>
+              <label className={`w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-medium cursor-pointer transition-colors ${escaneando ? 'bg-gray-700 text-gray-400' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
+                {escaneando ? 'Procesando imagen...' : '📷 Fotografiar o subir presupuesto'}
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  onChange={escanearPresupuesto}
+                  disabled={escaneando}
+                />
+              </label>
+              {datosEscaneados && (
+                <div className="mt-3 bg-green-950 border border-green-800 rounded-lg p-3">
+                  <p className="text-green-300 text-xs font-semibold mb-1">Datos extraidos correctamente</p>
+                  <p className="text-green-200 text-xs">Cliente: {datosEscaneados.cliente}</p>
+                  <p className="text-green-200 text-xs">Importe: {datosEscaneados.importe} EUR</p>
+                  <p className="text-green-200 text-xs">Numero: {datosEscaneados.numero}</p>
+                </div>
+              )}
+            </div>
+
             {mostrarFormPres && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
                 <h2 className="text-white font-semibold mb-4">{editandoPres ? 'Editar presupuesto' : 'Nuevo presupuesto'}</h2>
@@ -608,7 +659,7 @@ export default function Planificacion() {
             {presupuestos.length === 0 ? (
               <div className="text-center py-16 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">
                 <p className="text-3xl mb-2">📄</p>
-                <p>No hay presupuestos. Crea el primero.</p>
+                <p>No hay presupuestos. Crea el primero o escanea uno.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -622,6 +673,23 @@ export default function Planificacion() {
                         </div>
                         <p className="text-white font-semibold">{p.titulo}</p>
                         <p className="text-gray-400 text-sm">{p.clientes?.nombre || '—'}</p>
+                        {(() => {
+                          const cli = clientes.find(c => c.id === p.cliente_id)
+                          return cli ? (
+                            <div className="flex gap-4 mt-2 flex-wrap">
+                              {cli.telefono && (
+                                <a href={`tel:${cli.telefono}`} className="flex items-center gap-1 text-green-400 hover:text-green-300 text-xs font-medium">
+                                  📞 {cli.telefono}
+                                </a>
+                              )}
+                              {cli.email && (
+                                <a href={`mailto:${cli.email}`} className="flex items-center gap-1 text-blue-400 hover:text-blue-300 text-xs font-medium">
+                                  ✉️ {cli.email}
+                                </a>
+                              )}
+                            </div>
+                          ) : null
+                        })()}
                         {p.observaciones && <p className="text-gray-500 text-xs mt-1">{p.observaciones}</p>}
                       </div>
                       <div className="text-right">
@@ -651,11 +719,7 @@ export default function Planificacion() {
           <div>
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
               <h2 className="text-white font-semibold mb-2">Optimizador de rutas</h2>
-              <p className="text-gray-400 text-sm mb-4">
-                Selecciona un dia y el sistema calculara la ruta optima para cada trabajador
-                partiendo desde Elche (C/ Leonardo Da Vinci 12), agrupando por zonas y
-                respetando las horas fijas con clientes.
-              </p>
+              <p className="text-gray-400 text-sm mb-4">Selecciona un dia y el sistema calculara la ruta optima para cada trabajador partiendo desde Elche.</p>
               <div className="flex gap-3 items-end flex-wrap">
                 <div>
                   <label className="text-gray-400 text-xs uppercase mb-1 block">Dia a planificar</label>
@@ -671,35 +735,26 @@ export default function Planificacion() {
               <div className="text-center py-12 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">
                 <p className="text-3xl mb-2">📅</p>
                 <p>No hay ordenes pendientes para ese dia.</p>
-                <p className="text-xs mt-2">Crea ordenes de trabajo con fecha para ese dia y asigna trabajadores.</p>
               </div>
             )}
 
             {resultadoRuta?.resultados && (
               <div className="flex flex-col gap-6">
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                  <p className="text-white font-semibold">
-                    {new Date(resultadoRuta.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-                  </p>
-                  <p className="text-gray-400 text-sm mt-1">
-                    {resultadoRuta.totalOTs} ordenes — {resultadoRuta.resultados.length} trabajadores
-                  </p>
+                  <p className="text-white font-semibold">{new Date(resultadoRuta.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                  <p className="text-gray-400 text-sm mt-1">{resultadoRuta.totalOTs} ordenes — {resultadoRuta.resultados.length} trabajadores</p>
                 </div>
-
                 {resultadoRuta.resultados.map((res: any) => (
                   <div key={res.tecnico.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                     <div className="bg-gray-800 px-5 py-3 flex items-center justify-between flex-wrap gap-2">
                       <div>
                         <p className="text-white font-semibold">{res.tecnico.nombre}</p>
-                        <p className="text-gray-400 text-xs">
-                          Salida 08:00 desde Elche — {res.ruta.length} paradas — {res.horasTotales}h trabajo
-                        </p>
+                        <p className="text-gray-400 text-xs">Salida 08:00 desde Elche — {res.ruta.length} paradas — {res.horasTotales}h trabajo</p>
                       </div>
                       <span className={`text-xs px-3 py-1 rounded-full font-medium ${res.cabeEnJornada ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
-                        {res.cabeEnJornada ? 'Cabe en jornada 8-16h' : 'Excede jornada — revisar'}
+                        {res.cabeEnJornada ? 'Cabe en jornada 8-16h' : 'Excede jornada'}
                       </span>
                     </div>
-
                     <div className="p-5">
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-3">
@@ -712,16 +767,12 @@ export default function Planificacion() {
                             <p className="text-green-400 font-mono text-sm font-bold">08:00</p>
                           </div>
                         </div>
-
                         {res.ruta.map((parada: any, idx: number) => (
                           <div key={parada.ot.id}>
                             {parada.traslado > 0 && (
                               <div className="flex items-center gap-3 my-1 pl-4">
                                 <div className="w-0.5 h-5 bg-gray-700 ml-3.5"></div>
-                                <p className="text-gray-500 text-xs">
-                                  Traslado ~{parada.traslado} min
-                                  {ZONAS[parada.zona] ? ` — ${ZONAS[parada.zona].nombre}` : ''}
-                                </p>
+                                <p className="text-gray-500 text-xs">Traslado ~{parada.traslado} min{ZONAS[parada.zona] ? ` — ${ZONAS[parada.zona].nombre}` : ''}</p>
                               </div>
                             )}
                             <div className="flex items-start gap-3">
@@ -738,7 +789,7 @@ export default function Planificacion() {
                                     </div>
                                     <p className="text-white font-medium text-sm">{parada.cliente?.nombre || '—'}</p>
                                     <p className="text-gray-400 text-xs">{parada.cliente?.direccion || '—'}</p>
-                                    <p className="text-gray-500 text-xs mt-1 capitalize">{parada.ot.tipo} — {parada.ot.duracion_horas || 2}h estimadas</p>
+                                    <p className="text-gray-500 text-xs mt-1 capitalize">{parada.ot.tipo} — {parada.ot.duracion_horas || 2}h</p>
                                   </div>
                                   <div className="text-right">
                                     <p className="text-white text-sm font-mono font-bold">{formatHora(parada.horaInicio)}</p>
@@ -754,21 +805,17 @@ export default function Planificacion() {
                             </div>
                           </div>
                         ))}
-
                         <div className="flex items-center gap-3 mt-2">
                           <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs text-gray-300 font-bold flex-shrink-0">F</div>
                           <div className="flex-1 bg-gray-800 rounded-lg px-3 py-2 flex items-center justify-between">
                             <p className="text-white text-sm">Regreso nave Elche</p>
-                            <p className={`font-mono text-sm font-bold ${res.cabeEnJornada ? 'text-green-400' : 'text-red-400'}`}>
-                              {formatHora(res.horaFinal)} aprox.
-                            </p>
+                            <p className={`font-mono text-sm font-bold ${res.cabeEnJornada ? 'text-green-400' : 'text-red-400'}`}>{formatHora(res.horaFinal)} aprox.</p>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 ))}
-
                 {resultadoRuta.otsSinAsignar?.length > 0 && (
                   <div className="bg-yellow-950 border border-yellow-800 rounded-xl p-5">
                     <p className="text-yellow-300 font-semibold mb-3">Ordenes sin trabajador asignado ({resultadoRuta.otsSinAsignar.length})</p>
@@ -783,7 +830,6 @@ export default function Planificacion() {
                         </div>
                       ))}
                     </div>
-                    <p className="text-yellow-400 text-xs mt-3">Asigna trabajadores a estas ordenes para incluirlas en la ruta.</p>
                   </div>
                 )}
               </div>
