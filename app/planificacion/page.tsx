@@ -16,19 +16,12 @@ export default function Planificacion() {
   const router = useRouter()
 
   useEffect(() => {
-    verificarSesion()
     cargarDatos()
   }, [])
 
-  async function verificarSesion() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { router.push('/login'); return }
-    setUserId(session.user.id)
-  }
-
   async function cargarDatos() {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return
+    if (!session) { router.push('/login'); return }
     setUserId(session.user.id)
     const [ords, clis, tecs] = await Promise.all([
       supabase.from('ordenes').select('*').neq('estado', 'cancelada'),
@@ -67,7 +60,7 @@ export default function Planificacion() {
     const mes = mesActual.getMonth()
     const primerDia = new Date(anio, mes, 1)
     const ultimoDia = new Date(anio, mes + 1, 0)
-    const dias: any[] = []
+    const dias: (Date | null)[] = []
     let diaSemana = primerDia.getDay()
     diaSemana = diaSemana === 0 ? 6 : diaSemana - 1
     for (let i = 0; i < diaSemana; i++) dias.push(null)
@@ -124,6 +117,12 @@ export default function Planificacion() {
     return f >= lunes && f <= domingo
   }).sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
 
+  if (loading) return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <p className="text-white">Cargando...</p>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gray-950">
       <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
@@ -156,7 +155,8 @@ export default function Planificacion() {
             onClick={() => setVistaActiva('mis_ordenes')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vistaActiva === 'mis_ordenes' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
           >
-            Mis ordenes {misOrdenesPendientes.length > 0 && (
+            Mis ordenes
+            {misOrdenesPendientes.length > 0 && (
               <span className="ml-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">
                 {misOrdenesPendientes.length}
               </span>
@@ -189,11 +189,11 @@ export default function Planificacion() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Fecha</span>
-                  <span className="text-white">{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-white text-xs">{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Trabajadores</span>
-                  <span className="text-white text-right">{getNombresTecnicos(ordenSeleccionada.tecnicos_ids || [])}</span>
+                  <span className="text-white text-right text-xs">{getNombresTecnicos(ordenSeleccionada.tecnicos_ids || [])}</span>
                 </div>
                 {ordenSeleccionada.descripcion && (
                   <div>
@@ -243,8 +243,11 @@ export default function Planificacion() {
                     <div key={i} className={`min-h-24 border-b border-r border-gray-800 p-1.5 ${esHoy ? 'bg-blue-950' : ''}`}>
                       <p className={`text-xs font-bold mb-1 ${esHoy ? 'text-blue-400' : 'text-gray-500'}`}>{dia.getDate()}</p>
                       {otsDelDia.map(o => (
-                        <button key={o.id} onClick={() => setOrdenSeleccionada(o)}
-                          className={`w-full text-left text-xs px-1.5 py-1 rounded mb-1 truncate ${COLORES[o.tipo] || 'bg-gray-800 text-gray-200'}`}>
+                        <button
+                          key={o.id}
+                          onClick={() => setOrdenSeleccionada(o)}
+                          className={`w-full text-left text-xs px-1.5 py-1 rounded mb-1 truncate ${COLORES[o.tipo] || 'bg-gray-800 text-gray-200'}`}
+                        >
                           {o.codigo}
                         </button>
                       ))}
@@ -261,8 +264,11 @@ export default function Planificacion() {
               ) : (
                 <div className="flex flex-col gap-3">
                   {otsSemana.map(o => (
-                    <div key={o.id} onClick={() => setOrdenSeleccionada(o)}
-                      className="flex items-start justify-between p-4 bg-gray-800 rounded-xl cursor-pointer hover:bg-gray-700 transition-colors">
+                    <div
+                      key={o.id}
+                      onClick={() => setOrdenSeleccionada(o)}
+                      className="flex items-start justify-between p-4 bg-gray-800 rounded-xl cursor-pointer hover:bg-gray-700 transition-colors"
+                    >
                       <div>
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="text-blue-400 font-mono text-xs">{o.codigo}</span>
@@ -300,8 +306,11 @@ export default function Planificacion() {
               ) : (
                 <div className="flex flex-col gap-3">
                   {misOrdenesPendientes.map(o => (
-                    <div key={o.id} onClick={() => setOrdenSeleccionada(o)}
-                      className="bg-gray-900 border border-gray-800 rounded-xl p-5 cursor-pointer hover:border-blue-800 transition-colors">
+                    <div
+                      key={o.id}
+                      onClick={() => setOrdenSeleccionada(o)}
+                      className="bg-gray-900 border border-gray-800 rounded-xl p-5 cursor-pointer hover:border-blue-800 transition-colors"
+                    >
                       <div className="flex items-start justify-between flex-wrap gap-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -335,8 +344,11 @@ export default function Planificacion() {
                 <h2 className="text-white font-semibold mb-4">Mis ordenes completadas</h2>
                 <div className="flex flex-col gap-2">
                   {misOrdenesCompletadas.map(o => (
-                    <div key={o.id} onClick={() => setOrdenSeleccionada(o)}
-                      className="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-gray-700 transition-colors opacity-70">
+                    <div
+                      key={o.id}
+                      onClick={() => setOrdenSeleccionada(o)}
+                      className="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-gray-700 transition-colors opacity-70"
+                    >
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="text-blue-400 font-mono text-xs mr-2">{o.codigo}</span>
