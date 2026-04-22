@@ -244,6 +244,11 @@ export default function Dashboard() {
   <h2 className="text-white font-semibold">Asistente IA</h2>
   <p className="text-gray-400 text-xs mt-1">Pregunta sobre la empresa</p>
 </a>
+<a href="/movimientos" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
+  <div className="text-2xl mb-3">📊</div>
+  <h2 className="text-white font-semibold">Movimientos</h2>
+  <p className="text-gray-400 text-xs mt-1">Historial de consumos</p>
+</a>
           {!esTecnico && (
             <a href="/trabajadores" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
               <div className="text-2xl mb-3">👷</div>
