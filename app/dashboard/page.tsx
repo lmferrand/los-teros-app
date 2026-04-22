@@ -229,21 +229,16 @@ export default function Dashboard() {
             <h2 className="text-white font-semibold">Inventario</h2>
             <p className="text-gray-400 text-xs mt-1">Stock y materiales</p>
           </a>
-          <a href="/equipos" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
-            <div className="text-2xl mb-3">⚙️</div>
-            <h2 className="text-white font-semibold">Equipos</h2>
-            <p className="text-gray-400 text-xs mt-1">Turbinas y motores</p>
-          </a>
-          <a href="/presupuestos" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
-          <a href="/albaranes" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
+        <a href="/equipos" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
+  <div className="text-2xl mb-3">⚙️</div>
+  <h2 className="text-white font-semibold">Equipos</h2>
+  <p className="text-gray-400 text-xs mt-1">Turbinas y motores</p>
+</a>
+<a href="/albaranes" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
   <div className="text-2xl mb-3">🧾</div>
   <h2 className="text-white font-semibold">Albaranes</h2>
   <p className="text-gray-400 text-xs mt-1">Con fotos y firma</p>
 </a>
-            <div className="text-2xl mb-3">📄</div>
-            <h2 className="text-white font-semibold">Presupuestos</h2>
-            <p className="text-gray-400 text-xs mt-1">Crear y gestionar</p>
-          </a>
           {!esTecnico && (
             <a href="/trabajadores" className="bg-gray-900 border border-gray-800 hover:border-blue-700 rounded-xl p-5 block transition-colors">
               <div className="text-2xl mb-3">👷</div>
