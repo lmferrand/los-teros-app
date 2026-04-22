@@ -169,11 +169,12 @@ export default function Inventario() {
         </div>
         <div className="flex items-center gap-3">
           
-            href="/escanear"
-            className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
-          >
-            Escanear QR
-          </a>
+            <button
+  onClick={() => window.location.href = '/escanear'}
+  className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
+>
+  Escanear QR
+</button>
           <button
             onClick={() => abrirForm()}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
