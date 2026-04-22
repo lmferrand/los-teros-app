@@ -15,11 +15,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `Eres el asistente de Los Teros, una empresa de servicios tecnicos de limpieza y mantenimiento industrial especializada en sistemas de ventilacion, campanas industriales y turbinas.
-Ayudas a los trabajadores y a la oficina con informacion sobre ordenes de trabajo, inventario, planificacion y clientes.
-Responde siempre en espanol, de forma concisa y practica.
-Contexto actual de la empresa:
-${contexto || 'Sin datos adicionales'}`
+            content: `Eres el asistente de Los Teros. Responde en espanol de forma concisa. Contexto: ${contexto || 'Sin datos'}`
           },
           {
             role: 'user',
@@ -32,9 +28,19 @@ ${contexto || 'Sin datos adicionales'}`
     })
 
     const data = await response.json()
-    const respuesta = data.choices?.[0]?.message?.content || 'No pude procesar tu pregunta.'
+
+    if (!response.ok) {
+      return NextResponse.json({ 
+        respuesta: `Error Groq: ${data.error?.message || JSON.stringify(data)}` 
+      })
+    }
+
+    const respuesta = data.choices?.[0]?.message?.content || 'Respuesta vacia'
     return NextResponse.json({ respuesta })
-  } catch (error) {
-    return NextResponse.json({ error: 'Error al conectar con la IA' }, { status: 500 })
+
+  } catch (error: any) {
+    return NextResponse.json({ 
+      respuesta: `Error tecnico: ${error.message}` 
+    })
   }
 }
