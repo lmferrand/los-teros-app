@@ -12,6 +12,7 @@ export default function Ordenes() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [ordenDetalle, setOrdenDetalle] = useState<any>(null)
+  const [editandoId, setEditandoId] = useState<string | null>(null)
   const [subiendo, setSubiendo] = useState(false)
   const router = useRouter()
 
@@ -60,6 +61,33 @@ export default function Ordenes() {
     setOrdenDetalle({ ...o, fotos })
   }
 
+  function abrirFormNuevo() {
+    setEditandoId(null)
+    setTipo('limpieza')
+    setClienteId('')
+    setTecnicosSeleccionados([])
+    setFecha('')
+    setPrioridad('normal')
+    setEstado('pendiente')
+    setDescripcion('')
+    setObservaciones('')
+    setMostrarForm(true)
+  }
+
+  function abrirFormEditar(o: any) {
+    setEditandoId(o.id)
+    setTipo(o.tipo || 'limpieza')
+    setClienteId(o.cliente_id || '')
+    setTecnicosSeleccionados(o.tecnicos_ids || [])
+    setFecha(o.fecha_programada ? new Date(o.fecha_programada).toISOString().slice(0, 16) : '')
+    setPrioridad(o.prioridad || 'normal')
+    setEstado(o.estado || 'pendiente')
+    setDescripcion(o.descripcion || '')
+    setObservaciones(o.observaciones || '')
+    setMostrarForm(true)
+    setOrdenDetalle(null)
+  }
+
   async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipo: string) {
     const file = e.target.files?.[0]
     if (!file || !ordenDetalle) return
@@ -100,9 +128,7 @@ export default function Ordenes() {
 
   async function guardarOrden(e: React.FormEvent) {
     e.preventDefault()
-    const nuevoCodigo = await generarCodigo(tipo)
-    const { error } = await supabase.from('ordenes').insert({
-      codigo: nuevoCodigo,
+    const datos = {
       tipo,
       cliente_id: clienteId,
       tecnico_id: tecnicosSeleccionados[0] || null,
@@ -112,15 +138,20 @@ export default function Ordenes() {
       estado,
       descripcion,
       observaciones,
-    })
-    if (!error) {
-      setMostrarForm(false)
-      setDescripcion('')
-      setObservaciones('')
-      setClienteId('')
-      setTecnicosSeleccionados([])
-      cargarDatos()
     }
+    if (editandoId) {
+      await supabase.from('ordenes').update(datos).eq('id', editandoId)
+    } else {
+      const nuevoCodigo = await generarCodigo(tipo)
+      await supabase.from('ordenes').insert({ ...datos, codigo: nuevoCodigo })
+    }
+    setMostrarForm(false)
+    setEditandoId(null)
+    setDescripcion('')
+    setObservaciones('')
+    setClienteId('')
+    setTecnicosSeleccionados([])
+    cargarDatos()
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
@@ -187,7 +218,7 @@ export default function Ordenes() {
             <option value="cancelada">Cancelada</option>
           </select>
           <button
-            onClick={() => setMostrarForm(!mostrarForm)}
+            onClick={abrirFormNuevo}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
           >
             + Nueva OT
@@ -198,7 +229,9 @@ export default function Ordenes() {
       <div className="p-6">
         {mostrarForm && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
-            <h2 className="text-white font-semibold mb-4">Nueva orden de trabajo</h2>
+            <h2 className="text-white font-semibold mb-4">
+              {editandoId ? 'Editar orden de trabajo' : 'Nueva orden de trabajo'}
+            </h2>
             <form onSubmit={guardarOrden} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Tipo</label>
@@ -260,8 +293,12 @@ export default function Ordenes() {
                 <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Instrucciones especiales, acceso..." />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">Guardar OT</button>
-                <button type="button" onClick={() => setMostrarForm(false)} className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm">Cancelar</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                  {editandoId ? 'Guardar cambios' : 'Crear OT'}
+                </button>
+                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }} className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm">
+                  Cancelar
+                </button>
               </div>
             </form>
           </div>
@@ -316,7 +353,7 @@ export default function Ordenes() {
                   </div>
                 )}
 
-                <div className="border-t border-gray-800 pt-4">
+                <div className="border-t border-gray-800 pt-4 mb-4">
                   <h3 className="text-white font-semibold mb-3">Fotos</h3>
                   {subiendo && <p className="text-blue-400 text-sm mb-3">Subiendo foto...</p>}
                   {TIPOS_FOTO.map(tf => {
@@ -357,6 +394,9 @@ export default function Ordenes() {
                       Completar
                     </button>
                   )}
+                  <button onClick={() => abrirFormEditar(ordenDetalle)} className="bg-blue-900 hover:bg-blue-800 text-blue-300 px-4 py-2 rounded-lg text-sm">
+                    Editar OT
+                  </button>
                   <button onClick={() => eliminarOrden(ordenDetalle.id)} className="bg-gray-800 hover:bg-gray-700 text-red-400 px-4 py-2 rounded-lg text-sm">
                     Eliminar
                   </button>
