@@ -13,9 +13,12 @@ export default function Planificacion() {
   const [loading, setLoading] = useState(true)
   const [mesActual, setMesActual] = useState(new Date())
   const [ordenSeleccionada, setOrdenSeleccionada] = useState<any>(null)
-  const [vistaActiva, setVistaActiva] = useState<'calendario' | 'mis_ordenes' | 'presupuestos'>('calendario')
+  const [vistaActiva, setVistaActiva] = useState<'calendario' | 'mis_ordenes' | 'presupuestos' | 'rutas'>('calendario')
   const [mostrarFormPres, setMostrarFormPres] = useState(false)
   const [editandoPres, setEditandoPres] = useState<any>(null)
+  const [fechaRuta, setFechaRuta] = useState(new Date().toISOString().slice(0, 10))
+  const [resultadoRuta, setResultadoRuta] = useState<any>(null)
+  const [calculando, setCalculando] = useState(false)
   const router = useRouter()
 
   const [presClienteId, setPresClienteId] = useState('')
@@ -90,6 +93,146 @@ export default function Planificacion() {
     })
   }
 
+  const ZONAS: any = {
+    'alicante': { nombre: 'Alicante', orden: 2, tiempo_desde_elche: 30 },
+    'elche': { nombre: 'Elche', orden: 1, tiempo_desde_elche: 0 },
+    'santa pola': { nombre: 'Santa Pola', orden: 2, tiempo_desde_elche: 20 },
+    'murcia': { nombre: 'Murcia', orden: 4, tiempo_desde_elche: 60 },
+    'denia': { nombre: 'Denia', orden: 3, tiempo_desde_elche: 90 },
+    'torrevieja': { nombre: 'Torrevieja', orden: 3, tiempo_desde_elche: 40 },
+    'guardamar': { nombre: 'Guardamar', orden: 2, tiempo_desde_elche: 25 },
+    'benidorm': { nombre: 'Benidorm', orden: 3, tiempo_desde_elche: 70 },
+    'crevillente': { nombre: 'Crevillente', orden: 1, tiempo_desde_elche: 10 },
+    'orihuela': { nombre: 'Orihuela', orden: 3, tiempo_desde_elche: 45 },
+  }
+
+  function detectarZona(direccion: string): string {
+    if (!direccion) return 'elche'
+    const dir = direccion.toLowerCase()
+    for (const zona of Object.keys(ZONAS)) {
+      if (dir.includes(zona)) return zona
+    }
+    return 'elche'
+  }
+
+  function calcularTiempoEntreZonas(zona1: string, zona2: string): number {
+    const t1 = ZONAS[zona1]?.tiempo_desde_elche || 30
+    const t2 = ZONAS[zona2]?.tiempo_desde_elche || 30
+    return Math.abs(t1 - t2) + 15
+  }
+
+  function formatHora(minutos: number): string {
+    const h = Math.floor(minutos / 60)
+    const m = minutos % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+
+  function optimizarRutaTecnico(otsDelDia: any[], tecnicoId: string) {
+    const INICIO = 8 * 60
+    const FIN = 16 * 60
+
+    const otsTecnico = otsDelDia.filter(o =>
+      o.tecnicos_ids?.includes(tecnicoId) || o.tecnico_id === tecnicoId
+    )
+
+    const otsConHora = otsTecnico
+      .filter(o => o.hora_fija && o.fecha_programada)
+      .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
+
+    const otsSinHora = otsTecnico
+      .filter(o => !o.hora_fija)
+      .sort((a, b) => {
+        const zonaA = detectarZona(clientes.find((c: any) => c.id === a.cliente_id)?.direccion || '')
+        const zonaB = detectarZona(clientes.find((c: any) => c.id === b.cliente_id)?.direccion || '')
+        return (ZONAS[zonaA]?.orden || 99) - (ZONAS[zonaB]?.orden || 99)
+      })
+
+    const ruta: any[] = []
+    let horaActual = INICIO
+    let zonaActual = 'elche'
+
+    for (const ot of otsConHora) {
+      const horaOT = new Date(ot.fecha_programada)
+      const minutos = horaOT.getHours() * 60 + horaOT.getMinutes()
+      const zona = detectarZona(clientes.find((c: any) => c.id === ot.cliente_id)?.direccion || '')
+      const duracion = (ot.duracion_horas || 2) * 60
+      ruta.push({
+        ot,
+        horaInicio: minutos,
+        horaFin: minutos + duracion,
+        zona,
+        horaFija: true,
+        traslado: 0,
+        fueraDeJornada: minutos + duracion > FIN,
+        cliente: clientes.find((c: any) => c.id === ot.cliente_id),
+      })
+      horaActual = minutos + duracion
+      zonaActual = zona
+    }
+
+    for (const ot of otsSinHora) {
+      const zona = detectarZona(clientes.find((c: any) => c.id === ot.cliente_id)?.direccion || '')
+      const tiempoTraslado = calcularTiempoEntreZonas(zonaActual, zona)
+      const duracion = (ot.duracion_horas || 2) * 60
+      const horaInicio = horaActual + tiempoTraslado
+      const horaFin = horaInicio + duracion
+      ruta.push({
+        ot,
+        horaInicio,
+        horaFin,
+        zona,
+        horaFija: false,
+        traslado: tiempoTraslado,
+        fueraDeJornada: horaFin > FIN,
+        cliente: clientes.find((c: any) => c.id === ot.cliente_id),
+      })
+      horaActual = horaFin
+      zonaActual = zona
+    }
+
+    const horasTotales = otsTecnico.reduce((acc, o) => acc + (o.duracion_horas || 2), 0)
+    const cabeEnJornada = horaActual <= FIN
+
+    return { ruta, horasTotales, cabeEnJornada, horaFinal: horaActual }
+  }
+
+  function calcularRutas() {
+    setCalculando(true)
+    const otsDelDia = ordenes.filter(o => {
+      if (!o.fecha_programada) return false
+      const f = new Date(o.fecha_programada)
+      return f.toISOString().slice(0, 10) === fechaRuta &&
+        (o.estado === 'pendiente' || o.estado === 'en_curso')
+    })
+
+    if (otsDelDia.length === 0) {
+      setResultadoRuta({ vacio: true })
+      setCalculando(false)
+      return
+    }
+
+    const tecnicosDelDia = tecnicos.filter(t =>
+      otsDelDia.some(o => o.tecnicos_ids?.includes(t.id) || o.tecnico_id === t.id)
+    )
+
+    const resultados = tecnicosDelDia.map(t => ({
+      tecnico: t,
+      ...optimizarRutaTecnico(otsDelDia, t.id)
+    }))
+
+    const otsSinAsignar = otsDelDia.filter(o =>
+      (!o.tecnicos_ids || o.tecnicos_ids.length === 0) && !o.tecnico_id
+    )
+
+    setResultadoRuta({
+      resultados,
+      otsSinAsignar,
+      fecha: fechaRuta,
+      totalOTs: otsDelDia.length
+    })
+    setCalculando(false)
+  }
+
   const misOrdenes = ordenes.filter(o =>
     o.tecnicos_ids?.includes(userId) || o.tecnico_id === userId
   ).sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
@@ -115,7 +258,7 @@ export default function Planificacion() {
 
   const ESTADOS_PRES: any = {
     enviado: { clase: 'bg-blue-900 text-blue-300 border border-blue-700', label: 'Enviado' },
-    pendiente: { clase: 'bg-yellow-900 text-yellow-300 border border-yellow-700', label: 'Pendiente respuesta' },
+    pendiente: { clase: 'bg-yellow-900 text-yellow-300 border border-yellow-700', label: 'Pendiente' },
     aceptado: { clase: 'bg-green-900 text-green-300 border border-green-700', label: 'Aceptado' },
     rechazado: { clase: 'bg-red-900 text-red-300 border border-red-700', label: 'Rechazado' },
     expirado: { clase: 'bg-gray-800 text-gray-400 border border-gray-700', label: 'Expirado' },
@@ -136,6 +279,10 @@ export default function Planificacion() {
     domingo.setHours(23, 59, 59)
     return f >= lunes && f <= domingo
   }).sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
+
+  const presEnviados = presupuestos.filter(p => p.estado === 'enviado').length
+  const presAceptados = presupuestos.filter(p => p.estado === 'aceptado').length
+  const presPendientes = presupuestos.filter(p => p.estado === 'pendiente').length
 
   async function generarNumeroPres() {
     const { count } = await supabase.from('presupuestos').select('*', { count: 'exact', head: true })
@@ -196,10 +343,6 @@ export default function Planificacion() {
     cargarDatos()
   }
 
-  const presEnviados = presupuestos.filter(p => p.estado === 'enviado').length
-  const presAceptados = presupuestos.filter(p => p.estado === 'aceptado').length
-  const presPendientes = presupuestos.filter(p => p.estado === 'pendiente').length
-
   if (loading) return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
       <p className="text-white">Cargando...</p>
@@ -230,7 +373,7 @@ export default function Planificacion() {
       <div className="p-6">
         <div className="flex gap-2 mb-6 flex-wrap">
           <button onClick={() => setVistaActiva('calendario')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vistaActiva === 'calendario' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
-            Calendario empresa
+            Calendario
           </button>
           <button onClick={() => setVistaActiva('mis_ordenes')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vistaActiva === 'mis_ordenes' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
             Mis ordenes
@@ -243,6 +386,9 @@ export default function Planificacion() {
             {presEnviados > 0 && (
               <span className="ml-1 bg-yellow-600 text-white text-xs px-1.5 py-0.5 rounded-full">{presEnviados}</span>
             )}
+          </button>
+          <button onClick={() => setVistaActiva('rutas')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vistaActiva === 'rutas' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
+            Optimizar rutas
           </button>
         </div>
 
@@ -259,7 +405,8 @@ export default function Planificacion() {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between"><span className="text-gray-400">Tipo</span><span className="text-white capitalize">{ordenSeleccionada.tipo}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Estado</span><span className={`text-xs px-2 py-0.5 rounded-full ${ESTADOS_OT[ordenSeleccionada.estado]}`}>{ordenSeleccionada.estado.replace('_', ' ')}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Prioridad</span><span className="text-white capitalize">{ordenSeleccionada.prioridad}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Duracion</span><span className="text-white">{ordenSeleccionada.duracion_horas || 2}h</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Hora fija</span><span className="text-white">{ordenSeleccionada.hora_fija ? 'Si' : 'No'}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Fecha</span><span className="text-white text-xs">{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Trabajadores</span><span className="text-white text-right text-xs">{getNombresTecnicos(ordenSeleccionada.tecnicos_ids || [])}</span></div>
                 {ordenSeleccionada.descripcion && (
@@ -422,7 +569,7 @@ export default function Planificacion() {
                   </div>
                   <div>
                     <label className="text-gray-400 text-xs uppercase mb-1 block">Descripcion</label>
-                    <input value={presTitulo} onChange={e => setPresTitulo(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Limpieza campanas industriales..." />
+                    <input value={presTitulo} onChange={e => setPresTitulo(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Limpieza campanas..." />
                   </div>
                   <div>
                     <label className="text-gray-400 text-xs uppercase mb-1 block">Importe (EUR)</label>
@@ -444,7 +591,7 @@ export default function Planificacion() {
                   </div>
                   <div>
                     <label className="text-gray-400 text-xs uppercase mb-1 block">Observaciones</label>
-                    <input value={presObs} onChange={e => setPresObs(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Notas adicionales..." />
+                    <input value={presObs} onChange={e => setPresObs(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Notas..." />
                   </div>
                   <div className="md:col-span-2 flex gap-3">
                     <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
@@ -471,9 +618,7 @@ export default function Planificacion() {
                       <div>
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <span className="text-blue-400 font-mono text-sm">{p.numero}</span>
-                          <span className={`text-xs px-2 py-1 rounded-full ${ESTADOS_PRES[p.estado]?.clase}`}>
-                            {ESTADOS_PRES[p.estado]?.label}
-                          </span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${ESTADOS_PRES[p.estado]?.clase}`}>{ESTADOS_PRES[p.estado]?.label}</span>
                         </div>
                         <p className="text-white font-semibold">{p.titulo}</p>
                         <p className="text-gray-400 text-sm">{p.clientes?.nombre || '—'}</p>
@@ -484,26 +629,163 @@ export default function Planificacion() {
                         <p className="text-gray-500 text-xs">{p.fecha_envio ? new Date(p.fecha_envio).toLocaleDateString('es-ES') : '—'}</p>
                       </div>
                     </div>
-                    <div className="border-t border-gray-800 pt-3 flex flex-wrap gap-2">
-                      <p className="text-gray-500 text-xs mr-2 self-center">Cambiar estado:</p>
+                    <div className="border-t border-gray-800 pt-3 flex flex-wrap gap-2 items-center">
+                      <p className="text-gray-500 text-xs mr-1">Estado:</p>
                       {Object.entries(ESTADOS_PRES).map(([key, val]: any) => (
-                        <button
-                          key={key}
-                          onClick={() => cambiarEstadoPres(p.id, key)}
-                          className={`text-xs px-3 py-1 rounded-full border transition-opacity ${val.clase} ${p.estado === key ? 'opacity-100 ring-2 ring-white ring-opacity-30' : 'opacity-50 hover:opacity-80'}`}
-                        >
+                        <button key={key} onClick={() => cambiarEstadoPres(p.id, key)}
+                          className={`text-xs px-3 py-1 rounded-full border transition-opacity ${val.clase} ${p.estado === key ? 'opacity-100 ring-2 ring-white ring-opacity-30' : 'opacity-40 hover:opacity-80'}`}>
                           {val.label}
                         </button>
                       ))}
-                      <button onClick={() => abrirFormPres(p)} className="ml-auto bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-xs">
-                        Editar
-                      </button>
-                      <button onClick={() => eliminarPres(p.id)} className="bg-gray-800 hover:bg-gray-700 text-red-400 px-3 py-1 rounded text-xs">
-                        Eliminar
-                      </button>
+                      <button onClick={() => abrirFormPres(p)} className="ml-auto bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-xs">Editar</button>
+                      <button onClick={() => eliminarPres(p.id)} className="bg-gray-800 hover:bg-gray-700 text-red-400 px-3 py-1 rounded text-xs">Eliminar</button>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {vistaActiva === 'rutas' && (
+          <div>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
+              <h2 className="text-white font-semibold mb-2">Optimizador de rutas</h2>
+              <p className="text-gray-400 text-sm mb-4">
+                Selecciona un dia y el sistema calculara la ruta optima para cada trabajador
+                partiendo desde Elche (C/ Leonardo Da Vinci 12), agrupando por zonas y
+                respetando las horas fijas con clientes.
+              </p>
+              <div className="flex gap-3 items-end flex-wrap">
+                <div>
+                  <label className="text-gray-400 text-xs uppercase mb-1 block">Dia a planificar</label>
+                  <input type="date" value={fechaRuta} onChange={e => setFechaRuta(e.target.value)} className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                </div>
+                <button onClick={calcularRutas} disabled={calculando} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg text-sm font-medium">
+                  {calculando ? 'Calculando...' : 'Calcular ruta optima'}
+                </button>
+              </div>
+            </div>
+
+            {resultadoRuta?.vacio && (
+              <div className="text-center py-12 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">
+                <p className="text-3xl mb-2">📅</p>
+                <p>No hay ordenes pendientes para ese dia.</p>
+                <p className="text-xs mt-2">Crea ordenes de trabajo con fecha para ese dia y asigna trabajadores.</p>
+              </div>
+            )}
+
+            {resultadoRuta?.resultados && (
+              <div className="flex flex-col gap-6">
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <p className="text-white font-semibold">
+                    {new Date(resultadoRuta.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                  <p className="text-gray-400 text-sm mt-1">
+                    {resultadoRuta.totalOTs} ordenes — {resultadoRuta.resultados.length} trabajadores
+                  </p>
+                </div>
+
+                {resultadoRuta.resultados.map((res: any) => (
+                  <div key={res.tecnico.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                    <div className="bg-gray-800 px-5 py-3 flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <p className="text-white font-semibold">{res.tecnico.nombre}</p>
+                        <p className="text-gray-400 text-xs">
+                          Salida 08:00 desde Elche — {res.ruta.length} paradas — {res.horasTotales}h trabajo
+                        </p>
+                      </div>
+                      <span className={`text-xs px-3 py-1 rounded-full font-medium ${res.cabeEnJornada ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+                        {res.cabeEnJornada ? 'Cabe en jornada 8-16h' : 'Excede jornada — revisar'}
+                      </span>
+                    </div>
+
+                    <div className="p-5">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs text-gray-300 font-bold flex-shrink-0">S</div>
+                          <div className="flex-1 bg-gray-800 rounded-lg px-3 py-2 flex items-center justify-between">
+                            <div>
+                              <p className="text-white text-sm font-medium">Salida nave Elche</p>
+                              <p className="text-gray-400 text-xs">C/ Leonardo Da Vinci 12</p>
+                            </div>
+                            <p className="text-green-400 font-mono text-sm font-bold">08:00</p>
+                          </div>
+                        </div>
+
+                        {res.ruta.map((parada: any, idx: number) => (
+                          <div key={parada.ot.id}>
+                            {parada.traslado > 0 && (
+                              <div className="flex items-center gap-3 my-1 pl-4">
+                                <div className="w-0.5 h-5 bg-gray-700 ml-3.5"></div>
+                                <p className="text-gray-500 text-xs">
+                                  Traslado ~{parada.traslado} min
+                                  {ZONAS[parada.zona] ? ` — ${ZONAS[parada.zona].nombre}` : ''}
+                                </p>
+                              </div>
+                            )}
+                            <div className="flex items-start gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-1 ${parada.fueraDeJornada ? 'bg-red-900 text-red-300' : parada.horaFija ? 'bg-yellow-900 text-yellow-300' : 'bg-blue-900 text-blue-300'}`}>
+                                {idx + 1}
+                              </div>
+                              <div className={`flex-1 rounded-lg px-3 py-3 border ${parada.horaFija ? 'bg-yellow-950 border-yellow-800' : parada.fueraDeJornada ? 'bg-red-950 border-red-800' : 'bg-gray-800 border-gray-700'}`}>
+                                <div className="flex items-start justify-between flex-wrap gap-2">
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                      <span className="text-blue-400 font-mono text-xs">{parada.ot.codigo}</span>
+                                      {parada.horaFija && <span className="text-xs bg-yellow-900 text-yellow-300 px-1.5 py-0.5 rounded">Hora fija</span>}
+                                      {parada.fueraDeJornada && <span className="text-xs bg-red-900 text-red-300 px-1.5 py-0.5 rounded">Fuera de jornada</span>}
+                                    </div>
+                                    <p className="text-white font-medium text-sm">{parada.cliente?.nombre || '—'}</p>
+                                    <p className="text-gray-400 text-xs">{parada.cliente?.direccion || '—'}</p>
+                                    <p className="text-gray-500 text-xs mt-1 capitalize">{parada.ot.tipo} — {parada.ot.duracion_horas || 2}h estimadas</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-white text-sm font-mono font-bold">{formatHora(parada.horaInicio)}</p>
+                                    <p className="text-gray-400 text-xs">hasta {formatHora(parada.horaFin)}</p>
+                                    {parada.cliente?.direccion && (
+                                      <a href={`https://www.google.com/maps/dir/Calle+Leonardo+Da+Vinci+12+Elche/${encodeURIComponent(parada.cliente.direccion)}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300 text-xs block mt-1">
+                                        Abrir Maps
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className="flex items-center gap-3 mt-2">
+                          <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-xs text-gray-300 font-bold flex-shrink-0">F</div>
+                          <div className="flex-1 bg-gray-800 rounded-lg px-3 py-2 flex items-center justify-between">
+                            <p className="text-white text-sm">Regreso nave Elche</p>
+                            <p className={`font-mono text-sm font-bold ${res.cabeEnJornada ? 'text-green-400' : 'text-red-400'}`}>
+                              {formatHora(res.horaFinal)} aprox.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {resultadoRuta.otsSinAsignar?.length > 0 && (
+                  <div className="bg-yellow-950 border border-yellow-800 rounded-xl p-5">
+                    <p className="text-yellow-300 font-semibold mb-3">Ordenes sin trabajador asignado ({resultadoRuta.otsSinAsignar.length})</p>
+                    <div className="flex flex-col gap-2">
+                      {resultadoRuta.otsSinAsignar.map((o: any) => (
+                        <div key={o.id} className="bg-yellow-900 bg-opacity-30 rounded-lg px-3 py-2 flex items-center justify-between">
+                          <div>
+                            <span className="text-yellow-400 font-mono text-xs mr-2">{o.codigo}</span>
+                            <span className="text-white text-sm">{clientes.find((c: any) => c.id === o.cliente_id)?.nombre || '—'}</span>
+                          </div>
+                          <span className="text-yellow-400 text-xs">{o.duracion_horas || 2}h</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-yellow-400 text-xs mt-3">Asigna trabajadores a estas ordenes para incluirlas en la ruta.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
