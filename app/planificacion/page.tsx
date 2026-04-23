@@ -350,15 +350,17 @@ export default function Planificacion() {
       observaciones: presObs,
     }
     if (editandoPres) {
-      await supabase.from('presupuestos').update(datos).eq('id', editandoPres.id)
-    } else {
-      const numero = await generarNumeroPres()
-      await supabase.from('presupuestos').insert({ ...datos, numero })
-    }
-    setMostrarFormPres(false)
-    setEditandoPres(null)
-    setDatosEscaneados(null)
-    cargarDatos()
+  const { error } = await supabase.from('presupuestos').update(datos).eq('id', editandoPres.id)
+  if (error) { alert('Error al actualizar: ' + error.message); return }
+} else {
+  const numero = await generarNumeroPres()
+  const { error } = await supabase.from('presupuestos').insert({ ...datos, numero })
+  if (error) { alert('Error al guardar: ' + error.message); return }
+}
+setMostrarFormPres(false)
+setEditandoPres(null)
+setDatosEscaneados(null)
+cargarDatos()
   }
 
   async function cambiarEstadoPres(id: string, nuevoEstado: string) {
