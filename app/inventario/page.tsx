@@ -117,7 +117,7 @@ export default function Inventario() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.cardStyle}>
         <div className="flex items-center gap-4">
           <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
@@ -151,7 +151,7 @@ export default function Inventario() {
         )}
 
         {mostrarForm && (
-          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
+          <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
             <h2 className="text-white font-semibold mb-5">{editando ? 'Editar material' : 'Nuevo material'}</h2>
             <form onSubmit={guardarMaterial} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
