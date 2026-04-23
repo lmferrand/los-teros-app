@@ -26,54 +26,73 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-      <div className="bg-gray-900 p-8 rounded-xl border border-gray-800 w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#080b14' }}>
+      <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <Image
-              src="/logo.png"
-              alt="Los Teros"
-              width={120}
-              height={120}
-              className="rounded-xl"
-            />
+          <div className="flex justify-center mb-5">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-2xl blur-xl opacity-30" style={{ background: 'radial-gradient(circle, #7c3aed, #06b6d4)' }}></div>
+              <Image
+                src="/logo.png"
+                alt="Los Teros"
+                width={100}
+                height={100}
+                className="relative rounded-2xl"
+                style={{ mixBlendMode: 'screen' }}
+              />
+            </div>
           </div>
-          <h1 className="text-2xl font-bold text-white">LOS TEROS</h1>
-          <p className="text-gray-400 mt-1 text-sm">Gestion Operativa</p>
+          <h1 className="text-2xl font-bold text-white mb-1">LOS TEROS</h1>
+          <p className="text-sm" style={{ color: '#06b6d4' }}>Gestion Operativa</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500"
-              placeholder="tu@email.com"
-              required
-            />
-          </div>
-          <div>
-            <label className="text-sm text-gray-400 block mb-1">Contrasena</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
-          >
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
-        </form>
+        <div className="rounded-2xl p-8" style={{ background: '#0d1117', border: '1px solid #1e2d3d' }}>
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none transition-all"
+                style={{ background: '#080b14', border: '1px solid #1e2d3d' }}
+                onFocus={e => e.target.style.borderColor = '#7c3aed'}
+                onBlur={e => e.target.style.borderColor = '#1e2d3d'}
+                placeholder="tu@email.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Contrasena</label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full rounded-xl px-4 py-3 text-white text-sm outline-none transition-all"
+                style={{ background: '#080b14', border: '1px solid #1e2d3d' }}
+                onFocus={e => e.target.style.borderColor = '#7c3aed'}
+                onBlur={e => e.target.style.borderColor = '#1e2d3d'}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+            {error && (
+              <div className="rounded-xl px-4 py-3 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+                {error}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              {loading ? 'Entrando...' : 'Entrar'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   )

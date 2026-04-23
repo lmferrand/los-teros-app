@@ -50,11 +50,7 @@ export default function Ordenes() {
   }
 
   async function cargarFotosOrden(ordenId: string) {
-    const { data } = await supabase
-      .from('fotos_ordenes')
-      .select('*')
-      .eq('orden_id', ordenId)
-      .order('created_at')
+    const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
     return data || []
   }
 
@@ -65,71 +61,66 @@ export default function Ordenes() {
 
   function abrirFormNuevo() {
     setEditandoId(null)
-    setTipo('limpieza')
-    setClienteId('')
-    setTecnicosSeleccionados([])
-    setFecha('')
-    setPrioridad('normal')
-    setEstado('pendiente')
-    setDescripcion('')
-    setObservaciones('')
-    setDuracionHoras('2')
-    setHoraFija(false)
+    setTipo('limpieza'); setClienteId(''); setTecnicosSeleccionados([])
+    setFecha(''); setPrioridad('normal'); setEstado('pendiente')
+    setDescripcion(''); setObservaciones(''); setDuracionHoras('2'); setHoraFija(false)
     setMostrarForm(true)
   }
 
   function abrirFormEditar(o: any) {
     setEditandoId(o.id)
-    setTipo(o.tipo || 'limpieza')
-    setClienteId(o.cliente_id || '')
+    setTipo(o.tipo || 'limpieza'); setClienteId(o.cliente_id || '')
     setTecnicosSeleccionados(o.tecnicos_ids || [])
     setFecha(o.fecha_programada ? new Date(o.fecha_programada).toISOString().slice(0, 16) : '')
-    setPrioridad(o.prioridad || 'normal')
-    setEstado(o.estado || 'pendiente')
-    setDescripcion(o.descripcion || '')
-    setObservaciones(o.observaciones || '')
-    setDuracionHoras(String(o.duracion_horas || 2))
-    setHoraFija(o.hora_fija || false)
-    setMostrarForm(true)
-    setOrdenDetalle(null)
+    setPrioridad(o.prioridad || 'normal'); setEstado(o.estado || 'pendiente')
+    setDescripcion(o.descripcion || ''); setObservaciones(o.observaciones || '')
+    setDuracionHoras(String(o.duracion_horas || 2)); setHoraFija(o.hora_fija || false)
+    setMostrarForm(true); setOrdenDetalle(null)
   }
 
-  async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipo: string) {
+  async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipoFoto: string) {
     const file = e.target.files?.[0]
     if (!file || !ordenDetalle) return
     setSubiendo(true)
-    const nombre_archivo = `${ordenDetalle.id}/${tipo}/${Date.now()}-${file.name}`
-    const { data, error } = await supabase.storage
-      .from('fotos-ordenes')
-      .upload(nombre_archivo, file)
-    if (!error && data) {
-      const { data: urlData } = supabase.storage
-        .from('fotos-ordenes')
-        .getPublicUrl(nombre_archivo)
-      const { data: { session } } = await supabase.auth.getSession()
-      await supabase.from('fotos_ordenes').insert({
-        orden_id: ordenDetalle.id,
-        tipo,
-        url: urlData.publicUrl,
-        subida_por: session?.user?.id,
-      })
-      const fotos = await cargarFotosOrden(ordenDetalle.id)
-      setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
-    }
+    try {
+      const comprimida = await comprimirImagen(file)
+      const nombreArchivo = `${ordenDetalle.clientes?.nombre?.replace(/[^a-zA-Z0-9]/g, '_') || ordenDetalle.id}/${new Date().toISOString().slice(0, 10)}/${tipoFoto}/${Date.now()}.jpg`
+      const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
+      if (!error && data) {
+        const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
+        const { data: { session } } = await supabase.auth.getSession()
+        await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
+        const fotos = await cargarFotosOrden(ordenDetalle.id)
+        setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+      }
+    } catch { alert('Error al subir la foto.') }
     setSubiendo(false)
   }
 
+  async function comprimirImagen(file: File, maxWidth = 1200, calidad = 0.75): Promise<Blob> {
+    return new Promise((resolve) => {
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width; let height = img.height
+        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth }
+        canvas.width = width; canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx?.drawImage(img, 0, 0, width, height)
+        canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', calidad)
+        URL.revokeObjectURL(url)
+      }
+      img.src = url
+    })
+  }
+
   function toggleTecnico(id: string) {
-    setTecnicosSeleccionados(prev =>
-      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
-    )
+    setTecnicosSeleccionados(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
   }
 
   async function generarCodigo(tipo: string) {
-    const prefijos: any = {
-      limpieza: 'LIM', sustitucion: 'SUS', mantenimiento: 'MAN',
-      instalacion: 'INS', revision: 'REV', otro: 'OTR'
-    }
+    const prefijos: any = { limpieza: 'LIM', sustitucion: 'SUS', mantenimiento: 'MAN', instalacion: 'INS', revision: 'REV', otro: 'OTR' }
     const { count } = await supabase.from('ordenes').select('*', { count: 'exact', head: true }).eq('tipo', tipo)
     const num = String((count || 0) + 1).padStart(4, '0')
     return `${prefijos[tipo] || 'OTR'}-${new Date().getFullYear()}-${num}`
@@ -138,17 +129,9 @@ export default function Ordenes() {
   async function guardarOrden(e: React.FormEvent) {
     e.preventDefault()
     const datos = {
-      tipo,
-      cliente_id: clienteId,
-      tecnico_id: tecnicosSeleccionados[0] || null,
-      tecnicos_ids: tecnicosSeleccionados,
-      fecha_programada: fecha,
-      prioridad,
-      estado,
-      descripcion,
-      observaciones,
-      duracion_horas: parseFloat(duracionHoras) || 2,
-      hora_fija: horaFija,
+      tipo, cliente_id: clienteId, tecnico_id: tecnicosSeleccionados[0] || null,
+      tecnicos_ids: tecnicosSeleccionados, fecha_programada: fecha, prioridad, estado,
+      descripcion, observaciones, duracion_horas: parseFloat(duracionHoras) || 2, hora_fija: horaFija,
     }
     if (editandoId) {
       await supabase.from('ordenes').update(datos).eq('id', editandoId)
@@ -156,49 +139,26 @@ export default function Ordenes() {
       const nuevoCodigo = await generarCodigo(tipo)
       await supabase.from('ordenes').insert({ ...datos, codigo: nuevoCodigo })
     }
-    setMostrarForm(false)
-    setEditandoId(null)
-    setDescripcion('')
-    setObservaciones('')
-    setClienteId('')
-    setTecnicosSeleccionados([])
-    setDuracionHoras('2')
-    setHoraFija(false)
+    setMostrarForm(false); setEditandoId(null)
+    setDescripcion(''); setObservaciones(''); setClienteId(''); setTecnicosSeleccionados([])
     cargarDatos()
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
     await supabase.from('ordenes').update({ estado: nuevoEstado }).eq('id', id)
     cargarDatos()
-    if (ordenDetalle?.id === id) {
-      setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
-    }
+    if (ordenDetalle?.id === id) setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
   }
 
   async function eliminarOrden(id: string) {
     if (!confirm('Eliminar esta orden?')) return
     await supabase.from('ordenes').delete().eq('id', id)
-    cargarDatos()
-    setOrdenDetalle(null)
+    cargarDatos(); setOrdenDetalle(null)
   }
 
   function getNombresTecnicos(ids: string[]) {
     if (!ids || ids.length === 0) return 'Sin asignar'
     return ids.map(id => tecnicos.find(t => t.id === id)?.nombre || '').filter(Boolean).join(', ')
-  }
-
-  const ESTADOS: any = {
-    pendiente: 'bg-blue-900 text-blue-300',
-    en_curso: 'bg-yellow-900 text-yellow-300',
-    completada: 'bg-green-900 text-green-300',
-    cancelada: 'bg-gray-800 text-gray-400',
-  }
-
-  const PRIORIDADES: any = {
-    baja: 'text-gray-400',
-    normal: 'text-blue-400',
-    alta: 'text-yellow-400',
-    urgente: 'text-red-400',
   }
 
   const TIPOS_FOTO = [
@@ -209,123 +169,135 @@ export default function Ordenes() {
     { key: 'albaran', label: 'Albaran' },
   ]
 
-  const ordenesFiltradas = filtroEstado
-    ? ordenes.filter(o => o.estado === filtroEstado)
-    : ordenes
+  const ESTADO_COLORS: any = {
+    pendiente: { bg: 'rgba(124,58,237,0.2)', color: '#a78bfa' },
+    en_curso: { bg: 'rgba(234,179,8,0.2)', color: '#fbbf24' },
+    completada: { bg: 'rgba(16,185,129,0.2)', color: '#34d399' },
+    cancelada: { bg: 'rgba(71,85,105,0.2)', color: '#64748b' },
+  }
+
+  const PRIORIDAD_COLORS: any = {
+    baja: '#64748b', normal: '#06b6d4', alta: '#f59e0b', urgente: '#ef4444'
+  }
+
+  const ordenesFiltradas = filtroEstado ? ordenes.filter(o => o.estado === filtroEstado) : ordenes
+
+  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
+  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+    <div className="min-h-screen" style={{ background: '#080b14' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
-          <h1 className="text-xl font-bold text-white">Ordenes de trabajo</h1>
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
+            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>
+            Dashboard
+          </a>
+          <h1 className="text-white font-bold text-lg">Ordenes de trabajo</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} className="bg-gray-800 border border-gray-700 text-gray-300 text-sm rounded-lg px-3 py-2">
+          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
+            className="text-sm rounded-xl px-3 py-2 outline-none" style={inputStyle}>
             <option value="">Todos los estados</option>
             <option value="pendiente">Pendiente</option>
             <option value="en_curso">En curso</option>
             <option value="completada">Completada</option>
             <option value="cancelada">Cancelada</option>
           </select>
-          <button onClick={abrirFormNuevo} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+          <button onClick={abrirFormNuevo} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
             + Nueva OT
           </button>
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-6 max-w-5xl mx-auto">
         {mostrarForm && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
-            <h2 className="text-white font-semibold mb-4">
-              {editandoId ? 'Editar orden de trabajo' : 'Nueva orden de trabajo'}
-            </h2>
+          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
+            <h2 className="text-white font-semibold mb-5">{editandoId ? 'Editar orden' : 'Nueva orden de trabajo'}</h2>
             <form onSubmit={guardarOrden} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Tipo</label>
-                <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="limpieza">Limpieza</option>
-                  <option value="sustitucion">Sustitucion</option>
-                  <option value="mantenimiento">Mantenimiento</option>
-                  <option value="instalacion">Instalacion</option>
-                  <option value="revision">Revision</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Cliente</label>
-                <select value={clienteId} onChange={e => setClienteId(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+              {[
+                { label: 'Tipo', el: <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                  <option value="limpieza">Limpieza</option><option value="sustitucion">Sustitucion</option>
+                  <option value="mantenimiento">Mantenimiento</option><option value="instalacion">Instalacion</option>
+                  <option value="revision">Revision</option><option value="otro">Otro</option>
+                </select> },
+                { label: 'Cliente', el: <select value={clienteId} onChange={e => setClienteId(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
                   <option value="">Seleccionar cliente...</option>
                   {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                </select>
-              </div>
+                </select> },
+              ].map((f, i) => (
+                <div key={i}>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>{f.label}</label>
+                  {f.el}
+                </div>
+              ))}
               <div className="md:col-span-2">
-                <label className="text-gray-400 text-xs uppercase mb-2 block">Trabajadores asignados</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Trabajadores</label>
                 <div className="flex flex-wrap gap-2">
                   {tecnicos.map(t => (
                     <button key={t.id} type="button" onClick={() => toggleTecnico(t.id)}
-                      className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${tecnicosSeleccionados.includes(t.id) ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>
+                      className="px-3 py-1.5 rounded-xl text-sm transition-all"
+                      style={tecnicosSeleccionados.includes(t.id)
+                        ? { background: 'linear-gradient(135deg, #7c3aed, #06b6d4)', color: 'white', border: 'none' }
+                        : { background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
                       {t.nombre}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Fecha programada</label>
-                <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Fecha programada</label>
+                <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} />
               </div>
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Prioridad</label>
-                <select value={prioridad} onChange={e => setPrioridad(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="baja">Baja</option>
-                  <option value="normal">Normal</option>
-                  <option value="alta">Alta</option>
-                  <option value="urgente">Urgente</option>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Prioridad</label>
+                <select value={prioridad} onChange={e => setPrioridad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                  <option value="baja">Baja</option><option value="normal">Normal</option>
+                  <option value="alta">Alta</option><option value="urgente">Urgente</option>
                 </select>
               </div>
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Estado</label>
-                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="pendiente">Pendiente</option>
-                  <option value="en_curso">En curso</option>
-                  <option value="completada">Completada</option>
-                  <option value="cancelada">Cancelada</option>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Estado</label>
+                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                  <option value="pendiente">Pendiente</option><option value="en_curso">En curso</option>
+                  <option value="completada">Completada</option><option value="cancelada">Cancelada</option>
                 </select>
               </div>
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Duracion estimada</label>
-                <select value={duracionHoras} onChange={e => setDuracionHoras(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="0.5">30 minutos</option>
-                  <option value="1">1 hora</option>
-                  <option value="1.5">1.5 horas</option>
-                  <option value="2">2 horas</option>
-                  <option value="2.5">2.5 horas</option>
-                  <option value="3">3 horas</option>
-                  <option value="4">4 horas</option>
-                  <option value="5">5 horas</option>
-                  <option value="6">6 horas</option>
-                  <option value="8">Jornada completa</option>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Duracion estimada</label>
+                <select value={duracionHoras} onChange={e => setDuracionHoras(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                  <option value="0.5">30 min</option><option value="1">1 hora</option>
+                  <option value="1.5">1.5 horas</option><option value="2">2 horas</option>
+                  <option value="2.5">2.5 horas</option><option value="3">3 horas</option>
+                  <option value="4">4 horas</option><option value="5">5 horas</option>
+                  <option value="6">6 horas</option><option value="8">Jornada completa</option>
                 </select>
               </div>
-              <div className="flex items-center gap-3 bg-gray-800 rounded-lg px-3 py-2 mt-auto">
-                <input type="checkbox" id="hora-fija" checked={horaFija} onChange={e => setHoraFija(e.target.checked)} className="w-4 h-4 accent-blue-500" />
-                <label htmlFor="hora-fija" className="text-gray-300 text-sm cursor-pointer">
-                  Hora fija con cliente
-                </label>
+              <div className="flex items-center gap-3 rounded-xl px-3 py-2 mt-auto" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+                <input type="checkbox" id="hora-fija" checked={horaFija} onChange={e => setHoraFija(e.target.checked)} className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
+                <label htmlFor="hora-fija" className="text-sm cursor-pointer" style={{ color: '#94a3b8' }}>Hora fija con cliente</label>
               </div>
               <div className="md:col-span-2">
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Descripcion del trabajo</label>
-                <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Describe los trabajos a realizar..." />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Descripcion</label>
+                <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3}
+                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none"
+                  style={inputStyle} placeholder="Describe los trabajos a realizar..." />
               </div>
               <div className="md:col-span-2">
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Observaciones</label>
-                <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Instrucciones especiales, acceso..." />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Observaciones</label>
+                <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2}
+                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none"
+                  style={inputStyle} placeholder="Instrucciones especiales..." />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                <button type="submit" className="text-white px-5 py-2 rounded-xl text-sm font-medium"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
                   {editandoId ? 'Guardar cambios' : 'Crear OT'}
                 </button>
-                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }} className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm">
+                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }}
+                  className="text-sm px-5 py-2 rounded-xl" style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
                   Cancelar
                 </button>
               </div>
@@ -334,83 +306,69 @@ export default function Ordenes() {
         )}
 
         {ordenDetalle && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-screen overflow-y-auto">
-              <div className="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
+            <div className="w-full max-w-2xl max-h-screen overflow-y-auto rounded-2xl" style={cardStyle}>
+              <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={{ background: '#0d1117', borderBottom: '1px solid #1e2d3d' }}>
                 <div>
-                  <span className="text-blue-400 font-mono text-sm">{ordenDetalle.codigo}</span>
+                  <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{ordenDetalle.codigo}</span>
                   <h2 className="text-white font-bold text-lg">{ordenDetalle.clientes?.nombre || '—'}</h2>
                 </div>
-                <button onClick={() => setOrdenDetalle(null)} className="text-gray-400 hover:text-white text-xl">X</button>
+                <button onClick={() => setOrdenDetalle(null)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors" style={{ color: '#64748b', border: '1px solid #1e2d3d' }}>X</button>
               </div>
               <div className="p-6">
-                <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Estado</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${ESTADOS[ordenDetalle.estado]}`}>{ordenDetalle.estado.replace('_', ' ')}</span>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Prioridad</p>
-                    <span className={`text-sm font-medium ${PRIORIDADES[ordenDetalle.prioridad]}`}>{ordenDetalle.prioridad}</span>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Tipo</p>
-                    <p className="text-white text-sm capitalize">{ordenDetalle.tipo}</p>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Fecha</p>
-                    <p className="text-white text-sm">{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</p>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Duracion</p>
-                    <p className="text-white text-sm">{ordenDetalle.duracion_horas || 2} horas</p>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Hora fija</p>
-                    <p className={`text-sm font-medium ${ordenDetalle.hora_fija ? 'text-yellow-400' : 'text-gray-400'}`}>
-                      {ordenDetalle.hora_fija ? 'Si — hora acordada con cliente' : 'No'}
-                    </p>
-                  </div>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {[
+                    { label: 'Estado', val: <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADO_COLORS[ordenDetalle.estado]?.bg, color: ESTADO_COLORS[ordenDetalle.estado]?.color }}>{ordenDetalle.estado.replace('_', ' ')}</span> },
+                    { label: 'Prioridad', val: <span className="text-sm font-medium" style={{ color: PRIORIDAD_COLORS[ordenDetalle.prioridad] }}>{ordenDetalle.prioridad}</span> },
+                    { label: 'Tipo', val: <span className="text-white text-sm capitalize">{ordenDetalle.tipo}</span> },
+                    { label: 'Fecha', val: <span className="text-white text-sm">{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</span> },
+                    { label: 'Duracion', val: <span className="text-white text-sm">{ordenDetalle.duracion_horas || 2}h</span> },
+                    { label: 'Hora fija', val: <span className="text-sm font-medium" style={{ color: ordenDetalle.hora_fija ? '#f59e0b' : '#64748b' }}>{ordenDetalle.hora_fija ? 'Si' : 'No'}</span> },
+                  ].map((item, i) => (
+                    <div key={i} className="rounded-xl p-3" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: '#475569' }}>{item.label}</p>
+                      {item.val}
+                    </div>
+                  ))}
                 </div>
-
-                <div className="bg-gray-800 rounded-lg p-3 mb-4">
-                  <p className="text-gray-400 text-xs mb-1">Trabajadores</p>
+                <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+                  <p className="text-xs uppercase tracking-wider mb-1" style={{ color: '#475569' }}>Trabajadores</p>
                   <p className="text-white text-sm">{getNombresTecnicos(ordenDetalle.tecnicos_ids || [])}</p>
                 </div>
-
                 {ordenDetalle.descripcion && (
-                  <div className="bg-gray-800 rounded-lg p-3 mb-4">
-                    <p className="text-gray-400 text-xs mb-1">Trabajos a realizar</p>
+                  <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Trabajos a realizar</p>
                     <p className="text-white text-sm leading-relaxed">{ordenDetalle.descripcion}</p>
                   </div>
                 )}
-
                 {ordenDetalle.observaciones && (
-                  <div className="bg-gray-800 rounded-lg p-3 mb-4">
-                    <p className="text-gray-400 text-xs mb-1">Observaciones</p>
+                  <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Observaciones</p>
                     <p className="text-white text-sm leading-relaxed">{ordenDetalle.observaciones}</p>
                   </div>
                 )}
 
-                <div className="bg-green-950 border border-green-800 rounded-xl p-4 mb-4">
-                  <p className="text-green-300 font-medium text-sm mb-2">Escanear material o equipo</p>
-                  <p className="text-green-400 text-xs mb-3">Escanea el QR de cualquier material o equipo para registrar su salida vinculada a esta OT automaticamente.</p>
-                  <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)} className="w-full bg-green-700 hover:bg-green-600 text-white px-4 py-3 rounded-lg text-sm font-medium">
+                <div className="rounded-2xl p-4 mb-4" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.2)' }}>
+                  <p className="font-medium text-sm mb-1" style={{ color: '#06b6d4' }}>Escanear material o equipo</p>
+                  <p className="text-xs mb-3" style={{ color: '#475569' }}>Escanea el QR para registrar salida vinculada a esta OT.</p>
+                  <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
+                    className="w-full py-2.5 rounded-xl text-sm font-medium text-white"
+                    style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)' }}>
                     Abrir escaner QR
                   </button>
                 </div>
 
-                <div className="border-t border-gray-800 pt-4 mb-4">
+                <div className="mb-4">
                   <h3 className="text-white font-semibold mb-3">Fotos</h3>
-                  {subiendo && <p className="text-blue-400 text-sm mb-3">Subiendo foto...</p>}
+                  {subiendo && <p className="text-sm mb-3" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
                   {TIPOS_FOTO.map(tf => {
                     const fotosDelTipo = (ordenDetalle.fotos || []).filter((f: any) => f.tipo === tf.key)
                     return (
                       <div key={tf.key} className="mb-4">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-gray-400 text-xs uppercase">{tf.label}</p>
-                          <label className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-xs cursor-pointer">
-                            + Subir foto
+                          <p className="text-xs uppercase tracking-wider" style={{ color: '#475569' }}>{tf.label}</p>
+                          <label className="text-xs px-3 py-1 rounded-lg cursor-pointer transition-colors" style={{ background: '#080b14', color: '#06b6d4', border: '1px solid #1e2d3d' }}>
+                            + Foto
                             <input type="file" accept="image/*" className="hidden" onChange={e => subirFoto(e, tf.key)} />
                           </label>
                         </div>
@@ -418,36 +376,46 @@ export default function Ordenes() {
                           <div className="grid grid-cols-3 gap-2">
                             {fotosDelTipo.map((f: any) => (
                               <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
-                                <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-lg border border-gray-700 hover:opacity-80 transition-opacity" />
+                                <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid #1e2d3d' }} />
                               </a>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-gray-600 text-xs">Sin fotos</p>
+                          <p className="text-xs" style={{ color: '#334155' }}>Sin fotos</p>
                         )}
                       </div>
                     )
                   })}
                 </div>
 
-                <div className="border-t border-gray-800 pt-4 flex gap-3 flex-wrap">
+                <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid #1e2d3d' }}>
                   {ordenDetalle.estado === 'pendiente' && (
-                    <button onClick={() => cambiarEstado(ordenDetalle.id, 'en_curso')} className="bg-yellow-900 hover:bg-yellow-800 text-yellow-300 px-4 py-2 rounded-lg text-sm">
+                    <button onClick={() => cambiarEstado(ordenDetalle.id, 'en_curso')}
+                      className="text-sm px-4 py-2 rounded-xl font-medium"
+                      style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.3)' }}>
                       Iniciar trabajo
                     </button>
                   )}
                   {ordenDetalle.estado === 'en_curso' && (
-                    <button onClick={() => cambiarEstado(ordenDetalle.id, 'completada')} className="bg-green-900 hover:bg-green-800 text-green-300 px-4 py-2 rounded-lg text-sm">
+                    <button onClick={() => cambiarEstado(ordenDetalle.id, 'completada')}
+                      className="text-sm px-4 py-2 rounded-xl font-medium"
+                      style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
                       Completar
                     </button>
                   )}
-                  <button onClick={() => abrirFormEditar(ordenDetalle)} className="bg-blue-900 hover:bg-blue-800 text-blue-300 px-4 py-2 rounded-lg text-sm">
+                  <button onClick={() => abrirFormEditar(ordenDetalle)}
+                    className="text-sm px-4 py-2 rounded-xl"
+                    style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                     Editar OT
                   </button>
-                  <button onClick={() => eliminarOrden(ordenDetalle.id)} className="bg-gray-800 hover:bg-gray-700 text-red-400 px-4 py-2 rounded-lg text-sm">
+                  <button onClick={() => eliminarOrden(ordenDetalle.id)}
+                    className="text-sm px-4 py-2 rounded-xl"
+                    style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
                     Eliminar
                   </button>
-                  <button onClick={() => setOrdenDetalle(null)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm ml-auto">
+                  <button onClick={() => setOrdenDetalle(null)}
+                    className="text-sm px-4 py-2 rounded-xl ml-auto"
+                    style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
                     Cerrar
                   </button>
                 </div>
@@ -457,39 +425,41 @@ export default function Ordenes() {
         )}
 
         {loading ? (
-          <p className="text-gray-400">Cargando...</p>
+          <div className="flex items-center justify-center py-20">
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
+          </div>
         ) : ordenesFiltradas.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
-            <p className="text-4xl mb-3">📋</p>
-            <p>No hay ordenes. Crea la primera.</p>
+          <div className="text-center py-20">
+            <p className="text-5xl mb-4">📋</p>
+            <p style={{ color: '#475569' }}>No hay ordenes. Crea la primera.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {ordenesFiltradas.map(o => (
-              <div key={o.id} onClick={() => abrirDetalle(o)} className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl p-5 cursor-pointer transition-colors">
+              <div key={o.id} onClick={() => abrirDetalle(o)}
+                className="rounded-2xl p-5 cursor-pointer transition-all"
+                style={cardStyle}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#1e2d3d'}>
                 <div className="flex items-start justify-between flex-wrap gap-3">
                   <div>
-                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      <span className="text-blue-400 font-mono text-sm">{o.codigo}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${ESTADOS[o.estado] || 'bg-gray-800 text-gray-400'}`}>
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{o.codigo}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ESTADO_COLORS[o.estado]?.bg, color: ESTADO_COLORS[o.estado]?.color }}>
                         {o.estado.replace('_', ' ')}
                       </span>
-                      <span className={`text-xs font-medium ${PRIORIDADES[o.prioridad] || 'text-gray-400'}`}>
-                        {o.prioridad}
-                      </span>
-                      {o.hora_fija && (
-                        <span className="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full">Hora fija</span>
-                      )}
+                      <span className="text-xs font-medium" style={{ color: PRIORIDAD_COLORS[o.prioridad] }}>{o.prioridad}</span>
+                      {o.hora_fija && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>Hora fija</span>}
                     </div>
                     <p className="text-white font-medium">{o.clientes?.nombre || '—'}</p>
-                    <p className="text-gray-400 text-sm mt-1">{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
-                    <div className="flex gap-4 mt-2 text-xs text-gray-500 flex-wrap">
+                    <p className="text-sm mt-1" style={{ color: '#475569' }}>{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
+                    <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: '#334155' }}>
                       <span>Trabajadores: {getNombresTecnicos(o.tecnicos_ids || [])}</span>
                       <span>Duracion: {o.duracion_horas || 2}h</span>
                       <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '—'}</span>
                     </div>
                   </div>
-                  <span className="text-gray-500 text-xs">Ver detalle</span>
+                  <span className="text-xs" style={{ color: '#334155' }}>Ver detalle →</span>
                 </div>
               </div>
             ))}
