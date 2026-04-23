@@ -45,26 +45,17 @@ export default function Albaranes() {
   }
 
   function abrirFormNuevo() {
-    setEditandoId(null)
-    setClienteId('')
-    setOrdenId('')
-    setDescripcion('')
-    setEstado('pendiente')
-    setFecha(new Date().toISOString().slice(0, 10))
-    setObservaciones('')
+    setEditandoId(null); setClienteId(''); setOrdenId('')
+    setDescripcion(''); setEstado('pendiente')
+    setFecha(new Date().toISOString().slice(0, 10)); setObservaciones('')
     setMostrarForm(true)
   }
 
   function abrirFormEditar(a: any) {
-    setEditandoId(a.id)
-    setClienteId(a.cliente_id || '')
-    setOrdenId(a.orden_id || '')
-    setDescripcion(a.descripcion || '')
-    setEstado(a.estado || 'pendiente')
-    setFecha(a.fecha || new Date().toISOString().slice(0, 10))
-    setObservaciones(a.observaciones || '')
-    setMostrarForm(true)
-    setDetalleId(null)
+    setEditandoId(a.id); setClienteId(a.cliente_id || ''); setOrdenId(a.orden_id || '')
+    setDescripcion(a.descripcion || ''); setEstado(a.estado || 'pendiente')
+    setFecha(a.fecha || new Date().toISOString().slice(0, 10)); setObservaciones(a.observaciones || '')
+    setMostrarForm(true); setDetalleId(null)
   }
 
   async function generarNumero() {
@@ -75,23 +66,14 @@ export default function Albaranes() {
 
   async function guardarAlbaran(e: React.FormEvent) {
     e.preventDefault()
-    const datos = {
-      cliente_id: clienteId || null,
-      orden_id: ordenId || null,
-      descripcion,
-      estado,
-      fecha,
-      observaciones,
-    }
+    const datos = { cliente_id: clienteId || null, orden_id: ordenId || null, descripcion, estado, fecha, observaciones }
     if (editandoId) {
       await supabase.from('albaranes').update(datos).eq('id', editandoId)
     } else {
       const numero = await generarNumero()
       await supabase.from('albaranes').insert({ ...datos, numero, fotos_urls: [] })
     }
-    setMostrarForm(false)
-    setEditandoId(null)
-    cargarDatos()
+    setMostrarForm(false); setEditandoId(null); cargarDatos()
   }
 
   async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, albanId: string) {
@@ -99,18 +81,12 @@ export default function Albaranes() {
     if (!file) return
     setSubiendo(true)
     const nombre_archivo = `${albanId}/${Date.now()}-${file.name}`
-    const { data, error } = await supabase.storage
-      .from('fotos-albaranes')
-      .upload(nombre_archivo, file)
+    const { data, error } = await supabase.storage.from('fotos-albaranes').upload(nombre_archivo, file)
     if (!error && data) {
-      const { data: urlData } = supabase.storage
-        .from('fotos-albaranes')
-        .getPublicUrl(nombre_archivo)
+      const { data: urlData } = supabase.storage.from('fotos-albaranes').getPublicUrl(nombre_archivo)
       const alb = albaranes.find(a => a.id === albanId)
       const fotosActuales = alb?.fotos_urls || []
-      await supabase.from('albaranes').update({
-        fotos_urls: [...fotosActuales, urlData.publicUrl]
-      }).eq('id', albanId)
+      await supabase.from('albaranes').update({ fotos_urls: [...fotosActuales, urlData.publicUrl] }).eq('id', albanId)
       cargarDatos()
     }
     setSubiendo(false)
@@ -129,57 +105,61 @@ export default function Albaranes() {
   async function eliminarAlbaran(id: string) {
     if (!confirm('Eliminar este albaran?')) return
     await supabase.from('albaranes').delete().eq('id', id)
-    cargarDatos()
-    setDetalleId(null)
+    cargarDatos(); setDetalleId(null)
   }
 
   const ESTADOS: any = {
-    pendiente: { clase: 'bg-yellow-900 text-yellow-300', label: 'Pendiente' },
-    entregado: { clase: 'bg-blue-900 text-blue-300', label: 'Entregado' },
-    firmado: { clase: 'bg-green-900 text-green-300', label: 'Firmado' },
-    cancelado: { clase: 'bg-gray-800 text-gray-400', label: 'Cancelado' },
+    pendiente: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)', label: 'Pendiente' },
+    entregado: { color: '#06b6d4', bg: 'rgba(6,182,212,0.15)', label: 'Entregado' },
+    firmado: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Firmado' },
+    cancelado: { color: '#64748b', bg: 'rgba(71,85,105,0.15)', label: 'Cancelado' },
   }
 
   const albDetalle = detalleId ? albaranes.find(a => a.id === detalleId) : null
+  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
+  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+    <div className="min-h-screen" style={{ background: '#080b14' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
-          <h1 className="text-xl font-bold text-white">Albaranes</h1>
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
+            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
+          <h1 className="text-white font-bold text-lg">Albaranes</h1>
         </div>
-        <button onClick={abrirFormNuevo} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+        <button onClick={abrirFormNuevo} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
+          style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
           + Nuevo albaran
         </button>
       </div>
 
-      <div className="p-6">
+      <div className="p-6 max-w-5xl mx-auto">
         {mostrarForm && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
-            <h2 className="text-white font-semibold mb-4">{editandoId ? 'Editar albaran' : 'Nuevo albaran'}</h2>
+          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
+            <h2 className="text-white font-semibold mb-5">{editandoId ? 'Editar albaran' : 'Nuevo albaran'}</h2>
             <form onSubmit={guardarAlbaran} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Cliente</label>
-                <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Cliente</label>
+                <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
                   <option value="">Seleccionar cliente...</option>
                   {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Orden de trabajo</label>
-                <select value={ordenId} onChange={e => setOrdenId(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Orden de trabajo</label>
+                <select value={ordenId} onChange={e => setOrdenId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
                   <option value="">Sin OT asociada</option>
                   {ordenes.map(o => <option key={o.id} value={o.id}>{o.codigo}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Fecha</label>
-                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Fecha</label>
+                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} />
               </div>
               <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Estado</label>
-                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Estado</label>
+                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
                   <option value="pendiente">Pendiente</option>
                   <option value="entregado">Entregado</option>
                   <option value="firmado">Firmado</option>
@@ -187,18 +167,24 @@ export default function Albaranes() {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Descripcion del trabajo realizado</label>
-                <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Describe el trabajo realizado..." />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Trabajo realizado</label>
+                <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3}
+                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none" style={inputStyle}
+                  placeholder="Describe el trabajo realizado..." />
               </div>
               <div className="md:col-span-2">
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Observaciones</label>
-                <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Notas adicionales..." />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Observaciones</label>
+                <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2}
+                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none" style={inputStyle} />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                <button type="submit" className="text-white px-5 py-2 rounded-xl text-sm font-medium"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
                   {editandoId ? 'Guardar cambios' : 'Crear albaran'}
                 </button>
-                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }} className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm">
+                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }}
+                  className="text-sm px-5 py-2 rounded-xl"
+                  style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
                   Cancelar
                 </button>
               </div>
@@ -207,88 +193,85 @@ export default function Albaranes() {
         )}
 
         {albDetalle && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl max-h-screen overflow-y-auto">
-              <div className="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+            <div className="w-full max-w-2xl max-h-screen overflow-y-auto rounded-2xl" style={cardStyle}>
+              <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={{ background: '#0d1117', borderBottom: '1px solid #1e2d3d' }}>
                 <div>
-                  <span className="text-blue-400 font-mono text-sm">{albDetalle.numero}</span>
+                  <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{albDetalle.numero}</span>
                   <h2 className="text-white font-bold text-lg">{albDetalle.clientes?.nombre || '—'}</h2>
                 </div>
-                <button onClick={() => setDetalleId(null)} className="text-gray-400 hover:text-white text-xl">X</button>
+                <button onClick={() => setDetalleId(null)} className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ color: '#64748b', border: '1px solid #1e2d3d' }}>X</button>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Estado</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${ESTADOS[albDetalle.estado]?.clase}`}>{ESTADOS[albDetalle.estado]?.label}</span>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Fecha</p>
-                    <p className="text-white text-sm">{albDetalle.fecha ? new Date(albDetalle.fecha).toLocaleDateString('es-ES') : '—'}</p>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">OT asociada</p>
-                    <p className="text-white text-sm font-mono">{albDetalle.ordenes?.codigo || '—'}</p>
-                  </div>
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-gray-400 text-xs mb-1">Firmado</p>
-                    <p className={`text-sm font-semibold ${albDetalle.firmado ? 'text-green-400' : 'text-gray-400'}`}>{albDetalle.firmado ? 'Si' : 'No'}</p>
-                  </div>
+                  {[
+                    { label: 'Estado', val: <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADOS[albDetalle.estado]?.bg, color: ESTADOS[albDetalle.estado]?.color }}>{ESTADOS[albDetalle.estado]?.label}</span> },
+                    { label: 'Fecha', val: <span className="text-white text-sm">{albDetalle.fecha ? new Date(albDetalle.fecha).toLocaleDateString('es-ES') : '—'}</span> },
+                    { label: 'OT asociada', val: <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{albDetalle.ordenes?.codigo || '—'}</span> },
+                    { label: 'Firmado', val: <span className="text-sm font-semibold" style={{ color: albDetalle.firmado ? '#34d399' : '#64748b' }}>{albDetalle.firmado ? 'Si' : 'No'}</span> },
+                  ].map((item, i) => (
+                    <div key={i} className="rounded-xl p-3" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: '#475569' }}>{item.label}</p>
+                      {item.val}
+                    </div>
+                  ))}
                 </div>
-
                 {albDetalle.descripcion && (
-                  <div className="bg-gray-800 rounded-lg p-3 mb-4">
-                    <p className="text-gray-400 text-xs mb-1">Trabajo realizado</p>
+                  <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Trabajo realizado</p>
                     <p className="text-white text-sm leading-relaxed">{albDetalle.descripcion}</p>
                   </div>
                 )}
-
-                {albDetalle.observaciones && (
-                  <div className="bg-gray-800 rounded-lg p-3 mb-4">
-                    <p className="text-gray-400 text-xs mb-1">Observaciones</p>
-                    <p className="text-white text-sm">{albDetalle.observaciones}</p>
-                  </div>
-                )}
-
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-white font-semibold">Fotos del albaran</h3>
-                    <label className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs cursor-pointer">
+                    <label className="text-xs px-3 py-1.5 rounded-xl cursor-pointer"
+                      style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                       {subiendo ? 'Subiendo...' : '+ Subir foto'}
                       <input type="file" accept="image/*" className="hidden" onChange={e => subirFoto(e, albDetalle.id)} disabled={subiendo} />
                     </label>
                   </div>
                   {(albDetalle.fotos_urls || []).length === 0 ? (
-                    <p className="text-gray-500 text-sm">Sin fotos. Sube la primera.</p>
+                    <p className="text-sm" style={{ color: '#334155' }}>Sin fotos todavia.</p>
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
                       {(albDetalle.fotos_urls || []).map((url: string, i: number) => (
                         <a key={i} href={url} target="_blank" rel="noreferrer">
-                          <img src={url} alt={`foto ${i + 1}`} className="w-full h-28 object-cover rounded-lg border border-gray-700 hover:opacity-80 transition-opacity" />
+                          <img src={url} alt={`foto ${i + 1}`} className="w-full h-28 object-cover rounded-xl" style={{ border: '1px solid #1e2d3d' }} />
                         </a>
                       ))}
                     </div>
                   )}
                 </div>
-
-                <div className="border-t border-gray-800 pt-4 flex gap-3 flex-wrap">
+                <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid #1e2d3d' }}>
                   {albDetalle.estado === 'pendiente' && (
-                    <button onClick={() => { cambiarEstado(albDetalle.id, 'entregado'); setDetalleId(null) }} className="bg-blue-900 hover:bg-blue-800 text-blue-300 px-4 py-2 rounded-lg text-sm">
+                    <button onClick={() => { cambiarEstado(albDetalle.id, 'entregado'); setDetalleId(null) }}
+                      className="text-sm px-4 py-2 rounded-xl"
+                      style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}>
                       Marcar entregado
                     </button>
                   )}
                   {!albDetalle.firmado && (
-                    <button onClick={() => { marcarFirmado(albDetalle.id); setDetalleId(null) }} className="bg-green-900 hover:bg-green-800 text-green-300 px-4 py-2 rounded-lg text-sm">
+                    <button onClick={() => { marcarFirmado(albDetalle.id); setDetalleId(null) }}
+                      className="text-sm px-4 py-2 rounded-xl"
+                      style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
                       Marcar firmado
                     </button>
                   )}
-                  <button onClick={() => abrirFormEditar(albDetalle)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm">
+                  <button onClick={() => abrirFormEditar(albDetalle)}
+                    className="text-sm px-4 py-2 rounded-xl"
+                    style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                     Editar
                   </button>
-                  <button onClick={() => eliminarAlbaran(albDetalle.id)} className="bg-gray-800 hover:bg-gray-700 text-red-400 px-4 py-2 rounded-lg text-sm">
+                  <button onClick={() => eliminarAlbaran(albDetalle.id)}
+                    className="text-sm px-4 py-2 rounded-xl"
+                    style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
                     Eliminar
                   </button>
-                  <button onClick={() => setDetalleId(null)} className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm ml-auto">
+                  <button onClick={() => setDetalleId(null)}
+                    className="text-sm px-4 py-2 rounded-xl ml-auto"
+                    style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
                     Cerrar
                   </button>
                 </div>
@@ -298,32 +281,39 @@ export default function Albaranes() {
         )}
 
         {loading ? (
-          <p className="text-gray-400">Cargando...</p>
+          <div className="flex items-center justify-center py-20">
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
+          </div>
         ) : albaranes.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
-            <p className="text-4xl mb-3">🧾</p>
-            <p>No hay albaranes. Crea el primero.</p>
+          <div className="text-center py-20">
+            <p className="text-5xl mb-4">🧾</p>
+            <p style={{ color: '#475569' }}>No hay albaranes. Crea el primero.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {albaranes.map(a => (
-              <div key={a.id} onClick={() => setDetalleId(a.id)} className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-xl p-5 cursor-pointer transition-colors">
+              <div key={a.id} onClick={() => setDetalleId(a.id)}
+                className="rounded-2xl p-5 cursor-pointer transition-all" style={cardStyle}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#1e2d3d'}>
                 <div className="flex items-start justify-between flex-wrap gap-3">
                   <div>
-                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      <span className="text-blue-400 font-mono text-sm">{a.numero}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${ESTADOS[a.estado]?.clase}`}>{ESTADOS[a.estado]?.label}</span>
-                      {a.firmado && <span className="text-xs px-2 py-0.5 rounded-full bg-green-900 text-green-300">Firmado</span>}
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{a.numero}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ESTADOS[a.estado]?.bg, color: ESTADOS[a.estado]?.color }}>
+                        {ESTADOS[a.estado]?.label}
+                      </span>
+                      {a.firmado && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}>Firmado</span>}
                     </div>
                     <p className="text-white font-semibold">{a.clientes?.nombre || '—'}</p>
-                    <p className="text-gray-400 text-sm mt-1">{(a.descripcion || '').substring(0, 80)}{(a.descripcion || '').length > 80 ? '...' : ''}</p>
-                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                    <p className="text-sm mt-1" style={{ color: '#475569' }}>{(a.descripcion || '').substring(0, 80)}{(a.descripcion || '').length > 80 ? '...' : ''}</p>
+                    <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: '#334155' }}>
                       {a.ordenes?.codigo && <span>OT: {a.ordenes.codigo}</span>}
                       <span>{(a.fotos_urls || []).length} fotos</span>
                       <span>{a.fecha ? new Date(a.fecha).toLocaleDateString('es-ES') : '—'}</span>
                     </div>
                   </div>
-                  <span className="text-gray-500 text-xs">Ver detalle</span>
+                  <span className="text-xs" style={{ color: '#334155' }}>Ver detalle →</span>
                 </div>
               </div>
             ))}
