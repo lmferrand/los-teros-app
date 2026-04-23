@@ -1,5 +1,6 @@
 'use client'
 
+import { s } from '@/lib/styles'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -113,11 +114,9 @@ export default function Inventario() {
   }
 
   const stockBajo = materiales.filter(m => (m.stock || 0) < (m.minimo || 0))
-  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
-  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
 
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
         <div className="flex items-center gap-4">
           <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
@@ -156,7 +155,7 @@ export default function Inventario() {
             <h2 className="text-white font-semibold mb-5">{editando ? 'Editar material' : 'Nuevo material'}</h2>
             <form onSubmit={guardarMaterial} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
-                { label: 'Nombre', el: <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Desengrasante industrial" /> },
+                { label: 'Nombre', el: <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={s.inputStyle} placeholder="Desengrasante industrial" /> },
                 { label: 'Referencia', el: <input value={referencia} onChange={e => setReferencia(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="REF-001" /> },
                 { label: 'Categoria', el: <select value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
                   <option value="limpieza">Limpieza</option><option value="filtros">Filtros</option>
@@ -206,7 +205,7 @@ export default function Inventario() {
             <p style={{ color: '#475569' }}>No hay materiales. Añade el primero.</p>
           </div>
         ) : (
-          <div className="rounded-2xl overflow-hidden" style={cardStyle}>
+          <div className="rounded-2xl overflow-hidden" style={s.cardStyle}>
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid #1e2d3d' }}>
