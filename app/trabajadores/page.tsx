@@ -10,17 +10,15 @@ export default function Trabajadores() {
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [userActual, setUserActual] = useState<any>(null)
+  const [accesoDenegado, setAccesoDenegado] = useState(false)
   const router = useRouter()
 
   const [nombre, setNombre] = useState('')
   const [rol, setRol] = useState('tecnico')
   const [telefono, setTelefono] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
 
   useEffect(() => {
     verificarSesion()
-    cargarTrabajadores()
   }, [])
 
   async function verificarSesion() {
@@ -28,9 +26,12 @@ export default function Trabajadores() {
     if (!session) { router.push('/login'); return }
     const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
     setUserActual(data)
-    if (data?.rol !== 'gerente' && data?.rol !== 'oficina') {
-      router.push('/dashboard')
+    if (data?.rol !== 'gerente' && data?.rol !== 'oficina' && data?.rol !== 'supervisor') {
+      setAccesoDenegado(true)
+      setLoading(false)
+      return
     }
+    cargarTrabajadores()
   }
 
   async function cargarTrabajadores() {
@@ -47,8 +48,6 @@ export default function Trabajadores() {
     setNombre('')
     setRol('tecnico')
     setTelefono('')
-    setEmail('')
-    setPassword('')
     setMostrarForm(true)
   }
 
@@ -57,32 +56,13 @@ export default function Trabajadores() {
     setNombre(t.nombre || '')
     setRol(t.rol || 'tecnico')
     setTelefono(t.telefono || '')
-    setEmail('')
-    setPassword('')
     setMostrarForm(true)
   }
 
   async function guardarTrabajador(e: React.FormEvent) {
     e.preventDefault()
     if (editandoId) {
-      await supabase.from('perfiles').update({
-        nombre, rol, telefono
-      }).eq('id', editandoId)
-    } else {
-      const { data, error } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        user_metadata: { nombre, rol }
-      })
-      if (!error && data.user) {
-        await supabase.from('perfiles').insert({
-          id: data.user.id,
-          nombre, rol, telefono
-        })
-      } else {
-        alert('Error al crear usuario. Usa el panel de Supabase para crear usuarios nuevos.')
-        return
-      }
+      await supabase.from('perfiles').update({ nombre, rol, telefono }).eq('id', editandoId)
     }
     setMostrarForm(false)
     setEditandoId(null)
@@ -106,6 +86,25 @@ export default function Trabajadores() {
     return nombre?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || '?'
   }
 
+  if (loading) return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <p className="text-white">Cargando...</p>
+    </div>
+  )
+
+  if (accesoDenegado) return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-4xl mb-4">🔒</p>
+        <p className="text-white font-semibold mb-2">Acceso restringido</p>
+        <p className="text-gray-400 text-sm mb-6">Solo gerentes y oficina pueden ver este modulo.</p>
+        <a href="/dashboard" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm">
+          Volver al dashboard
+        </a>
+      </div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-gray-950">
       <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
@@ -113,10 +112,7 @@ export default function Trabajadores() {
           <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
           <h1 className="text-xl font-bold text-white">Trabajadores</h1>
         </div>
-        <button
-          onClick={abrirFormNuevo}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
-        >
+        <button onClick={abrirFormNuevo} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
           + Nuevo trabajador
         </button>
       </div>
@@ -130,21 +126,11 @@ export default function Trabajadores() {
             <form onSubmit={guardarTrabajador} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Nombre completo</label>
-                <input
-                  value={nombre}
-                  onChange={e => setNombre(e.target.value)}
-                  required
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="Federico Maggio"
-                />
+                <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Federico Maggio" />
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Rol</label>
-                <select
-                  value={rol}
-                  onChange={e => setRol(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                >
+                <select value={rol} onChange={e => setRol(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
                   <option value="gerente">Gerente</option>
                   <option value="oficina">Oficina</option>
                   <option value="supervisor">Supervisor</option>
@@ -154,43 +140,14 @@ export default function Trabajadores() {
               </div>
               <div>
                 <label className="text-gray-400 text-xs uppercase mb-1 block">Telefono</label>
-                <input
-                  value={telefono}
-                  onChange={e => setTelefono(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                  placeholder="600 000 000"
-                />
+                <input value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="600 000 000" />
               </div>
               {!editandoId && (
-                <>
-                  <div>
-                    <label className="text-gray-400 text-xs uppercase mb-1 block">Email</label>
-                    <input
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      type="email"
-                      required
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                      placeholder="trabajador@email.com"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-gray-400 text-xs uppercase mb-1 block">Password inicial</label>
-                    <input
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      type="password"
-                      required
-                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
-                      placeholder="Minimo 6 caracteres"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-yellow-400 text-xs bg-yellow-900 bg-opacity-30 border border-yellow-800 rounded-lg p-3">
-                      Si la creacion falla, crea el usuario desde Supabase → Authentication → Users y luego edita su perfil aqui.
-                    </p>
-                  </div>
-                </>
+                <div className="md:col-span-2">
+                  <p className="text-yellow-400 text-xs bg-yellow-900 bg-opacity-30 border border-yellow-800 rounded-lg p-3">
+                    Para crear un usuario nuevo ve a Supabase → Authentication → Users → Invite user. Luego edita su perfil aqui para asignarle el rol correcto.
+                  </p>
+                </div>
               )}
               <div className="md:col-span-2 flex gap-3">
                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
@@ -204,9 +161,7 @@ export default function Trabajadores() {
           </div>
         )}
 
-        {loading ? (
-          <p className="text-gray-400">Cargando...</p>
-        ) : trabajadores.length === 0 ? (
+        {trabajadores.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
             <p className="text-4xl mb-3">👷</p>
             <p>No hay trabajadores registrados.</p>
@@ -227,7 +182,9 @@ export default function Trabajadores() {
                   </div>
                 </div>
                 {t.telefono && (
-                  <p className="text-gray-400 text-sm mb-3">📞 {t.telefono}</p>
+                  <a href={`tel:${t.telefono}`} className="text-green-400 hover:text-green-300 text-sm mb-3 block">
+                    📞 {t.telefono}
+                  </a>
                 )}
                 <div className="border-t border-gray-800 pt-3">
                   <p className="text-gray-500 text-xs mb-2">Cambiar rol</p>
@@ -242,10 +199,7 @@ export default function Trabajadores() {
                     <option value="tecnico">Tecnico</option>
                     <option value="almacen">Almacen</option>
                   </select>
-                  <button
-                    onClick={() => abrirFormEditar(t)}
-                    className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs"
-                  >
+                  <button onClick={() => abrirFormEditar(t)} className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs">
                     Editar datos
                   </button>
                 </div>
