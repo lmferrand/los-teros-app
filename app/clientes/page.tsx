@@ -27,9 +27,14 @@ export default function Clientes() {
   }, [])
 
   async function verificarSesion() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) router.push('/login')
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) { router.push('/login'); return }
+  const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+  if (data?.rol !== 'gerente' && data?.rol !== 'oficina') {
+    router.push('/dashboard')
+    return
   }
+}
 
   async function cargarClientes() {
     const { data } = await supabase
