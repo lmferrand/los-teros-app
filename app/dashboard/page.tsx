@@ -1,5 +1,6 @@
 'use client'
 
+import { useTheme } from '@/lib/useTheme'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
@@ -15,6 +16,7 @@ export default function Dashboard() {
   const [misOrdenes, setMisOrdenes] = useState<any[]>([])
   const [alertas, setAlertas] = useState<{ tipo: string; texto: string }[]>([])
   const router = useRouter()
+  const { tema, toggleTema } = useTheme()
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -91,31 +93,49 @@ export default function Dashboard() {
     { href: '/trabajadores', icono: '👷', titulo: 'Trabajadores', desc: 'Gestion personal', soloAdmin: true },
   ]
 
+  const bgCard = tema === 'dark' ? '#0d1117' : '#ffffff'
+  const bgMain = tema === 'dark' ? '#080b14' : '#f8fafc'
+  const border = tema === 'dark' ? '#1e2d3d' : '#e2e8f0'
+  const textColor = tema === 'dark' ? 'white' : '#0f172a'
+  const textMuted = tema === 'dark' ? '#475569' : '#64748b'
+
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#080b14' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: bgMain }}>
       <div className="text-center">
         <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-        <p className="text-slate-400 text-sm">Cargando...</p>
+        <p className="text-sm" style={{ color: textMuted }}>Cargando...</p>
       </div>
     </div>
   )
 
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div style={{ background: '#0d1117', borderBottom: '1px solid #1e2d3d' }} className="px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+    <div className="min-h-screen" style={{ background: bgMain }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={{ background: bgCard, borderBottom: `1px solid ${border}` }}>
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Los Teros" className="w-10 h-10 object-contain" style={{ mixBlendMode: 'screen' }} />
+          <img src="/logo.png" alt="Los Teros" className="w-10 h-10 object-contain" style={{ mixBlendMode: tema === 'dark' ? 'screen' : 'normal' }} />
           <div>
-            <h1 className="text-white font-bold text-lg leading-tight">LOS TEROS</h1>
+            <h1 className="font-bold text-lg leading-tight" style={{ color: textColor }}>LOS TEROS</h1>
             <p className="text-xs" style={{ color: '#06b6d4' }}>Gestion Operativa</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-white text-sm font-medium">{perfil?.nombre || user?.email}</p>
+            <p className="text-sm font-medium" style={{ color: textColor }}>{perfil?.nombre || user?.email}</p>
             <p className="text-xs" style={{ color: '#8b5cf6' }}>{ROLES[perfil?.rol] || perfil?.rol}</p>
           </div>
-          <button onClick={handleLogout} className="text-slate-400 hover:text-white text-sm px-3 py-1.5 rounded-lg transition-colors" style={{ border: '1px solid #1e2d3d' }}>
+          <button
+            onClick={toggleTema}
+            className="text-sm px-3 py-1.5 rounded-lg transition-all"
+            style={{ background: bgMain, color: textMuted, border: `1px solid ${border}` }}
+            title={tema === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+          >
+            {tema === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="text-sm px-3 py-1.5 rounded-lg transition-colors"
+            style={{ background: bgMain, color: textMuted, border: `1px solid ${border}` }}
+          >
             Salir
           </button>
         </div>
@@ -123,10 +143,10 @@ export default function Dashboard() {
 
       <div className="p-6 max-w-6xl mx-auto">
         <div className="mb-8">
-          <h2 className="text-white font-semibold text-xl mb-1">
+          <h2 className="font-semibold text-xl mb-1" style={{ color: textColor }}>
             Hola, {perfil?.nombre?.split(' ')[0] || 'bienvenido'} 👋
           </h2>
-          <p className="text-slate-500 text-sm">
+          <p className="text-sm" style={{ color: textMuted }}>
             {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
@@ -139,9 +159,12 @@ export default function Dashboard() {
                 <div key={o.id} className="flex items-center justify-between rounded-lg px-4 py-3" style={{ background: 'rgba(124,58,237,0.1)' }}>
                   <div>
                     <span className="font-mono text-xs mr-2" style={{ color: '#06b6d4' }}>{o.codigo}</span>
-                    <span className="text-white text-sm">{o.descripcion?.substring(0, 50) || '—'}</span>
+                    <span className="text-sm" style={{ color: textColor }}>{o.descripcion?.substring(0, 50) || '—'}</span>
                   </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: o.estado === 'en_curso' ? 'rgba(234,179,8,0.2)' : 'rgba(124,58,237,0.2)', color: o.estado === 'en_curso' ? '#fbbf24' : '#a78bfa' }}>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                    background: o.estado === 'en_curso' ? 'rgba(234,179,8,0.2)' : 'rgba(124,58,237,0.2)',
+                    color: o.estado === 'en_curso' ? '#fbbf24' : '#a78bfa'
+                  }}>
                     {o.estado.replace('_', ' ')}
                   </span>
                 </div>
@@ -175,23 +198,23 @@ export default function Dashboard() {
             { label: 'Clientes', valor: stats.clientes, sub: 'registrados', color: '#8b5cf6' },
             { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', color: stats.stockBajo > 0 ? '#f59e0b' : '#10b981' },
           ].map((s, i) => (
-            <div key={i} className="rounded-xl p-4" style={{ background: '#0d1117', border: '1px solid #1e2d3d' }}>
-              <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#475569' }}>{s.label}</p>
+            <div key={i} className="rounded-xl p-4" style={{ background: bgCard, border: `1px solid ${border}` }}>
+              <p className="text-xs uppercase tracking-wider mb-2" style={{ color: textMuted }}>{s.label}</p>
               <p className="text-3xl font-bold" style={{ color: s.color }}>{s.valor}</p>
-              <p className="text-xs mt-1" style={{ color: '#475569' }}>{s.sub}</p>
+              <p className="text-xs mt-1" style={{ color: textMuted }}>{s.sub}</p>
             </div>
           ))}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {MODULOS.filter(m => m.siempre || (!esTecnico && m.soloAdmin)).map(m => (
-            <a key={m.href} href={m.href} className="rounded-xl p-5 block group" style={{ background: '#0d1117', border: '1px solid #1e2d3d' }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = '#7c3aed')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = '#1e2d3d')}
-            >
+            <a key={m.href} href={m.href} className="rounded-xl p-5 block transition-all"
+              style={{ background: bgCard, border: `1px solid ${border}` }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = border}>
               <div className="text-2xl mb-3">{m.icono}</div>
-              <h2 className="text-white font-semibold text-sm">{m.titulo}</h2>
-              <p className="text-xs mt-1" style={{ color: '#475569' }}>{m.desc}</p>
+              <h2 className="font-semibold text-sm" style={{ color: textColor }}>{m.titulo}</h2>
+              <p className="text-xs mt-1" style={{ color: textMuted }}>{m.desc}</p>
             </a>
           ))}
         </div>
