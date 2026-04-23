@@ -1,56 +1,7 @@
-'use client'
+@import "tailwindcss";
 
-import { useEffect, useState } from 'react'
-
-export default function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [tema, setTema] = useState<'dark' | 'light'>('dark')
-  const [montado, setMontado] = useState(false)
-
-  useEffect(() => {
-    const guardado = localStorage.getItem('tema') as 'dark' | 'light' || 'dark'
-    setTema(guardado)
-    aplicarTema(guardado)
-    setMontado(true)
-  }, [])
-
-  function aplicarTema(t: 'dark' | 'light') {
-    document.documentElement.setAttribute('data-theme', t)
-    document.body.style.background = t === 'dark' ? '#080b14' : '#f1f5f9'
-    document.body.style.color = t === 'dark' ? '#e2e8f0' : '#0f172a'
-    const cards = document.querySelectorAll('[data-card]')
-    cards.forEach((el: any) => {
-      el.style.background = t === 'dark' ? '#0d1117' : '#ffffff'
-      el.style.borderColor = t === 'dark' ? '#1e2d3d' : '#e2e8f0'
-    })
-  }
-
-  function toggleTema() {
-    const nuevo = tema === 'dark' ? 'light' : 'dark'
-    setTema(nuevo)
-    localStorage.setItem('tema', nuevo)
-    aplicarTema(nuevo)
-  }
-
-  if (!montado) return <>{children}</>
-
-  return (
-    <>
-      {children}
-      <button
-        onClick={toggleTema}
-        className="fixed bottom-6 right-6 z-50 w-12 h-12 rounded-full flex items-center justify-center text-xl shadow-lg transition-all hover:scale-110 active:scale-95"
-        style={{
-          background: tema === 'dark'
-            ? 'linear-gradient(135deg, #7c3aed, #06b6d4)'
-            : 'linear-gradient(135deg, #f59e0b, #ef4444)',
-          boxShadow: tema === 'dark'
-            ? '0 0 20px rgba(124,58,237,0.4)'
-            : '0 0 20px rgba(245,158,11,0.4)',
-        }}
-        title={tema === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-      >
-        {tema === 'dark' ? '☀️' : '🌙'}
-      </button>
-    </>
-  )
+body {
+  background: #080b14;
+  color: #e2e8f0;
+  font-family: sans-serif;
 }
