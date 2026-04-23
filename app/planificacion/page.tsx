@@ -364,9 +364,38 @@ cargarDatos()
   }
 
   async function cambiarEstadoPres(id: string, nuevoEstado: string) {
-    await supabase.from('presupuestos').update({ estado: nuevoEstado }).eq('id', id)
-    cargarDatos()
+  await supabase.from('presupuestos').update({ estado: nuevoEstado }).eq('id', id)
+
+  if (nuevoEstado === 'aceptado') {
+    const pres = presupuestos.find(p => p.id === id)
+    if (pres) {
+      const { data: clienteData } = await supabase
+        .from('clientes')
+        .select('*')
+        .eq('id', pres.cliente_id)
+        .single()
+
+      const { error } = await supabase.from('ordenes').insert({
+        codigo: `OT-${pres.numero || id.slice(0, 6).toUpperCase()}`,
+        tipo: 'otro',
+        cliente_id: pres.cliente_id || null,
+        estado: 'pendiente',
+        prioridad: 'normal',
+        descripcion: pres.titulo || 'Trabajo pendiente de agendar',
+        observaciones: `Creado automaticamente desde presupuesto ${pres.numero || ''} aceptado. Importe: ${(pres.importe || 0).toFixed(2)} EUR`,
+        duracion_horas: 2,
+        hora_fija: false,
+        tecnicos_ids: [],
+      })
+
+      if (!error) {
+        alert(`Presupuesto aceptado. Se ha creado una OT en borrador en el calendario. Asignale fecha y trabajadores desde el modulo de Ordenes.`)
+      }
+    }
   }
+
+  cargarDatos()
+}
 
   async function eliminarPres(id: string) {
     if (!confirm('Eliminar este presupuesto?')) return
