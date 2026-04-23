@@ -156,19 +156,19 @@ export default function Inventario() {
             <form onSubmit={guardarMaterial} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
                 { label: 'Nombre', el: <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={s.inputStyle} placeholder="Desengrasante industrial" /> },
-                { label: 'Referencia', el: <input value={referencia} onChange={e => setReferencia(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="REF-001" /> },
-                { label: 'Categoria', el: <select value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                { label: 'Referencia', el: <input value={referencia} onChange={e => setReferencia(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={s.inputStyle} placeholder="REF-001" /> },
+                { label: 'Categoria', el: <select value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="limpieza">Limpieza</option><option value="filtros">Filtros</option>
                   <option value="repuestos">Repuestos</option><option value="instalacion">Instalacion</option><option value="otro">Otro</option>
                 </select> },
-                { label: 'Unidad', el: <select value={unidad} onChange={e => setUnidad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                { label: 'Unidad', el: <select value={unidad} onChange={e => setUnidad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="unidad">Unidad</option><option value="litro">Litro</option>
                   <option value="kg">Kg</option><option value="metro">Metro</option><option value="caja">Caja</option><option value="rollo">Rollo</option>
                 </select> },
-                { label: 'Stock actual', el: <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} /> },
-                { label: 'Stock minimo', el: <input type="number" value={minimo} onChange={e => setMinimo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} /> },
-                { label: 'Ubicacion', el: <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Estanteria A, balda 3" /> },
-                { label: 'Notas', el: <input value={notas} onChange={e => setNotas(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Proveedor, especificaciones..." /> },
+                { label: 'Stock actual', el: <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={s.inputStyle} /> },
+                { label: 'Stock minimo', el: <input type="number" value={minimo} onChange={e => setMinimo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={s.inputStyle} /> },
+                { label: 'Ubicacion', el: <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={s.inputStyle} placeholder="Estanteria A, balda 3" /> },
+                { label: 'Notas', el: <input value={notas} onChange={e => setNotas(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={s.inputStyle} placeholder="Proveedor, especificaciones..." /> },
               ].map((f, i) => (
                 <div key={i}>
                   <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>{f.label}</label>
@@ -177,7 +177,7 @@ export default function Inventario() {
               ))}
               <div className="md:col-span-2">
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Foto del material</label>
-                <input type="file" accept="image/*" onChange={subirFoto} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} />
+                <input type="file" accept="image/*" onChange={subirFoto} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
                 {subiendo && <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
                 {fotoUrl && <img src={fotoUrl} alt="foto" className="mt-2 h-20 w-20 object-cover rounded-xl" style={{ border: '1px solid #1e2d3d' }} />}
               </div>
