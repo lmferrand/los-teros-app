@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
+import { s } from '@/lib/styles'
 
 export default function Equipos() {
   const [equipos, setEquipos] = useState<any[]>([])
@@ -117,35 +118,32 @@ export default function Equipos() {
   }
 
   const ESTADOS: any = {
-    disponible: { bg: 'rgba(16,185,129,0.15)', color: '#34d399', label: 'Disponible' },
-    en_cliente: { bg: 'rgba(234,179,8,0.15)', color: '#fbbf24', label: 'En cliente' },
-    pendiente_limpieza: { bg: 'rgba(124,58,237,0.15)', color: '#a78bfa', label: 'Pend. limpieza' },
-    pendiente_revision: { bg: 'rgba(6,182,212,0.15)', color: '#22d3ee', label: 'Pend. revision' },
-    averiado: { bg: 'rgba(239,68,68,0.15)', color: '#f87171', label: 'Averiado' },
+    disponible: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Disponible' },
+    en_cliente: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)', label: 'En cliente' },
+    pendiente_limpieza: { color: '#a78bfa', bg: 'rgba(124,58,237,0.15)', label: 'Pend. limpieza' },
+    pendiente_revision: { color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: 'Pend. revision' },
+    averiado: { color: '#f87171', bg: 'rgba(239,68,68,0.15)', label: 'Averiado' },
   }
 
   const enCliente = equipos.filter(e => e.estado === 'en_cliente')
   const pendientes = equipos.filter(e => e.estado === 'pendiente_limpieza' || e.estado === 'pendiente_revision')
   const disponibles = equipos.filter(e => e.estado === 'disponible')
-  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
-  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
 
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
-          <h1 className="text-white font-bold text-lg">Equipos de sustitucion</h1>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
+          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Equipos de sustitucion</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={generarQRTodos} className="text-sm px-4 py-2 rounded-xl font-medium"
             style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
             QR todos
           </button>
-          <button onClick={() => abrirForm()} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+          <button onClick={() => abrirForm()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nuevo equipo
           </button>
         </div>
@@ -157,10 +155,10 @@ export default function Equipos() {
             { label: 'Disponibles', valor: disponibles.length, color: '#34d399', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)' },
             { label: 'En cliente', valor: enCliente.length, color: '#fbbf24', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.2)' },
             { label: 'Pendientes', valor: pendientes.length, color: '#a78bfa', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)' },
-          ].map((s, i) => (
-            <div key={i} className="rounded-2xl p-4 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
-              <p className="text-3xl font-bold" style={{ color: s.color }}>{s.valor}</p>
-              <p className="text-sm mt-1" style={{ color: s.color }}>{s.label}</p>
+          ].map((s2, i) => (
+            <div key={i} className="rounded-2xl p-4 text-center" style={{ background: s2.bg, border: `1px solid ${s2.border}` }}>
+              <p className="text-3xl font-bold" style={{ color: s2.color }}>{s2.valor}</p>
+              <p className="text-sm mt-1" style={{ color: s2.color }}>{s2.label}</p>
             </div>
           ))}
         </div>
@@ -179,41 +177,39 @@ export default function Equipos() {
         )}
 
         {mostrarForm && (
-          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
-            <h2 className="text-white font-semibold mb-5">{editando ? 'Editar equipo' : 'Nuevo equipo'}</h2>
+          <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
+            <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editando ? 'Editar equipo' : 'Nuevo equipo'}</h2>
             <form onSubmit={guardarEquipo} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
-                { label: 'Codigo', el: <input value={codigo} onChange={e => setCodigo(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="TRB-001" /> },
-                { label: 'Tipo', el: <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                { label: 'Codigo', el: <input value={codigo} onChange={e => setCodigo(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="TRB-001" /> },
+                { label: 'Tipo', el: <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="turbina">Turbina</option><option value="motor">Motor</option>
                   <option value="caja_extraccion">Caja extraccion</option><option value="otro">Otro</option>
                 </select> },
-                { label: 'Marca', el: <input value={marca} onChange={e => setMarca(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Soler&Palau" /> },
-                { label: 'Modelo', el: <input value={modelo} onChange={e => setModelo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="CVST-25/13" /> },
-                { label: 'Estado', el: <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                { label: 'Marca', el: <input value={marca} onChange={e => setMarca(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Soler&Palau" /> },
+                { label: 'Modelo', el: <input value={modelo} onChange={e => setModelo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="CVST-25/13" /> },
+                { label: 'Estado', el: <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="disponible">Disponible</option><option value="en_cliente">En cliente</option>
                   <option value="pendiente_limpieza">Pendiente limpieza</option>
                   <option value="pendiente_revision">Pendiente revision</option><option value="averiado">Averiado</option>
                 </select> },
-                { label: 'Ubicacion', el: <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Nave principal, zona A" /> },
+                { label: 'Ubicacion', el: <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Nave principal, zona A" /> },
               ].map((f, i) => (
                 <div key={i}>
-                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>{f.label}</label>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>{f.label}</label>
                   {f.el}
                 </div>
               ))}
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Notas tecnicas</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Notas tecnicas</label>
                 <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2}
-                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none" style={inputStyle} />
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle} />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="text-white px-5 py-2 rounded-xl text-sm font-medium"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+                <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium" style={s.btnPrimary}>
                   {editando ? 'Actualizar' : 'Guardar'}
                 </button>
-                <button type="button" onClick={() => setMostrarForm(false)} className="text-sm px-5 py-2 rounded-xl"
-                  style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                <button type="button" onClick={() => setMostrarForm(false)} className="text-sm px-5 py-2 rounded-xl" style={s.btnSecondary}>
                   Cancelar
                 </button>
               </div>
@@ -228,27 +224,27 @@ export default function Equipos() {
         ) : equipos.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">⚙️</p>
-            <p style={{ color: '#475569' }}>No hay equipos registrados.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay equipos registrados.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {equipos.map(e => (
-              <div key={e.id} className="rounded-2xl p-5 transition-all" style={cardStyle}
+              <div key={e.id} className="rounded-2xl p-5 transition-all" style={s.cardStyle}
                 onMouseEnter={el => el.currentTarget.style.borderColor = '#7c3aed'}
-                onMouseLeave={el => el.currentTarget.style.borderColor = '#1e2d3d'}>
+                onMouseLeave={el => el.currentTarget.style.borderColor = 'var(--border)'}>
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="font-mono text-sm font-bold" style={{ color: '#06b6d4' }}>{e.codigo}</p>
-                    <p className="text-white font-semibold mt-1 capitalize">{e.tipo.replace('_', ' ')}</p>
-                    <p className="text-sm" style={{ color: '#64748b' }}>{e.marca} {e.modelo}</p>
+                    <p className="font-semibold mt-1 capitalize" style={{ color: 'var(--text)' }}>{e.tipo.replace('_', ' ')}</p>
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{e.marca} {e.modelo}</p>
                   </div>
                   <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADOS[e.estado]?.bg, color: ESTADOS[e.estado]?.color }}>
                     {ESTADOS[e.estado]?.label || e.estado}
                   </span>
                 </div>
-                {e.ubicacion && <p className="text-xs mb-3" style={{ color: '#475569' }}>📍 {e.ubicacion}</p>}
-                {e.notas && <p className="text-xs mb-3" style={{ color: '#475569' }}>{e.notas}</p>}
-                <div className="flex flex-wrap gap-2 pt-3" style={{ borderTop: '1px solid #1e2d3d' }}>
+                {e.ubicacion && <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>📍 {e.ubicacion}</p>}
+                {e.notas && <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{e.notas}</p>}
+                <div className="flex flex-wrap gap-2 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                   {(e.estado === 'pendiente_limpieza' || e.estado === 'pendiente_revision') && (
                     <button onClick={() => cambiarEstado(e.id, 'disponible')} className="text-xs px-3 py-1 rounded-lg"
                       style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
