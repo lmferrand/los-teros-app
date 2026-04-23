@@ -2,25 +2,6 @@
 
 import { useEffect, useState } from 'react'
 
-const TEMAS = {
-  dark: {
-    '--bg': 'var(--bg)',
-    '--bg-card': 'var(--bg-card)',
-    '--border': 'var(--border)',
-    '--text': 'var(--text)',
-    '--text-muted': 'var(--text-muted)',
-    '--text-subtle': 'var(--text-subtle)',
-  },
-  light: {
-    '--bg': '#f1f5f9',
-    '--bg-card': '#ffffff',
-    '--border': '#e2e8f0',
-    '--text': '#0f172a',
-    '--text-muted': '#64748b',
-    '--text-subtle': '#94a3b8',
-  }
-}
-
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [tema, setTema] = useState<'dark' | 'light'>('dark')
   const [montado, setMontado] = useState(false)
@@ -33,11 +14,12 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
   }, [])
 
   function aplicarTema(t: 'dark' | 'light') {
-    const vars = TEMAS[t]
     const root = document.documentElement
-    Object.entries(vars).forEach(([key, value]) => {
-      root.style.setProperty(key, value)
-    })
+    if (t === 'light') {
+      root.classList.add('light')
+    } else {
+      root.classList.remove('light')
+    }
   }
 
   function toggleTema() {

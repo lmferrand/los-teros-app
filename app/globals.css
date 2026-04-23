@@ -15,17 +15,27 @@
   --orange: #fb923c;
 }
 
+.light {
+  --bg: #f1f5f9;
+  --bg-card: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-subtle: #94a3b8;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
   font-family: sans-serif;
-  transition: background 0.3s ease, color 0.3s ease;
+  transition: background 0.4s ease, color 0.3s ease;
+}
+
+* {
+  transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
-* {
-  transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease;
-}
