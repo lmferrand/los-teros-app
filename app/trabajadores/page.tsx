@@ -9,13 +9,15 @@ export default function Trabajadores() {
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
-  const [userActual, setUserActual] = useState<any>(null)
   const [accesoDenegado, setAccesoDenegado] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [mensajeExito, setMensajeExito] = useState('')
   const router = useRouter()
 
   const [nombre, setNombre] = useState('')
   const [rol, setRol] = useState('tecnico')
   const [telefono, setTelefono] = useState('')
+  const [email, setEmail] = useState('')
 
   useEffect(() => {
     verificarSesion()
@@ -25,7 +27,6 @@ export default function Trabajadores() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
     const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
-    setUserActual(data)
     if (data?.rol !== 'gerente' && data?.rol !== 'oficina' && data?.rol !== 'supervisor') {
       setAccesoDenegado(true)
       setLoading(false)
@@ -48,6 +49,8 @@ export default function Trabajadores() {
     setNombre('')
     setRol('tecnico')
     setTelefono('')
+    setEmail('')
+    setMensajeExito('')
     setMostrarForm(true)
   }
 
@@ -56,17 +59,51 @@ export default function Trabajadores() {
     setNombre(t.nombre || '')
     setRol(t.rol || 'tecnico')
     setTelefono(t.telefono || '')
+    setEmail('')
+    setMensajeExito('')
     setMostrarForm(true)
   }
 
   async function guardarTrabajador(e: React.FormEvent) {
     e.preventDefault()
+
     if (editandoId) {
       await supabase.from('perfiles').update({ nombre, rol, telefono }).eq('id', editandoId)
+      setMostrarForm(false)
+      setEditandoId(null)
+      cargarTrabajadores()
+      return
     }
-    setMostrarForm(false)
-    setEditandoId(null)
-    cargarTrabajadores()
+
+    setEnviando(true)
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: 'https://los-teros-app.vercel.app',
+      }
+    })
+
+    if (error) {
+      alert('Error al enviar invitacion: ' + error.message)
+      setEnviando(false)
+      return
+    }
+
+    const { data: userData } = await supabase.auth.admin?.listUsers?.() || { data: null }
+
+    await supabase.from('perfiles').upsert({
+      nombre,
+      rol,
+      telefono,
+    }, { onConflict: 'id', ignoreDuplicates: false })
+
+    setMensajeExito(`Invitacion enviada a ${email}. El trabajador recibira un email para acceder a la app.`)
+    setEnviando(false)
+    setNombre('')
+    setEmail('')
+    setTelefono('')
+    setRol('tecnico')
   }
 
   async function cambiarRol(id: string, nuevoRol: string) {
@@ -121,43 +158,93 @@ export default function Trabajadores() {
         {mostrarForm && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
             <h2 className="text-white font-semibold mb-4">
-              {editandoId ? 'Editar trabajador' : 'Nuevo trabajador'}
+              {editandoId ? 'Editar trabajador' : 'Invitar nuevo trabajador'}
             </h2>
-            <form onSubmit={guardarTrabajador} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Nombre completo</label>
-                <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Federico Maggio" />
+
+            {mensajeExito ? (
+              <div className="bg-green-950 border border-green-800 rounded-xl p-4">
+                <p className="text-green-300 text-sm">{mensajeExito}</p>
+                <button
+                  onClick={() => { setMostrarForm(false); setMensajeExito('') }}
+                  className="mt-3 bg-green-800 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm"
+                >
+                  Cerrar
+                </button>
               </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Rol</label>
-                <select value={rol} onChange={e => setRol(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="gerente">Gerente</option>
-                  <option value="oficina">Oficina</option>
-                  <option value="supervisor">Supervisor</option>
-                  <option value="tecnico">Tecnico</option>
-                  <option value="almacen">Almacen</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Telefono</label>
-                <input value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="600 000 000" />
-              </div>
-              {!editandoId && (
-                <div className="md:col-span-2">
-                  <p className="text-yellow-400 text-xs bg-yellow-900 bg-opacity-30 border border-yellow-800 rounded-lg p-3">
-                    Para crear un usuario nuevo ve a Supabase → Authentication → Users → Invite user. Luego edita su perfil aqui para asignarle el rol correcto.
-                  </p>
+            ) : (
+              <form onSubmit={guardarTrabajador} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-gray-400 text-xs uppercase mb-1 block">Nombre completo</label>
+                  <input
+                    value={nombre}
+                    onChange={e => setNombre(e.target.value)}
+                    required
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                    placeholder="Jose Antonio Garcia"
+                  />
                 </div>
-              )}
-              <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
-                  {editandoId ? 'Guardar cambios' : 'Crear trabajador'}
-                </button>
-                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }} className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm">
-                  Cancelar
-                </button>
-              </div>
-            </form>
+                <div>
+                  <label className="text-gray-400 text-xs uppercase mb-1 block">Rol</label>
+                  <select
+                    value={rol}
+                    onChange={e => setRol(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                  >
+                    <option value="gerente">Gerente</option>
+                    <option value="oficina">Oficina</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="tecnico">Tecnico</option>
+                    <option value="almacen">Almacen</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs uppercase mb-1 block">Telefono</label>
+                  <input
+                    value={telefono}
+                    onChange={e => setTelefono(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                    placeholder="600 000 000"
+                  />
+                </div>
+                {!editandoId && (
+                  <div>
+                    <label className="text-gray-400 text-xs uppercase mb-1 block">Email</label>
+                    <input
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      type="email"
+                      required
+                      className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                      placeholder="trabajador@email.com"
+                    />
+                  </div>
+                )}
+                {!editandoId && (
+                  <div className="md:col-span-2">
+                    <div className="bg-blue-950 border border-blue-800 rounded-lg p-3">
+                      <p className="text-blue-300 text-xs font-semibold mb-1">Como funciona</p>
+                      <p className="text-blue-200 text-xs">El trabajador recibira un email con un enlace para acceder a la app. Solo necesita hacer clic en el enlace y ya podra entrar sin necesidad de contraseña.</p>
+                    </div>
+                  </div>
+                )}
+                <div className="md:col-span-2 flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={enviando}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm"
+                  >
+                    {enviando ? 'Enviando invitacion...' : editandoId ? 'Guardar cambios' : 'Enviar invitacion'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMostrarForm(false); setEditandoId(null) }}
+                    className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
@@ -199,7 +286,10 @@ export default function Trabajadores() {
                     <option value="tecnico">Tecnico</option>
                     <option value="almacen">Almacen</option>
                   </select>
-                  <button onClick={() => abrirFormEditar(t)} className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs">
+                  <button
+                    onClick={() => abrirFormEditar(t)}
+                    className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs"
+                  >
                     Editar datos
                   </button>
                 </div>
