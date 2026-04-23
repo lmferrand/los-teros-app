@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
+import { s } from '@/lib/styles'
 
 export default function Clientes() {
   const [clientes, setClientes] = useState<any[]>([])
@@ -112,30 +113,24 @@ export default function Clientes() {
     XLSX.writeFile(wb, `clientes_los_teros_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
-  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
-  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
-
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
-          <h1 className="text-white font-bold text-lg">Clientes</h1>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
+          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Clientes</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <button onClick={exportarExcel} className="text-sm px-4 py-2 rounded-xl"
-            style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+          <button onClick={exportarExcel} className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
             Exportar Excel
           </button>
-          <label className="text-sm px-4 py-2 rounded-xl cursor-pointer"
-            style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+          <label className="text-sm px-4 py-2 rounded-xl cursor-pointer" style={s.btnSecondary}>
             {importando ? 'Importando...' : 'Importar Excel'}
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importarExcel} disabled={importando} />
           </label>
-          <button onClick={abrirFormNuevo} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+          <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nuevo cliente
           </button>
         </div>
@@ -149,11 +144,11 @@ export default function Clientes() {
             {resultadoImport.error
               ? <p className="text-sm" style={{ color: '#f87171' }}>{resultadoImport.error}</p>
               : <div>
-                  <p className="text-white font-semibold mb-1">Importacion completada</p>
+                  <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Importacion completada</p>
                   <p className="text-sm" style={{ color: '#34d399' }}>{resultadoImport.importados} clientes importados</p>
                   {resultadoImport.errores > 0 && <p className="text-sm" style={{ color: '#f87171' }}>{resultadoImport.errores} errores</p>}
                 </div>}
-            <button onClick={() => setResultadoImport(null)} className="text-xs mt-2" style={{ color: '#475569' }}>Cerrar</button>
+            <button onClick={() => setResultadoImport(null)} className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Cerrar</button>
           </div>
         )}
 
@@ -167,36 +162,34 @@ export default function Clientes() {
         </div>
 
         {mostrarForm && (
-          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
-            <h2 className="text-white font-semibold mb-5">{editandoId ? 'Editar cliente' : 'Nuevo cliente'}</h2>
+          <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
+            <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoId ? 'Editar cliente' : 'Nuevo cliente'}</h2>
             <form onSubmit={guardarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Nombre</label>
-                <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Restaurante La Brasa" />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Nombre</label>
+                <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Restaurante La Brasa" />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Direccion</label>
-                <input value={direccion} onChange={e => setDireccion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Calle, numero, ciudad..." />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Direccion</label>
+                <input value={direccion} onChange={e => setDireccion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Calle, numero, ciudad..." />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Telefono</label>
-                <input value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Telefono</label>
+                <input value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Email</label>
-                <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Email</label>
+                <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Notas</label>
-                <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none" style={inputStyle} placeholder="Instrucciones de acceso, contacto..." />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Notas</label>
+                <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle} placeholder="Instrucciones de acceso, contacto..." />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="text-white px-5 py-2 rounded-xl text-sm font-medium"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+                <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium" style={s.btnPrimary}>
                   {editandoId ? 'Guardar cambios' : 'Guardar cliente'}
                 </button>
-                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }} className="text-sm px-5 py-2 rounded-xl"
-                  style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }} className="text-sm px-5 py-2 rounded-xl" style={s.btnSecondary}>
                   Cancelar
                 </button>
               </div>
@@ -211,49 +204,41 @@ export default function Clientes() {
         ) : clientes.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">🏢</p>
-            <p style={{ color: '#475569' }}>No hay clientes. Añade el primero o importa un Excel.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay clientes. Añade el primero o importa un Excel.</p>
           </div>
         ) : (
-          <div className="rounded-2xl overflow-hidden" style={cardStyle}>
-            <div className="px-4 py-3" style={{ borderBottom: '1px solid #1e2d3d' }}>
-              <p className="text-sm" style={{ color: '#475569' }}>{clientes.length} clientes registrados</p>
+          <div className="rounded-2xl overflow-hidden" style={s.cardStyle}>
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{clientes.length} clientes registrados</p>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom: '1px solid #1e2d3d' }}>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   {['Nombre', 'Telefono', 'Email', 'Direccion', ''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: '#475569' }}>{h}</th>
+                    <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {clientes.map(c => (
-                  <tr key={c.id} style={{ borderBottom: '1px solid #1e2d3d' }}
+                  <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.05)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <td className="px-4 py-3">
-                      <p className="text-white font-medium">{c.nombre}</p>
-                      {c.notas && <p className="text-xs mt-0.5" style={{ color: '#475569' }}>{c.notas.substring(0, 50)}</p>}
+                      <p className="font-medium" style={{ color: 'var(--text)' }}>{c.nombre}</p>
+                      {c.notas && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.notas.substring(0, 50)}</p>}
                     </td>
                     <td className="px-4 py-3">
                       {c.telefono
-                        ? <a href={`tel:${c.telefono}`} className="text-sm font-medium transition-colors" style={{ color: '#34d399' }}
-                            onMouseEnter={e => e.currentTarget.style.color = '#6ee7b7'}
-                            onMouseLeave={e => e.currentTarget.style.color = '#34d399'}>
-                            📞 {c.telefono}
-                          </a>
-                        : <span style={{ color: '#334155' }}>—</span>}
+                        ? <a href={`tel:${c.telefono}`} className="text-sm font-medium" style={{ color: '#34d399' }}>📞 {c.telefono}</a>
+                        : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
                     </td>
                     <td className="px-4 py-3">
                       {c.email
-                        ? <a href={`mailto:${c.email}`} className="text-sm transition-colors" style={{ color: '#06b6d4' }}
-                            onMouseEnter={e => e.currentTarget.style.color = '#22d3ee'}
-                            onMouseLeave={e => e.currentTarget.style.color = '#06b6d4'}>
-                            ✉️ {c.email}
-                          </a>
-                        : <span style={{ color: '#334155' }}>—</span>}
+                        ? <a href={`mailto:${c.email}`} className="text-sm" style={{ color: '#06b6d4' }}>✉️ {c.email}</a>
+                        : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs max-w-xs truncate" style={{ color: '#64748b' }}>
+                    <td className="px-4 py-3 text-xs max-w-xs truncate" style={{ color: 'var(--text-muted)' }}>
                       {c.direccion || '—'}
                     </td>
                     <td className="px-4 py-3">
