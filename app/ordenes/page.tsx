@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { s } from '@/lib/styles'
 
 export default function Ordenes() {
   const [ordenes, setOrdenes] = useState<any[]>([])
@@ -182,31 +183,28 @@ export default function Ordenes() {
 
   const ordenesFiltradas = filtroEstado ? ordenes.filter(o => o.estado === filtroEstado) : ordenes
 
-  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
-  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
-
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
             Dashboard
           </a>
-          <h1 className="text-white font-bold text-lg">Ordenes de trabajo</h1>
+          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Ordenes de trabajo</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
-            className="text-sm rounded-xl px-3 py-2 outline-none" style={inputStyle}>
+            className="text-sm rounded-xl px-3 py-2 outline-none" style={s.inputStyle}>
             <option value="">Todos los estados</option>
             <option value="pendiente">Pendiente</option>
             <option value="en_curso">En curso</option>
             <option value="completada">Completada</option>
             <option value="cancelada">Cancelada</option>
           </select>
-          <button onClick={abrirFormNuevo} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+          <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium"
+            style={s.btnPrimary}>
             + Nueva OT
           </button>
         </div>
@@ -214,60 +212,57 @@ export default function Ordenes() {
 
       <div className="p-6 max-w-5xl mx-auto">
         {mostrarForm && (
-          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
-            <h2 className="text-white font-semibold mb-5">{editandoId ? 'Editar orden' : 'Nueva orden de trabajo'}</h2>
+          <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
+            <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoId ? 'Editar orden' : 'Nueva orden de trabajo'}</h2>
             <form onSubmit={guardarOrden} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { label: 'Tipo', el: <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Tipo</label>
+                <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="limpieza">Limpieza</option><option value="sustitucion">Sustitucion</option>
                   <option value="mantenimiento">Mantenimiento</option><option value="instalacion">Instalacion</option>
                   <option value="revision">Revision</option><option value="otro">Otro</option>
-                </select> },
-                { label: 'Cliente', el: <select value={clienteId} onChange={e => setClienteId(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Cliente</label>
+                <select value={clienteId} onChange={e => setClienteId(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="">Seleccionar cliente...</option>
                   {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                </select> },
-              ].map((f, i) => (
-                <div key={i}>
-                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>{f.label}</label>
-                  {f.el}
-                </div>
-              ))}
+                </select>
+              </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Trabajadores</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Trabajadores</label>
                 <div className="flex flex-wrap gap-2">
                   {tecnicos.map(t => (
                     <button key={t.id} type="button" onClick={() => toggleTecnico(t.id)}
                       className="px-3 py-1.5 rounded-xl text-sm transition-all"
-                      style={tecnicosSeleccionados.includes(t.id)
-                        ? { background: 'linear-gradient(135deg, #7c3aed, #06b6d4)', color: 'white', border: 'none' }
-                        : { background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                      style={tecnicosSeleccionados.includes(t.id) ? s.btnPrimary : s.btnSecondary}>
                       {t.nombre}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Fecha programada</label>
-                <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha programada</label>
+                <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Prioridad</label>
-                <select value={prioridad} onChange={e => setPrioridad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Prioridad</label>
+                <select value={prioridad} onChange={e => setPrioridad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="baja">Baja</option><option value="normal">Normal</option>
                   <option value="alta">Alta</option><option value="urgente">Urgente</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Estado</label>
-                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Estado</label>
+                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="pendiente">Pendiente</option><option value="en_curso">En curso</option>
                   <option value="completada">Completada</option><option value="cancelada">Cancelada</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Duracion estimada</label>
-                <select value={duracionHoras} onChange={e => setDuracionHoras(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Duracion estimada</label>
+                <select value={duracionHoras} onChange={e => setDuracionHoras(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="0.5">30 min</option><option value="1">1 hora</option>
                   <option value="1.5">1.5 horas</option><option value="2">2 horas</option>
                   <option value="2.5">2.5 horas</option><option value="3">3 horas</option>
@@ -275,29 +270,28 @@ export default function Ordenes() {
                   <option value="6">6 horas</option><option value="8">Jornada completa</option>
                 </select>
               </div>
-              <div className="flex items-center gap-3 rounded-xl px-3 py-2 mt-auto" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
+              <div className="flex items-center gap-3 rounded-xl px-3 py-2 mt-auto" style={s.inputStyle}>
                 <input type="checkbox" id="hora-fija" checked={horaFija} onChange={e => setHoraFija(e.target.checked)} className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
-                <label htmlFor="hora-fija" className="text-sm cursor-pointer" style={{ color: '#94a3b8' }}>Hora fija con cliente</label>
+                <label htmlFor="hora-fija" className="text-sm cursor-pointer" style={{ color: 'var(--text-muted)' }}>Hora fija con cliente</label>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Descripcion</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Descripcion</label>
                 <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3}
-                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none"
-                  style={inputStyle} placeholder="Describe los trabajos a realizar..." />
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
+                  style={s.inputStyle} placeholder="Describe los trabajos a realizar..." />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Observaciones</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Observaciones</label>
                 <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2}
-                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none"
-                  style={inputStyle} placeholder="Instrucciones especiales..." />
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
+                  style={s.inputStyle} placeholder="Instrucciones especiales..." />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="text-white px-5 py-2 rounded-xl text-sm font-medium"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+                <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium" style={s.btnPrimary}>
                   {editandoId ? 'Guardar cambios' : 'Crear OT'}
                 </button>
                 <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }}
-                  className="text-sm px-5 py-2 rounded-xl" style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                  className="text-sm px-5 py-2 rounded-xl" style={s.btnSecondary}>
                   Cancelar
                 </button>
               </div>
@@ -307,67 +301,71 @@ export default function Ordenes() {
 
         {ordenDetalle && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-            <div className="w-full max-w-2xl max-h-screen overflow-y-auto rounded-2xl" style={cardStyle}>
-              <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={{ background: '#0d1117', borderBottom: '1px solid #1e2d3d' }}>
+            <div className="w-full max-w-2xl max-h-screen overflow-y-auto rounded-2xl" style={s.cardStyle}>
+              <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={s.headerStyle}>
                 <div>
                   <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{ordenDetalle.codigo}</span>
-                  <h2 className="text-white font-bold text-lg">{ordenDetalle.clientes?.nombre || '—'}</h2>
+                  <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>{ordenDetalle.clientes?.nombre || '—'}</h2>
                 </div>
-                <button onClick={() => setOrdenDetalle(null)} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors" style={{ color: '#64748b', border: '1px solid #1e2d3d' }}>X</button>
+                <button onClick={() => setOrdenDetalle(null)} className="w-8 h-8 rounded-lg flex items-center justify-center"
+                  style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
                     { label: 'Estado', val: <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADO_COLORS[ordenDetalle.estado]?.bg, color: ESTADO_COLORS[ordenDetalle.estado]?.color }}>{ordenDetalle.estado.replace('_', ' ')}</span> },
                     { label: 'Prioridad', val: <span className="text-sm font-medium" style={{ color: PRIORIDAD_COLORS[ordenDetalle.prioridad] }}>{ordenDetalle.prioridad}</span> },
-                    { label: 'Tipo', val: <span className="text-white text-sm capitalize">{ordenDetalle.tipo}</span> },
-                    { label: 'Fecha', val: <span className="text-white text-sm">{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</span> },
-                    { label: 'Duracion', val: <span className="text-white text-sm">{ordenDetalle.duracion_horas || 2}h</span> },
-                    { label: 'Hora fija', val: <span className="text-sm font-medium" style={{ color: ordenDetalle.hora_fija ? '#f59e0b' : '#64748b' }}>{ordenDetalle.hora_fija ? 'Si' : 'No'}</span> },
+                    { label: 'Tipo', val: <span className="text-sm capitalize" style={{ color: 'var(--text)' }}>{ordenDetalle.tipo}</span> },
+                    { label: 'Fecha', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</span> },
+                    { label: 'Duracion', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.duracion_horas || 2}h</span> },
+                    { label: 'Hora fija', val: <span className="text-sm font-medium" style={{ color: ordenDetalle.hora_fija ? '#f59e0b' : 'var(--text-muted)' }}>{ordenDetalle.hora_fija ? 'Si' : 'No'}</span> },
                   ].map((item, i) => (
-                    <div key={i} className="rounded-xl p-3" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
-                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: '#475569' }}>{item.label}</p>
+                    <div key={i} className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{item.label}</p>
                       {item.val}
                     </div>
                   ))}
                 </div>
-                <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
-                  <p className="text-xs uppercase tracking-wider mb-1" style={{ color: '#475569' }}>Trabajadores</p>
-                  <p className="text-white text-sm">{getNombresTecnicos(ordenDetalle.tecnicos_ids || [])}</p>
+
+                <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                  <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Trabajadores</p>
+                  <p className="text-sm" style={{ color: 'var(--text)' }}>{getNombresTecnicos(ordenDetalle.tecnicos_ids || [])}</p>
                 </div>
+
                 {ordenDetalle.descripcion && (
-                  <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
-                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Trabajos a realizar</p>
-                    <p className="text-white text-sm leading-relaxed">{ordenDetalle.descripcion}</p>
+                  <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Trabajos a realizar</p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{ordenDetalle.descripcion}</p>
                   </div>
                 )}
+
                 {ordenDetalle.observaciones && (
-                  <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
-                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Observaciones</p>
-                    <p className="text-white text-sm leading-relaxed">{ordenDetalle.observaciones}</p>
+                  <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Observaciones</p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{ordenDetalle.observaciones}</p>
                   </div>
                 )}
 
                 <div className="rounded-2xl p-4 mb-4" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.2)' }}>
                   <p className="font-medium text-sm mb-1" style={{ color: '#06b6d4' }}>Escanear material o equipo</p>
-                  <p className="text-xs mb-3" style={{ color: '#475569' }}>Escanea el QR para registrar salida vinculada a esta OT.</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Escanea el QR para registrar salida vinculada a esta OT.</p>
                   <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
-                    className="w-full py-2.5 rounded-xl text-sm font-medium text-white"
-                    style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)' }}>
+                    className="w-full py-2.5 rounded-xl text-sm font-medium"
+                    style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)', color: 'white' }}>
                     Abrir escaner QR
                   </button>
                 </div>
 
                 <div className="mb-4">
-                  <h3 className="text-white font-semibold mb-3">Fotos</h3>
+                  <h3 className="font-semibold mb-3" style={{ color: 'var(--text)' }}>Fotos</h3>
                   {subiendo && <p className="text-sm mb-3" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
                   {TIPOS_FOTO.map(tf => {
                     const fotosDelTipo = (ordenDetalle.fotos || []).filter((f: any) => f.tipo === tf.key)
                     return (
                       <div key={tf.key} className="mb-4">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs uppercase tracking-wider" style={{ color: '#475569' }}>{tf.label}</p>
-                          <label className="text-xs px-3 py-1 rounded-lg cursor-pointer transition-colors" style={{ background: '#080b14', color: '#06b6d4', border: '1px solid #1e2d3d' }}>
+                          <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{tf.label}</p>
+                          <label className="text-xs px-3 py-1 rounded-lg cursor-pointer" style={{ background: 'var(--bg)', color: '#06b6d4', border: '1px solid var(--border)' }}>
                             + Foto
                             <input type="file" accept="image/*" className="hidden" onChange={e => subirFoto(e, tf.key)} />
                           </label>
@@ -376,19 +374,19 @@ export default function Ordenes() {
                           <div className="grid grid-cols-3 gap-2">
                             {fotosDelTipo.map((f: any) => (
                               <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
-                                <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid #1e2d3d' }} />
+                                <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
                               </a>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs" style={{ color: '#334155' }}>Sin fotos</p>
+                          <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin fotos</p>
                         )}
                       </div>
                     )
                   })}
                 </div>
 
-                <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid #1e2d3d' }}>
+                <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid var(--border)' }}>
                   {ordenDetalle.estado === 'pendiente' && (
                     <button onClick={() => cambiarEstado(ordenDetalle.id, 'en_curso')}
                       className="text-sm px-4 py-2 rounded-xl font-medium"
@@ -414,8 +412,7 @@ export default function Ordenes() {
                     Eliminar
                   </button>
                   <button onClick={() => setOrdenDetalle(null)}
-                    className="text-sm px-4 py-2 rounded-xl ml-auto"
-                    style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                    className="text-sm px-4 py-2 rounded-xl ml-auto" style={s.btnSecondary}>
                     Cerrar
                   </button>
                 </div>
@@ -431,16 +428,15 @@ export default function Ordenes() {
         ) : ordenesFiltradas.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">📋</p>
-            <p style={{ color: '#475569' }}>No hay ordenes. Crea la primera.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay ordenes. Crea la primera.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {ordenesFiltradas.map(o => (
               <div key={o.id} onClick={() => abrirDetalle(o)}
-                className="rounded-2xl p-5 cursor-pointer transition-all"
-                style={cardStyle}
+                className="rounded-2xl p-5 cursor-pointer transition-all" style={s.cardStyle}
                 onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#1e2d3d'}>
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
                 <div className="flex items-start justify-between flex-wrap gap-3">
                   <div>
                     <div className="flex items-center gap-3 mb-2 flex-wrap">
@@ -451,15 +447,15 @@ export default function Ordenes() {
                       <span className="text-xs font-medium" style={{ color: PRIORIDAD_COLORS[o.prioridad] }}>{o.prioridad}</span>
                       {o.hora_fija && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>Hora fija</span>}
                     </div>
-                    <p className="text-white font-medium">{o.clientes?.nombre || '—'}</p>
-                    <p className="text-sm mt-1" style={{ color: '#475569' }}>{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
-                    <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: '#334155' }}>
+                    <p className="font-medium" style={{ color: 'var(--text)' }}>{o.clientes?.nombre || '—'}</p>
+                    <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
+                    <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: 'var(--text-subtle)' }}>
                       <span>Trabajadores: {getNombresTecnicos(o.tecnicos_ids || [])}</span>
                       <span>Duracion: {o.duracion_horas || 2}h</span>
                       <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '—'}</span>
                     </div>
                   </div>
-                  <span className="text-xs" style={{ color: '#334155' }}>Ver detalle →</span>
+                  <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>Ver detalle →</span>
                 </div>
               </div>
             ))}
