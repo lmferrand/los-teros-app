@@ -34,10 +34,7 @@ export default function Inventario() {
   }
 
   async function cargarMateriales() {
-    const { data } = await supabase
-      .from('materiales')
-      .select('*')
-      .order('nombre')
+    const { data } = await supabase.from('materiales').select('*').order('nombre')
     if (data) setMateriales(data)
     setLoading(false)
   }
@@ -47,13 +44,9 @@ export default function Inventario() {
     if (!file) return
     setSubiendo(true)
     const nombre_archivo = `materiales/${Date.now()}-${file.name}`
-    const { data, error } = await supabase.storage
-      .from('fotos-materiales')
-      .upload(nombre_archivo, file)
+    const { data, error } = await supabase.storage.from('fotos-materiales').upload(nombre_archivo, file)
     if (!error && data) {
-      const { data: urlData } = supabase.storage
-        .from('fotos-materiales')
-        .getPublicUrl(nombre_archivo)
+      const { data: urlData } = supabase.storage.from('fotos-materiales').getPublicUrl(nombre_archivo)
       setFotoUrl(urlData.publicUrl)
     }
     setSubiendo(false)
@@ -62,47 +55,27 @@ export default function Inventario() {
   function abrirForm(mat?: any) {
     if (mat) {
       setEditando(mat)
-      setNombre(mat.nombre || '')
-      setReferencia(mat.referencia || '')
-      setCategoria(mat.categoria || 'limpieza')
-      setUnidad(mat.unidad || 'unidad')
-      setStock(String(mat.stock || 0))
-      setMinimo(String(mat.minimo || 5))
-      setUbicacion(mat.ubicacion || '')
-      setNotas(mat.notas || '')
-      setFotoUrl(mat.foto_url || '')
+      setNombre(mat.nombre || ''); setReferencia(mat.referencia || '')
+      setCategoria(mat.categoria || 'limpieza'); setUnidad(mat.unidad || 'unidad')
+      setStock(String(mat.stock || 0)); setMinimo(String(mat.minimo || 5))
+      setUbicacion(mat.ubicacion || ''); setNotas(mat.notas || ''); setFotoUrl(mat.foto_url || '')
     } else {
       setEditando(null)
-      setNombre('')
-      setReferencia('')
-      setCategoria('limpieza')
-      setUnidad('unidad')
-      setStock('0')
-      setMinimo('5')
-      setUbicacion('')
-      setNotas('')
-      setFotoUrl('')
+      setNombre(''); setReferencia(''); setCategoria('limpieza'); setUnidad('unidad')
+      setStock('0'); setMinimo('5'); setUbicacion(''); setNotas(''); setFotoUrl('')
     }
     setMostrarForm(true)
   }
 
   async function guardarMaterial(e: React.FormEvent) {
     e.preventDefault()
-    const datos = {
-      nombre, referencia, categoria, unidad,
-      stock: parseFloat(stock) || 0,
-      minimo: parseFloat(minimo) || 0,
-      ubicacion, notas,
-      foto_url: fotoUrl || null,
-    }
+    const datos = { nombre, referencia, categoria, unidad, stock: parseFloat(stock) || 0, minimo: parseFloat(minimo) || 0, ubicacion, notas, foto_url: fotoUrl || null }
     if (editando) {
       await supabase.from('materiales').update(datos).eq('id', editando.id)
     } else {
       await supabase.from('materiales').insert(datos)
     }
-    setMostrarForm(false)
-    setEditando(null)
-    cargarMateriales()
+    setMostrarForm(false); setEditando(null); cargarMateriales()
   }
 
   async function ajustarStock(id: string, cantidad: number) {
@@ -124,75 +97,53 @@ export default function Inventario() {
     const url = await QRCode.toDataURL(datos, { width: 300, margin: 2 })
     const win = window.open('', '_blank')
     if (win) {
-      win.document.write(`
-        <html>
-        <head>
-          <title>QR - ${mat.nombre}</title>
-          <style>
-            body { font-family: sans-serif; text-align: center; padding: 30px; background: #fff; }
-            .etiqueta { border: 2px solid #000; padding: 20px; display: inline-block; margin: 10px; border-radius: 8px; }
-            h2 { margin: 10px 0 5px; font-size: 18px; }
-            p { margin: 4px 0; font-size: 13px; color: #444; }
-            .ref { font-size: 11px; color: #888; font-family: monospace; }
-            .footer { font-size: 10px; color: #999; margin-top: 8px; }
-            @media print { button { display: none; } }
-          </style>
-        </head>
-        <body>
-          <div class="etiqueta">
-            <img src="${url}" style="width:200px;height:200px">
-            <h2>${mat.nombre}</h2>
-            <p class="ref">Ref: ${mat.referencia || '—'}</p>
-            <p>Ubicacion: ${mat.ubicacion || '—'}</p>
-            <p>Stock actual: ${mat.stock || 0} ${mat.unidad || ''}</p>
-            <p class="footer">Los Teros — Escanea para registrar salida</p>
-          </div>
-          <br>
-          <button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#2563eb;color:#fff;border:none;border-radius:8px;margin-top:10px">
-            Imprimir etiqueta
-          </button>
-        </body>
-        </html>
-      `)
+      win.document.write(`<html><head><title>QR - ${mat.nombre}</title>
+      <style>body{font-family:sans-serif;text-align:center;padding:30px;background:#fff}
+      .etiqueta{border:2px solid #000;padding:20px;display:inline-block;border-radius:8px}
+      h2{margin:10px 0 5px;font-size:18px}p{margin:4px 0;font-size:13px;color:#444}
+      @media print{button{display:none}}</style></head>
+      <body><div class="etiqueta"><img src="${url}" style="width:200px;height:200px">
+      <h2>${mat.nombre}</h2><p>Ref: ${mat.referencia || '—'}</p>
+      <p>Ubicacion: ${mat.ubicacion || '—'}</p><p>Stock: ${mat.stock || 0} ${mat.unidad || ''}</p>
+      <p style="font-size:10px;color:#999">Los Teros — Escanea para registrar salida</p></div>
+      <br><button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#7c3aed;color:#fff;border:none;border-radius:8px;margin-top:10px">Imprimir</button>
+      </body></html>`)
       win.document.close()
     }
   }
 
   const stockBajo = materiales.filter(m => (m.stock || 0) < (m.minimo || 0))
+  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
+  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
 
   return (
-    <div className="min-h-screen bg-gray-950">
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+    <div className="min-h-screen" style={{ background: '#080b14' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
-          <h1 className="text-xl font-bold text-white">Inventario</h1>
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
+            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
+          <h1 className="text-white font-bold text-lg">Inventario</h1>
         </div>
         <div className="flex items-center gap-3">
-          
-            <button
-  onClick={() => window.location.href = '/escanear'}
-  className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-lg text-sm"
->
-  Escanear QR
-</button>
-          <button
-            onClick={() => abrirForm()}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"
-          >
+          <button onClick={() => router.push('/escanear')} className="text-sm px-4 py-2 rounded-xl font-medium"
+            style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
+            Escanear QR
+          </button>
+          <button onClick={() => abrirForm()} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
             + Nuevo material
           </button>
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-6 max-w-6xl mx-auto">
         {stockBajo.length > 0 && (
-          <div className="bg-yellow-900 border border-yellow-700 rounded-xl p-4 mb-6">
-            <p className="text-yellow-300 font-medium text-sm mb-2">
-              Alerta de stock bajo ({stockBajo.length} materiales)
-            </p>
+          <div className="rounded-2xl p-4 mb-6" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)' }}>
+            <p className="font-medium text-sm mb-2" style={{ color: '#fbbf24' }}>Alerta stock bajo — {stockBajo.length} materiales</p>
             <div className="flex flex-wrap gap-2">
               {stockBajo.map(m => (
-                <span key={m.id} className="bg-yellow-800 text-yellow-200 text-xs px-2 py-1 rounded">
+                <span key={m.id} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24' }}>
                   {m.nombre}: {m.stock} {m.unidad} (min: {m.minimo})
                 </span>
               ))}
@@ -201,67 +152,43 @@ export default function Inventario() {
         )}
 
         {mostrarForm && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
-            <h2 className="text-white font-semibold mb-4">
-              {editando ? 'Editar material' : 'Nuevo material'}
-            </h2>
+          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
+            <h2 className="text-white font-semibold mb-5">{editando ? 'Editar material' : 'Nuevo material'}</h2>
             <form onSubmit={guardarMaterial} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Nombre</label>
-                <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Desengrasante industrial" />
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Referencia</label>
-                <input value={referencia} onChange={e => setReferencia(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="REF-001" />
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Categoria</label>
-                <select value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="limpieza">Limpieza</option>
-                  <option value="filtros">Filtros</option>
-                  <option value="repuestos">Repuestos</option>
-                  <option value="instalacion">Instalacion</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Unidad</label>
-                <select value={unidad} onChange={e => setUnidad(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
-                  <option value="unidad">Unidad</option>
-                  <option value="litro">Litro</option>
-                  <option value="kg">Kg</option>
-                  <option value="metro">Metro</option>
-                  <option value="caja">Caja</option>
-                  <option value="rollo">Rollo</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Stock actual</label>
-                <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Stock minimo alerta</label>
-                <input type="number" value={minimo} onChange={e => setMinimo(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Ubicacion almacen</label>
-                <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Estanteria A, balda 3" />
-              </div>
-              <div>
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Notas</label>
-                <input value={notas} onChange={e => setNotas(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Proveedor, especificaciones..." />
-              </div>
+              {[
+                { label: 'Nombre', el: <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Desengrasante industrial" /> },
+                { label: 'Referencia', el: <input value={referencia} onChange={e => setReferencia(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="REF-001" /> },
+                { label: 'Categoria', el: <select value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                  <option value="limpieza">Limpieza</option><option value="filtros">Filtros</option>
+                  <option value="repuestos">Repuestos</option><option value="instalacion">Instalacion</option><option value="otro">Otro</option>
+                </select> },
+                { label: 'Unidad', el: <select value={unidad} onChange={e => setUnidad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                  <option value="unidad">Unidad</option><option value="litro">Litro</option>
+                  <option value="kg">Kg</option><option value="metro">Metro</option><option value="caja">Caja</option><option value="rollo">Rollo</option>
+                </select> },
+                { label: 'Stock actual', el: <input type="number" value={stock} onChange={e => setStock(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} /> },
+                { label: 'Stock minimo', el: <input type="number" value={minimo} onChange={e => setMinimo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} /> },
+                { label: 'Ubicacion', el: <input value={ubicacion} onChange={e => setUbicacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Estanteria A, balda 3" /> },
+                { label: 'Notas', el: <input value={notas} onChange={e => setNotas(e.target.value)} className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} placeholder="Proveedor, especificaciones..." /> },
+              ].map((f, i) => (
+                <div key={i}>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>{f.label}</label>
+                  {f.el}
+                </div>
+              ))}
               <div className="md:col-span-2">
-                <label className="text-gray-400 text-xs uppercase mb-1 block">Foto del material</label>
-                <input type="file" accept="image/*" onChange={subirFoto} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
-                {subiendo && <p className="text-blue-400 text-xs mt-1">Subiendo foto...</p>}
-                {fotoUrl && <img src={fotoUrl} alt="foto" className="mt-2 h-20 w-20 object-cover rounded-lg border border-gray-700" />}
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Foto del material</label>
+                <input type="file" accept="image/*" onChange={subirFoto} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle} />
+                {subiendo && <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
+                {fotoUrl && <img src={fotoUrl} alt="foto" className="mt-2 h-20 w-20 object-cover rounded-xl" style={{ border: '1px solid #1e2d3d' }} />}
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                <button type="submit" className="text-white px-5 py-2 rounded-xl text-sm font-medium"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
                   {editando ? 'Actualizar' : 'Guardar'}
                 </button>
-                <button type="button" onClick={() => setMostrarForm(false)} className="bg-gray-800 text-gray-400 px-4 py-2 rounded-lg text-sm">
+                <button type="button" onClick={() => setMostrarForm(false)} className="text-sm px-5 py-2 rounded-xl"
+                  style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
                   Cancelar
                 </button>
               </div>
@@ -270,63 +197,62 @@ export default function Inventario() {
         )}
 
         {loading ? (
-          <p className="text-gray-400">Cargando...</p>
+          <div className="flex items-center justify-center py-20">
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
+          </div>
         ) : materiales.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
-            <p className="text-4xl mb-3">📦</p>
-            <p>No hay materiales. Añade el primero.</p>
+          <div className="text-center py-20">
+            <p className="text-5xl mb-4">📦</p>
+            <p style={{ color: '#475569' }}>No hay materiales. Añade el primero.</p>
           </div>
         ) : (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="rounded-2xl overflow-hidden" style={cardStyle}>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-800">
-                  <th className="text-left px-4 py-3 text-gray-400 text-xs uppercase">Foto</th>
-                  <th className="text-left px-4 py-3 text-gray-400 text-xs uppercase">Material</th>
-                  <th className="text-left px-4 py-3 text-gray-400 text-xs uppercase">Categoria</th>
-                  <th className="text-left px-4 py-3 text-gray-400 text-xs uppercase">Stock</th>
-                  <th className="text-left px-4 py-3 text-gray-400 text-xs uppercase">Minimo</th>
-                  <th className="text-left px-4 py-3 text-gray-400 text-xs uppercase">Ubicacion</th>
-                  <th className="px-4 py-3"></th>
+                <tr style={{ borderBottom: '1px solid #1e2d3d' }}>
+                  {['Foto', 'Material', 'Categoria', 'Stock', 'Minimo', 'Ubicacion', ''].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: '#475569' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {materiales.map(m => (
-                  <tr key={m.id} className="border-b border-gray-800 hover:bg-gray-800">
+                  <tr key={m.id} style={{ borderBottom: '1px solid #1e2d3d' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.05)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <td className="px-4 py-3">
                       {m.foto_url ? (
-                        <img src={m.foto_url} alt={m.nombre} className="w-10 h-10 object-cover rounded-lg border border-gray-700" />
+                        <img src={m.foto_url} alt={m.nombre} className="w-10 h-10 object-cover rounded-xl" style={{ border: '1px solid #1e2d3d' }} />
                       ) : (
-                        <div className="w-10 h-10 bg-gray-800 rounded-lg border border-gray-700 flex items-center justify-center text-gray-600 text-xs">📦</div>
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>📦</div>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-white font-medium">{m.nombre}</p>
-                      <p className="text-gray-500 text-xs">{m.referencia}</p>
+                      <p className="text-xs" style={{ color: '#475569' }}>{m.referencia}</p>
                     </td>
-                    <td className="px-4 py-3 text-gray-400">{m.categoria}</td>
+                    <td className="px-4 py-3 text-sm capitalize" style={{ color: '#64748b' }}>{m.categoria}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => ajustarStock(m.id, -1)} className="w-6 h-6 bg-gray-800 hover:bg-gray-700 text-white rounded text-xs">-</button>
-                        <span className={`font-mono font-bold ${(m.stock || 0) < (m.minimo || 0) ? 'text-red-400' : 'text-white'}`}>
+                        <button onClick={() => ajustarStock(m.id, -1)} className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold transition-colors"
+                          style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>-</button>
+                        <span className="font-mono font-bold text-sm" style={{ color: (m.stock || 0) < (m.minimo || 0) ? '#f87171' : '#34d399' }}>
                           {m.stock || 0} {m.unidad}
                         </span>
-                        <button onClick={() => ajustarStock(m.id, 1)} className="w-6 h-6 bg-gray-800 hover:bg-gray-700 text-white rounded text-xs">+</button>
+                        <button onClick={() => ajustarStock(m.id, 1)} className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold transition-colors"
+                          style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>+</button>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{m.minimo || 0} {m.unidad}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{m.ubicacion || '—'}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-xs" style={{ color: '#64748b' }}>{m.minimo || 0} {m.unidad}</td>
+                    <td className="px-4 py-3 text-xs" style={{ color: '#64748b' }}>{m.ubicacion || '—'}</td>
+                    <td className="px-4 py-3">
                       <div className="flex gap-2 justify-end">
-                        <button onClick={() => generarQR(m)} className="text-green-400 hover:text-green-300 text-xs">
-                          QR
-                        </button>
-                        <button onClick={() => abrirForm(m)} className="text-blue-400 hover:text-blue-300 text-xs">
-                          Editar
-                        </button>
-                        <button onClick={() => eliminarMaterial(m.id)} className="text-red-400 hover:text-red-300 text-xs">
-                          Eliminar
-                        </button>
+                        <button onClick={() => generarQR(m)} className="text-xs px-2 py-1 rounded-lg transition-colors"
+                          style={{ color: '#34d399', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)' }}>QR</button>
+                        <button onClick={() => abrirForm(m)} className="text-xs px-2 py-1 rounded-lg transition-colors"
+                          style={{ color: '#a78bfa', background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)' }}>Editar</button>
+                        <button onClick={() => eliminarMaterial(m.id)} className="text-xs px-2 py-1 rounded-lg transition-colors"
+                          style={{ color: '#f87171', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>Eliminar</button>
                       </div>
                     </td>
                   </tr>
