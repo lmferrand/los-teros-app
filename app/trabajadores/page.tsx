@@ -110,6 +110,11 @@ export default function Trabajadores() {
     await supabase.from('perfiles').update({ rol: nuevoRol }).eq('id', id)
     cargarTrabajadores()
   }
+  async function eliminarTrabajador(id: string, nombre: string) {
+  if (!confirm(`Eliminar a ${nombre}? Esta accion no se puede deshacer.`)) return
+  await supabase.from('perfiles').delete().eq('id', id)
+  cargarTrabajadores()
+}
 
   const ROLES: any = {
     gerente: { label: 'Gerente', clase: 'bg-purple-900 text-purple-300' },
@@ -291,7 +296,12 @@ export default function Trabajadores() {
                     className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs"
                   >
                     Editar datos
-                  </button>
+                  </button><button
+  onClick={() => eliminarTrabajador(t.id, t.nombre)}
+  className="w-full bg-gray-800 hover:bg-gray-700 text-red-400 px-3 py-1.5 rounded-lg text-xs mt-2"
+>
+  Eliminar trabajador
+</button>
                 </div>
               </div>
             ))}
