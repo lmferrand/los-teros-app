@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { s } from '@/lib/styles'
 
 export default function Movimientos() {
   const [movimientos, setMovimientos] = useState<any[]>([])
@@ -50,17 +51,14 @@ export default function Movimientos() {
   const totalSalidas = movimientos.filter(m => m.tipo === 'salida').length
   const totalEntradas = movimientos.filter(m => m.tipo === 'entrada').length
 
-  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
-  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
-
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
-          <h1 className="text-white font-bold text-lg">Movimientos</h1>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
+          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Movimientos</h1>
         </div>
       </div>
 
@@ -70,17 +68,17 @@ export default function Movimientos() {
             { label: 'Consumos material', valor: totalConsumos, color: '#fb923c', bg: 'rgba(249,115,22,0.08)', border: 'rgba(249,115,22,0.2)' },
             { label: 'Salidas equipo', valor: totalSalidas, color: '#fbbf24', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.2)' },
             { label: 'Entradas stock', valor: totalEntradas, color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.2)' },
-          ].map((s, i) => (
-            <div key={i} className="rounded-2xl p-4 text-center" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
-              <p className="text-3xl font-bold" style={{ color: s.color }}>{s.valor}</p>
-              <p className="text-sm mt-1" style={{ color: s.color }}>{s.label}</p>
+          ].map((s2, i) => (
+            <div key={i} className="rounded-2xl p-4 text-center" style={{ background: s2.bg, border: `1px solid ${s2.border}` }}>
+              <p className="text-3xl font-bold" style={{ color: s2.color }}>{s2.valor}</p>
+              <p className="text-sm mt-1" style={{ color: s2.color }}>{s2.label}</p>
             </div>
           ))}
         </div>
 
         <div className="flex gap-3 mb-6 flex-wrap">
           <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}
-            className="text-sm rounded-xl px-3 py-2 outline-none" style={inputStyle}>
+            className="text-sm rounded-xl px-3 py-2 outline-none" style={s.inputStyle}>
             <option value="">Todos los tipos</option>
             <option value="consumo">Consumo material</option>
             <option value="salida">Salida equipo</option>
@@ -89,14 +87,13 @@ export default function Movimientos() {
             <option value="ajuste">Ajuste stock</option>
           </select>
           <select value={filtroTecnico} onChange={e => setFiltroTecnico(e.target.value)}
-            className="text-sm rounded-xl px-3 py-2 outline-none" style={inputStyle}>
+            className="text-sm rounded-xl px-3 py-2 outline-none" style={s.inputStyle}>
             <option value="">Todos los trabajadores</option>
             {tecnicos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
           </select>
           {(filtroTipo || filtroTecnico) && (
             <button onClick={() => { setFiltroTipo(''); setFiltroTecnico('') }}
-              className="text-sm px-4 py-2 rounded-xl"
-              style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+              className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
               Limpiar filtros
             </button>
           )}
@@ -107,19 +104,19 @@ export default function Movimientos() {
             <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
           </div>
         ) : movimientosFiltrados.length === 0 ? (
-          <div className="text-center py-20 rounded-2xl" style={cardStyle}>
+          <div className="text-center py-20 rounded-2xl" style={s.cardStyle}>
             <p className="text-5xl mb-4">📊</p>
-            <p style={{ color: '#475569' }}>No hay movimientos registrados.</p>
-            <p className="text-xs mt-2" style={{ color: '#334155' }}>Los movimientos se registran al escanear QR o ajustar stock.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay movimientos registrados.</p>
+            <p className="text-xs mt-2" style={{ color: 'var(--text-subtle)' }}>Los movimientos se registran al escanear QR o ajustar stock.</p>
           </div>
         ) : (
-          <div className="rounded-2xl overflow-hidden" style={cardStyle}>
-            <div className="px-4 py-3" style={{ borderBottom: '1px solid #1e2d3d' }}>
-              <p className="text-sm" style={{ color: '#475569' }}>{movimientosFiltrados.length} movimientos</p>
+          <div className="rounded-2xl overflow-hidden" style={s.cardStyle}>
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{movimientosFiltrados.length} movimientos</p>
             </div>
             <div className="flex flex-col">
               {movimientosFiltrados.map(m => (
-                <div key={m.id} className="px-4 py-4 transition-colors" style={{ borderBottom: '1px solid #1e2d3d' }}
+                <div key={m.id} className="px-4 py-4 transition-colors" style={{ borderBottom: '1px solid var(--border)' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.05)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <div className="flex items-start justify-between flex-wrap gap-3">
@@ -135,28 +132,28 @@ export default function Movimientos() {
                           )}
                         </div>
                         {m.materiales && (
-                          <p className="text-white font-medium text-sm">
+                          <p className="font-medium text-sm" style={{ color: 'var(--text)' }}>
                             {m.materiales.nombre}
-                            <span className="font-normal ml-2" style={{ color: '#64748b' }}>
+                            <span className="font-normal ml-2" style={{ color: 'var(--text-muted)' }}>
                               — {m.cantidad} {m.materiales.unidad || 'uds'}
                             </span>
                           </p>
                         )}
                         {m.equipos && (
-                          <p className="text-white font-medium text-sm">
+                          <p className="font-medium text-sm" style={{ color: 'var(--text)' }}>
                             <span className="font-mono" style={{ color: '#06b6d4' }}>{m.equipos.codigo}</span>
-                            <span className="font-normal ml-2 capitalize" style={{ color: '#64748b' }}>— {m.equipos.tipo}</span>
+                            <span className="font-normal ml-2 capitalize" style={{ color: 'var(--text-muted)' }}>— {m.equipos.tipo}</span>
                           </p>
                         )}
-                        {m.observaciones && <p className="text-xs mt-1" style={{ color: '#475569' }}>{m.observaciones}</p>}
-                        <p className="text-xs mt-1" style={{ color: '#334155' }}>Trabajador: {m.perfiles?.nombre || '—'}</p>
+                        {m.observaciones && <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{m.observaciones}</p>}
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>Trabajador: {m.perfiles?.nombre || '—'}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm" style={{ color: '#475569' }}>
+                      <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                         {m.fecha ? new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                       </p>
-                      <p className="text-xs" style={{ color: '#334155' }}>
+                      <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
                         {m.fecha ? new Date(m.fecha).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}
                       </p>
                     </div>
