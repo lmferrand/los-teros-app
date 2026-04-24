@@ -331,7 +331,7 @@ const [cargandoFotos, setCargandoFotos] = useState(false)
                     onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.05)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <td className="px-4 py-3">
-                      <p className="font-medium" style={{ color: 'var(--text)' }}>{c.nombre}</p>
+                      <a href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</a>
                       {c.notas && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.notas.substring(0, 50)}</p>}
                     </td>
                     <td className="px-4 py-3">
