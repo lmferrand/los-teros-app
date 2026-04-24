@@ -18,12 +18,24 @@ export default function Dashboard() {
   const router = useRouter()
   const { tema, toggleTema } = useTheme()
 
+  useEffect(() => { cargarDatos() }, [])
+
   async function cargarDatos() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
     setUser(session.user)
-    const { data: perfilData } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+
+    let { data: perfilData } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+    if (!perfilData) {
+      const { data: nuevoPerfil } = await supabase.from('perfiles').insert({
+        id: session.user.id,
+        nombre: session.user.email?.split('@')[0] || 'Usuario',
+        rol: 'tecnico',
+      }).select().single()
+      perfilData = nuevoPerfil
+    }
     setPerfil(perfilData)
+
     const [ordenes, materiales, equipos, clientes] = await Promise.all([
       supabase.from('ordenes').select('*'),
       supabase.from('materiales').select('*'),
@@ -66,8 +78,6 @@ export default function Dashboard() {
     setAlertas(nuevasAlertas)
     setLoading(false)
   }
-
-  useEffect(() => { cargarDatos() }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -123,19 +133,13 @@ export default function Dashboard() {
             <p className="text-sm font-medium" style={{ color: textColor }}>{perfil?.nombre || user?.email}</p>
             <p className="text-xs" style={{ color: '#8b5cf6' }}>{ROLES[perfil?.rol] || perfil?.rol}</p>
           </div>
-          <button
-            onClick={toggleTema}
-            className="text-sm px-3 py-1.5 rounded-lg transition-all"
+          <button onClick={toggleTema} className="text-sm px-3 py-1.5 rounded-lg transition-all"
             style={{ background: bgMain, color: textMuted, border: `1px solid ${border}` }}
-            title={tema === 'dark' ? 'Modo claro' : 'Modo oscuro'}
-          >
+            title={tema === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
             {tema === 'dark' ? '☀️' : '🌙'}
           </button>
-          <button
-            onClick={handleLogout}
-            className="text-sm px-3 py-1.5 rounded-lg transition-colors"
-            style={{ background: bgMain, color: textMuted, border: `1px solid ${border}` }}
-          >
+          <button onClick={handleLogout} className="text-sm px-3 py-1.5 rounded-lg transition-colors"
+            style={{ background: bgMain, color: textMuted, border: `1px solid ${border}` }}>
             Salir
           </button>
         </div>
