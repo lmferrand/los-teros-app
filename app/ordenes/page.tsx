@@ -53,7 +53,28 @@ export default function Ordenes() {
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
     return data || []
+  }async function eliminarFoto(foto: any) {
+  if (!confirm('Eliminar esta foto?')) return
+  await supabase.from('fotos_ordenes').delete().eq('id', foto.id)
+  if (foto.tipo === 'albaran') {
+    const { data: albaranes } = await supabase
+      .from('albaranes')
+      .select('id, fotos_urls')
+      .eq('orden_id', ordenDetalle.id)
+    if (albaranes && albaranes.length > 0) {
+      for (const alb of albaranes) {
+        const nuevasFotos = (alb.fotos_urls || []).filter((u: string) => u !== foto.url)
+        if (nuevasFotos.length === 0) {
+          await supabase.from('albaranes').delete().eq('id', alb.id)
+        } else {
+          await supabase.from('albaranes').update({ fotos_urls: nuevasFotos }).eq('id', alb.id)
+        }
+      }
+    }
   }
+  const fotos = await cargarFotosOrden(ordenDetalle.id)
+  setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+}
 
   async function abrirDetalle(o: any) {
     const fotos = await cargarFotosOrden(o.id)
@@ -104,27 +125,24 @@ if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
   setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
 
       if (tipoFoto === 'albaran') {
-        try {
-          const reader = new FileReader()
-          reader.onload = async (ev) => {
-            const base64 = ev.target?.result as string
-            const res = await fetch('/api/chat', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                imagen: base64,
-                sistemaPrompt: `Eres un experto en leer albaranes. Analiza esta imagen y extrae los datos en formato JSON exacto sin texto adicional ni markdown:
-{"numero":"numero del albaran","cliente":"nombre del cliente","descripcion":"descripcion breve del trabajo realizado","fecha":"DD/MM/YYYY","importe":0.00}
-Si no encuentras algun dato deja el campo vacio o en 0.`
-              }),
-            })
-            const dataIA = await res.json()
-            try {
-              const json = JSON.parse(dataIA.respuesta.replace(/```json|```/g, '').trim())
-              const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
-              const num = String((count || 0) + 1).padStart(4, '0')
-              const numero = json.numero || `ALB-${new Date().getFullYear()}-${num}`
-              await supabase.from('albaranes').insert({
+  const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
+  const num = String((count || 0) + 1).padStart(4, '0')
+  const { error: albError } = await supabase.from('albaranes').insert({
+    numero: `ALB-${new Date().getFullYear()}-${num}`,
+    cliente_id: ordenDetalle.cliente_id || null,
+    orden_id: ordenDetalle.id,
+    descripcion: ordenDetalle.descripcion || '',
+    estado: 'pendiente',
+    fecha: new Date().toISOString().slice(0, 10),
+    fotos_urls: [urlData.publicUrl],
+    observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
+  })
+  if (!albError) {
+    alert('Albaran creado automaticamente en Albaranes.')
+  } else {
+    alert('Error al crear albaran: ' + albError.message)
+  }
+}
                 numero,
                 cliente_id: ordenDetalle.cliente_id || null,
                 orden_id: ordenDetalle.id,
@@ -433,13 +451,20 @@ Si no encuentras algun dato deja el campo vacio o en 0.`
                             <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => subirFoto(e, tf.key)} />
                           </label>
                         </div>
-                        {fotosDelTipo.length > 0 ? (
-                          <div className="grid grid-cols-3 gap-2">
-                            {fotosDelTipo.map((f: any) => (
-                              <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
-                                <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
-                              </a>
-                            ))}
+                        {fotosDelTipo.map((f: any) => (
+  <div key={f.id} className="relative">
+    <a href={f.url} target="_blank" rel="noreferrer">
+      <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
+    </a>
+    <button
+      onClick={() => eliminarFoto(f)}
+      className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+      style={{ background: 'rgba(239,68,68,0.9)', color: 'white' }}
+    >
+      X
+    </button>
+  </div>
+))}
                           </div>
                         ) : (
                           <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin fotos</p>
