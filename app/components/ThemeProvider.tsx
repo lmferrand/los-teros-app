@@ -1,9 +1,50 @@
 'use client'
 
-import { useTheme } from '@/lib/useTheme'
+import { useEffect, useState } from 'react'
+
+const TEMAS = {
+  dark: {
+    '--bg': '#080b14',
+    '--bg-card': '#0d1117',
+    '--border': '#1e2d3d',
+    '--text': '#e2e8f0',
+    '--text-muted': '#475569',
+    '--text-subtle': '#334155',
+  },
+  light: {
+    '--bg': '#f1f5f9',
+    '--bg-card': '#ffffff',
+    '--border': '#e2e8f0',
+    '--text': '#0f172a',
+    '--text-muted': '#64748b',
+    '--text-subtle': '#94a3b8',
+  }
+}
+
+function aplicarTema(t: 'dark' | 'light') {
+  const vars = TEMAS[t]
+  const root = document.documentElement
+  Object.entries(vars).forEach(([key, value]) => {
+    root.style.setProperty(key, value)
+  })
+  root.classList.toggle('light', t === 'light')
+}
 
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const { tema, toggleTema } = useTheme()
+  const [tema, setTema] = useState<'dark' | 'light'>('dark')
+
+  useEffect(() => {
+    const guardado = (localStorage.getItem('tema') as 'dark' | 'light') || 'dark'
+    setTema(guardado)
+    aplicarTema(guardado)
+  }, [])
+
+  function toggleTema() {
+    const nuevo = tema === 'dark' ? 'light' : 'dark'
+    setTema(nuevo)
+    localStorage.setItem('tema', nuevo)
+    aplicarTema(nuevo)
+  }
 
   return (
     <>
