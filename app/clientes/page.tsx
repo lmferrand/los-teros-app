@@ -21,6 +21,9 @@ export default function Clientes() {
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
   const [notas, setNotas] = useState('')
+const [clienteFotos, setClienteFotos] = useState<any>(null)
+const [fotosOT, setFotosOT] = useState<any[]>([])
+const [cargandoFotos, setCargandoFotos] = useState(false)
 
   useEffect(() => {
     verificarSesion()
@@ -72,6 +75,33 @@ export default function Clientes() {
     cargarClientes()
   }
 
+  async function verFotosCliente(cliente: any) {
+  setClienteFotos(cliente)
+  setCargandoFotos(true)
+  const { data: ordenes } = await supabase
+    .from('ordenes')
+    .select('id, codigo, fecha_programada')
+    .eq('cliente_id', cliente.id)
+    .order('fecha_programada', { ascending: false })
+  if (!ordenes || ordenes.length === 0) {
+    setFotosOT([])
+    setCargandoFotos(false)
+    return
+  }
+  const ordenIds = ordenes.map((o: any) => o.id)
+  const { data: fotos } = await supabase
+    .from('fotos_ordenes')
+    .select('*')
+    .in('orden_id', ordenIds)
+    .in('tipo', ['proceso', 'cierre'])
+    .order('created_at', { ascending: false })
+  const fotasConOrden = (fotos || []).map((f: any) => ({
+    ...f,
+    orden: ordenes.find((o: any) => o.id === f.orden_id)
+  }))
+  setFotosOT(fotasConOrden)
+  setCargandoFotos(false)
+}
   function abrirMaps(dir: string) {
     window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir), '_blank')
   }
@@ -160,7 +190,83 @@ export default function Clientes() {
             ))}
           </div>
         </div>
-
+{clienteFotos && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+    <div className="w-full max-w-3xl max-h-screen overflow-y-auto rounded-2xl" style={s.cardStyle}>
+      <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={s.headerStyle}>
+        <div>
+          <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Fotos OT — {clienteFotos.nombre}</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Fotos de proceso y cierre de todos los trabajos</p>
+        </div>
+        <button onClick={() => setClienteFotos(null)} className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
+      </div>
+      <div className="p-6">
+        {cargandoFotos ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
+          </div>
+        ) : fotosOT.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-4xl mb-3">📷</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay fotos de proceso o cierre para este cliente.</p>
+          </div>
+        ) : (
+          <div>
+            <div className="mb-8">
+              <h3 className="font-semibold mb-4 flex items-center gap-2" style={{ color: 'var(--text)' }}>
+                <span className="text-lg">🔧</span> Fotos del proceso (Antes)
+              </h3>
+              {fotosOT.filter(f => f.tipo === 'proceso').length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--text-subtle)' }}>Sin fotos de proceso.</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {fotosOT.filter(f => f.tipo === 'proceso').map((f: any) => (
+                    <div key={f.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                      <a href={f.url} target="_blank" rel="noreferrer">
+                        <img src={f.url} alt="proceso" className="w-full h-36 object-cover" />
+                      </a>
+                      <div className="px-2 py-1.5" style={{ background: 'var(--bg-card)' }}>
+                        <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{f.orden?.codigo || '—'}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
+                          {f.orden?.fecha_programada ? new Date(f.orden.fecha_programada).toLocaleDateString('es-ES') : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h3 className="font-semibold mb-4 flex items-center gap-2" style={{ color: 'var(--text)' }}>
+                <span className="text-lg">✅</span> Fotos de cierre (Despues)
+              </h3>
+              {fotosOT.filter(f => f.tipo === 'cierre').length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--text-subtle)' }}>Sin fotos de cierre.</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {fotosOT.filter(f => f.tipo === 'cierre').map((f: any) => (
+                    <div key={f.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                      <a href={f.url} target="_blank" rel="noreferrer">
+                        <img src={f.url} alt="cierre" className="w-full h-36 object-cover" />
+                      </a>
+                      <div className="px-2 py-1.5" style={{ background: 'var(--bg-card)' }}>
+                        <p className="text-xs font-mono" style={{ color: '#06b6d4' }}>{f.orden?.codigo || '—'}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
+                          {f.orden?.fecha_programada ? new Date(f.orden.fecha_programada).toLocaleDateString('es-ES') : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
         {mostrarForm && (
           <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
             <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoId ? 'Editar cliente' : 'Nuevo cliente'}</h2>
@@ -245,18 +351,22 @@ export default function Clientes() {
                       <div className="flex gap-2 justify-end">
                         {c.direccion && (
                           <button onClick={() => abrirMaps(c.direccion)} className="text-xs px-2 py-1 rounded-lg"
-                            style={{ color: '#06b6d4', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)' }}>
-                            Maps
-                          </button>
-                        )}
-                        <button onClick={() => abrirFormEditar(c)} className="text-xs px-2 py-1 rounded-lg"
-                          style={{ color: '#a78bfa', background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)' }}>
-                          Editar
-                        </button>
-                        <button onClick={() => eliminarCliente(c.id)} className="text-xs px-2 py-1 rounded-lg"
-                          style={{ color: '#f87171', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                          Eliminar
-                        </button>
+  style={{ color: '#06b6d4', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)' }}>
+  Maps
+</button>
+)}
+<button onClick={() => verFotosCliente(c)} className="text-xs px-2 py-1 rounded-lg"
+  style={{ color: '#a78bfa', background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)' }}>
+  Fotos OT
+</button>
+<button onClick={() => abrirFormEditar(c)} className="text-xs px-2 py-1 rounded-lg"
+  style={{ color: '#a78bfa', background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)' }}>
+  Editar
+</button>
+<button onClick={() => eliminarCliente(c.id)} className="text-xs px-2 py-1 rounded-lg"
+  style={{ color: '#f87171', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+  Eliminar
+</button>
                       </div>
                     </td>
                   </tr>

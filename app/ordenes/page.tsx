@@ -195,10 +195,23 @@ export default function Ordenes() {
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
-    await supabase.from('ordenes').update({ estado: nuevoEstado }).eq('id', id)
-    cargarDatos()
-    if (ordenDetalle?.id === id) setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
+  if (nuevoEstado === 'completada' && ordenDetalle) {
+    const fotos = ordenDetalle.fotos || []
+    const fotosProceso = fotos.filter((f: any) => f.tipo === 'proceso')
+    const fotosCierre = fotos.filter((f: any) => f.tipo === 'cierre')
+    if (fotosProceso.length === 0) {
+      alert('Debes subir al menos una foto del proceso antes de completar la orden.')
+      return
+    }
+    if (fotosCierre.length === 0) {
+      alert('Debes subir al menos una foto de cierre antes de completar la orden.')
+      return
+    }
   }
+  await supabase.from('ordenes').update({ estado: nuevoEstado }).eq('id', id)
+  cargarDatos()
+  if (ordenDetalle?.id === id) setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
+}
 
   async function eliminarOrden(id: string) {
     if (!confirm('Eliminar esta orden?')) return
