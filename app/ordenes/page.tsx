@@ -84,16 +84,23 @@ export default function Ordenes() {
   if (!file || !ordenDetalle) return
   setSubiendo(true)
   try {
-    const comprimida = await comprimirImagen(file)
-    const nombreArchivo = `${ordenDetalle.clientes?.nombre?.replace(/[^a-zA-Z0-9]/g, '_') || ordenDetalle.id}/${new Date().toISOString().slice(0, 10)}/${tipoFoto}/${Date.now()}.jpg`
-    const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
-    if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
-    if (!error && data) {
-      const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
-      const { data: { session } } = await supabase.auth.getSession()
-      await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
-      const fotos = await cargarFotosOrden(ordenDetalle.id)
-      setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+    let comprimida: Blob = file
+try {
+  comprimida = await comprimirImagen(file)
+} catch (compError) {
+  alert('Error al comprimir: ' + compError)
+  setSubiendo(false)
+  return
+}
+const nombreArchivo = `${ordenDetalle.clientes?.nombre?.replace(/[^a-zA-Z0-9]/g, '_') || ordenDetalle.id}/${new Date().toISOString().slice(0, 10)}/${tipoFoto}/${Date.now()}.jpg`
+const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
+if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
+if (!error && data) {
+  const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
+  const { data: { session } } = await supabase.auth.getSession()
+  await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
+  const fotos = await cargarFotosOrden(ordenDetalle.id)
+  setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
 
       if (tipoFoto === 'albaran') {
         try {
