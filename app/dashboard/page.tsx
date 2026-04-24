@@ -18,8 +18,6 @@ export default function Dashboard() {
   const router = useRouter()
   const { tema, toggleTema } = useTheme()
 
-  useEffect(() => { cargarDatos() }, [])
-
   async function cargarDatos() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
@@ -68,6 +66,8 @@ export default function Dashboard() {
     setAlertas(nuevasAlertas)
     setLoading(false)
   }
+
+  useEffect(() => { cargarDatos() }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()

@@ -20,8 +20,6 @@ export default function Trabajadores() {
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
 
-  useEffect(() => { verificarSesion() }, [])
-
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
@@ -37,6 +35,8 @@ export default function Trabajadores() {
     if (data) setTrabajadores(data)
     setLoading(false)
   }
+
+  useEffect(() => { verificarSesion() }, [])
 
   function abrirFormNuevo() {
     setEditandoId(null); setNombre(''); setRol('tecnico')
@@ -55,9 +55,14 @@ export default function Trabajadores() {
       setMostrarForm(false); setEditandoId(null); cargarTrabajadores(); return
     }
     setEnviando(true)
+    const redirectTo = `${window.location.origin}/dashboard`
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true, emailRedirectTo: 'https://los-teros-app.vercel.app' }
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: redirectTo,
+        data: { nombre, rol, telefono },
+      }
     })
     if (error) { alert('Error: ' + error.message); setEnviando(false); return }
     setMensajeExito(`Invitacion enviada a ${email}. El trabajador recibira un email para acceder.`)

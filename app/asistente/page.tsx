@@ -18,15 +18,6 @@ export default function Asistente() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
-  useEffect(() => {
-    verificarSesion()
-    cargarContexto()
-  }, [])
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [mensajes])
-
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
@@ -54,6 +45,15 @@ ${(clientes.data || []).map((c: any) => c.nombre).join(', ')}
     `.trim()
     setContexto(ctx)
   }
+
+  useEffect(() => {
+    verificarSesion()
+    cargarContexto()
+  }, [])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [mensajes])
 
   async function enviarMensaje(e: React.FormEvent) {
     e.preventDefault()

@@ -1,35 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useTheme } from '@/lib/useTheme'
 
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [tema, setTema] = useState<'dark' | 'light'>('dark')
-  const [montado, setMontado] = useState(false)
-
-  useEffect(() => {
-    const guardado = localStorage.getItem('tema') as 'dark' | 'light' || 'dark'
-    setTema(guardado)
-    aplicarTema(guardado)
-    setMontado(true)
-  }, [])
-
-  function aplicarTema(t: 'dark' | 'light') {
-    const root = document.documentElement
-    if (t === 'light') {
-      root.classList.add('light')
-    } else {
-      root.classList.remove('light')
-    }
-  }
-
-  function toggleTema() {
-    const nuevo = tema === 'dark' ? 'light' : 'dark'
-    setTema(nuevo)
-    localStorage.setItem('tema', nuevo)
-    aplicarTema(nuevo)
-  }
-
-  if (!montado) return <>{children}</>
+  const { tema, toggleTema } = useTheme()
 
   return (
     <>

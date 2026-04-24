@@ -13,11 +13,6 @@ export default function Movimientos() {
   const [tecnicos, setTecnicos] = useState<any[]>([])
   const router = useRouter()
 
-  useEffect(() => {
-    verificarSesion()
-    cargarDatos()
-  }, [])
-
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) router.push('/login')
@@ -32,6 +27,11 @@ export default function Movimientos() {
     if (tecs.data) setTecnicos(tecs.data)
     setLoading(false)
   }
+
+  useEffect(() => {
+    verificarSesion()
+    cargarDatos()
+  }, [])
 
   const TIPOS: any = {
     consumo: { label: 'Consumo material', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', icono: '📦' },
