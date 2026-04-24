@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { s } from '@/lib/styles'
 
 export default function Trabajadores() {
   const [trabajadores, setTrabajadores] = useState<any[]>([])
@@ -85,23 +86,19 @@ export default function Trabajadores() {
   const INICIALES = (nombre: string) =>
     nombre?.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || '?'
 
-  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
-  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
-
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#080b14' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
     </div>
   )
 
   if (accesoDenegado) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#080b14' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="text-center">
         <p className="text-5xl mb-4">🔒</p>
-        <p className="text-white font-semibold mb-2">Acceso restringido</p>
-        <p className="text-sm mb-6" style={{ color: '#475569' }}>Solo gerentes y oficina pueden ver este modulo.</p>
-        <a href="/dashboard" className="text-white text-sm px-6 py-2 rounded-xl font-medium"
-          style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+        <p className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Acceso restringido</p>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Solo gerentes y oficina pueden ver este modulo.</p>
+        <a href="/dashboard" className="text-sm px-6 py-2 rounded-xl font-medium" style={s.btnPrimary}>
           Volver al dashboard
         </a>
       </div>
@@ -109,46 +106,45 @@ export default function Trabajadores() {
   )
 
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
-          <h1 className="text-white font-bold text-lg">Trabajadores</h1>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
+          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Trabajadores</h1>
         </div>
-        <button onClick={abrirFormNuevo} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
-          style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+        <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
           + Nuevo trabajador
         </button>
       </div>
 
       <div className="p-6 max-w-5xl mx-auto">
         {mostrarForm && (
-          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
-            <h2 className="text-white font-semibold mb-5">
+          <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
+            <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>
               {editandoId ? 'Editar trabajador' : 'Invitar nuevo trabajador'}
             </h2>
             {mensajeExito ? (
               <div className="rounded-2xl p-4" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
                 <p className="text-sm" style={{ color: '#34d399' }}>{mensajeExito}</p>
                 <button onClick={() => { setMostrarForm(false); setMensajeExito('') }}
-                  className="mt-3 text-sm px-4 py-2 rounded-xl text-white"
-                  style={{ background: 'rgba(16,185,129,0.2)' }}>
+                  className="mt-3 text-sm px-4 py-2 rounded-xl"
+                  style={{ background: 'rgba(16,185,129,0.2)', color: '#34d399' }}>
                   Cerrar
                 </button>
               </div>
             ) : (
               <form onSubmit={guardarTrabajador} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Nombre completo</label>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Nombre completo</label>
                   <input value={nombre} onChange={e => setNombre(e.target.value)} required
-                    className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle}
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}
                     placeholder="Jose Antonio Garcia" />
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Rol</label>
-                  <select value={rol} onChange={e => setRol(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Rol</label>
+                  <select value={rol} onChange={e => setRol(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                     <option value="gerente">Gerente</option>
                     <option value="oficina">Oficina</option>
                     <option value="supervisor">Supervisor</option>
@@ -157,33 +153,31 @@ export default function Trabajadores() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Telefono</label>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Telefono</label>
                   <input value={telefono} onChange={e => setTelefono(e.target.value)}
-                    className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle}
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}
                     placeholder="600 000 000" />
                 </div>
                 {!editandoId && (
                   <div>
-                    <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Email</label>
+                    <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Email</label>
                     <input value={email} onChange={e => setEmail(e.target.value)} type="email" required
-                      className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle}
+                      className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}
                       placeholder="trabajador@email.com" />
                   </div>
                 )}
                 {!editandoId && (
                   <div className="md:col-span-2 rounded-2xl p-3" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.15)' }}>
                     <p className="text-xs font-semibold mb-1" style={{ color: '#06b6d4' }}>Como funciona</p>
-                    <p className="text-xs" style={{ color: '#475569' }}>El trabajador recibira un email con enlace para acceder a la app sin necesidad de contraseña.</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>El trabajador recibira un email con enlace para acceder a la app sin necesidad de contraseña.</p>
                   </div>
                 )}
                 <div className="md:col-span-2 flex gap-3">
-                  <button type="submit" disabled={enviando} className="text-white px-5 py-2 rounded-xl text-sm font-medium disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+                  <button type="submit" disabled={enviando} className="px-5 py-2 rounded-xl text-sm font-medium disabled:opacity-50" style={s.btnPrimary}>
                     {enviando ? 'Enviando...' : editandoId ? 'Guardar cambios' : 'Enviar invitacion'}
                   </button>
                   <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }}
-                    className="text-sm px-5 py-2 rounded-xl"
-                    style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                    className="text-sm px-5 py-2 rounded-xl" style={s.btnSecondary}>
                     Cancelar
                   </button>
                 </div>
@@ -195,47 +189,46 @@ export default function Trabajadores() {
         {trabajadores.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">👷</p>
-            <p style={{ color: '#475569' }}>No hay trabajadores registrados.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay trabajadores registrados.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {trabajadores.map(t => (
-              <div key={t.id} className="rounded-2xl p-5 transition-all" style={cardStyle}
+              <div key={t.id} className="rounded-2xl p-5 transition-all" style={s.cardStyle}
                 onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#1e2d3d'}>
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold font-mono flex-shrink-0"
                     style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(6,182,212,0.3))', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                     {INICIALES(t.nombre)}
                   </div>
                   <div>
-                    <p className="text-white font-semibold">{t.nombre}</p>
+                    <p className="font-semibold" style={{ color: 'var(--text)' }}>{t.nombre}</p>
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ROLES[t.rol]?.bg, color: ROLES[t.rol]?.color }}>
                       {ROLES[t.rol]?.label || t.rol}
                     </span>
                   </div>
                 </div>
                 {t.telefono && (
-                  <a href={`tel:${t.telefono}`} className="text-sm mb-4 block transition-colors" style={{ color: '#34d399' }}>
+                  <a href={`tel:${t.telefono}`} className="text-sm mb-4 block" style={{ color: '#34d399' }}>
                     📞 {t.telefono}
                   </a>
                 )}
-                <div className="pt-3" style={{ borderTop: '1px solid #1e2d3d' }}>
-                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Rol</label>
+                <div className="pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Rol</label>
                   <select value={t.rol} onChange={e => cambiarRol(t.id, e.target.value)}
-                    className="w-full rounded-xl px-3 py-1.5 text-sm outline-none mb-3"
-                    style={{ background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }}>
+                    className="w-full rounded-xl px-3 py-1.5 text-sm outline-none mb-3" style={s.inputStyle}>
                     <option value="gerente">Gerente</option>
                     <option value="oficina">Oficina</option>
                     <option value="supervisor">Supervisor</option>
                     <option value="tecnico">Tecnico</option>
                     <option value="almacen">Almacen</option>
                   </select>
-                  <button onClick={() => abrirFormEditar(t)} className="w-full text-sm py-1.5 rounded-xl mb-2 transition-colors"
+                  <button onClick={() => abrirFormEditar(t)} className="w-full text-sm py-1.5 rounded-xl mb-2"
                     style={{ background: 'rgba(124,58,237,0.1)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.2)' }}>
                     Editar datos
                   </button>
-                  <button onClick={() => eliminarTrabajador(t.id, t.nombre)} className="w-full text-sm py-1.5 rounded-xl transition-colors"
+                  <button onClick={() => eliminarTrabajador(t.id, t.nombre)} className="w-full text-sm py-1.5 rounded-xl"
                     style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
                     Eliminar
                   </button>
