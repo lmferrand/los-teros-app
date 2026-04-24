@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { s } from '@/lib/styles'
 
 export default function Albaranes() {
   const [albaranes, setAlbaranes] = useState<any[]>([])
@@ -116,50 +117,47 @@ export default function Albaranes() {
   }
 
   const albDetalle = detalleId ? albaranes.find(a => a.id === detalleId) : null
-  const inputStyle = { background: '#080b14', border: '1px solid #1e2d3d', color: 'white' }
-  const cardStyle = { background: '#0d1117', border: '1px solid #1e2d3d' }
 
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={cardStyle}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
-          <h1 className="text-white font-bold text-lg">Albaranes</h1>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
+          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Albaranes</h1>
         </div>
-        <button onClick={abrirFormNuevo} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
-          style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+        <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
           + Nuevo albaran
         </button>
       </div>
 
       <div className="p-6 max-w-5xl mx-auto">
         {mostrarForm && (
-          <div className="rounded-2xl p-6 mb-6" style={cardStyle}>
-            <h2 className="text-white font-semibold mb-5">{editandoId ? 'Editar albaran' : 'Nuevo albaran'}</h2>
+          <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
+            <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoId ? 'Editar albaran' : 'Nuevo albaran'}</h2>
             <form onSubmit={guardarAlbaran} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Cliente</label>
-                <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Cliente</label>
+                <select value={clienteId} onChange={e => setClienteId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="">Seleccionar cliente...</option>
                   {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Orden de trabajo</label>
-                <select value={ordenId} onChange={e => setOrdenId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Orden de trabajo</label>
+                <select value={ordenId} onChange={e => setOrdenId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="">Sin OT asociada</option>
                   {ordenes.map(o => <option key={o.id} value={o.id}>{o.codigo}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Fecha</label>
-                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none" style={inputStyle} />
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha</label>
+                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Estado</label>
-                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={inputStyle}>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Estado</label>
+                <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="pendiente">Pendiente</option>
                   <option value="entregado">Entregado</option>
                   <option value="firmado">Firmado</option>
@@ -167,24 +165,22 @@ export default function Albaranes() {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Trabajo realizado</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Trabajo realizado</label>
                 <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3}
-                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none" style={inputStyle}
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle}
                   placeholder="Describe el trabajo realizado..." />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Observaciones</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Observaciones</label>
                 <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={2}
-                  className="w-full rounded-xl px-3 py-2 text-white text-sm outline-none resize-none" style={inputStyle} />
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle} />
               </div>
               <div className="md:col-span-2 flex gap-3">
-                <button type="submit" className="text-white px-5 py-2 rounded-xl text-sm font-medium"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+                <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium" style={s.btnPrimary}>
                   {editandoId ? 'Guardar cambios' : 'Crear albaran'}
                 </button>
                 <button type="button" onClick={() => { setMostrarForm(false); setEditandoId(null) }}
-                  className="text-sm px-5 py-2 rounded-xl"
-                  style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                  className="text-sm px-5 py-2 rounded-xl" style={s.btnSecondary}>
                   Cancelar
                 </button>
               </div>
@@ -194,38 +190,38 @@ export default function Albaranes() {
 
         {albDetalle && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
-            <div className="w-full max-w-2xl max-h-screen overflow-y-auto rounded-2xl" style={cardStyle}>
-              <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={{ background: '#0d1117', borderBottom: '1px solid #1e2d3d' }}>
+            <div className="w-full max-w-2xl max-h-screen overflow-y-auto rounded-2xl" style={s.cardStyle}>
+              <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={s.headerStyle}>
                 <div>
                   <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{albDetalle.numero}</span>
-                  <h2 className="text-white font-bold text-lg">{albDetalle.clientes?.nombre || '—'}</h2>
+                  <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>{albDetalle.clientes?.nombre || '—'}</h2>
                 </div>
                 <button onClick={() => setDetalleId(null)} className="w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ color: '#64748b', border: '1px solid #1e2d3d' }}>X</button>
+                  style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
                     { label: 'Estado', val: <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADOS[albDetalle.estado]?.bg, color: ESTADOS[albDetalle.estado]?.color }}>{ESTADOS[albDetalle.estado]?.label}</span> },
-                    { label: 'Fecha', val: <span className="text-white text-sm">{albDetalle.fecha ? new Date(albDetalle.fecha).toLocaleDateString('es-ES') : '—'}</span> },
+                    { label: 'Fecha', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{albDetalle.fecha ? new Date(albDetalle.fecha).toLocaleDateString('es-ES') : '—'}</span> },
                     { label: 'OT asociada', val: <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{albDetalle.ordenes?.codigo || '—'}</span> },
-                    { label: 'Firmado', val: <span className="text-sm font-semibold" style={{ color: albDetalle.firmado ? '#34d399' : '#64748b' }}>{albDetalle.firmado ? 'Si' : 'No'}</span> },
+                    { label: 'Firmado', val: <span className="text-sm font-semibold" style={{ color: albDetalle.firmado ? '#34d399' : 'var(--text-muted)' }}>{albDetalle.firmado ? 'Si' : 'No'}</span> },
                   ].map((item, i) => (
-                    <div key={i} className="rounded-xl p-3" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
-                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: '#475569' }}>{item.label}</p>
+                    <div key={i} className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{item.label}</p>
                       {item.val}
                     </div>
                   ))}
                 </div>
                 {albDetalle.descripcion && (
-                  <div className="rounded-xl p-3 mb-4" style={{ background: '#080b14', border: '1px solid #1e2d3d' }}>
-                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: '#475569' }}>Trabajo realizado</p>
-                    <p className="text-white text-sm leading-relaxed">{albDetalle.descripcion}</p>
+                  <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Trabajo realizado</p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>{albDetalle.descripcion}</p>
                   </div>
                 )}
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-white font-semibold">Fotos del albaran</h3>
+                    <h3 className="font-semibold" style={{ color: 'var(--text)' }}>Fotos del albaran</h3>
                     <label className="text-xs px-3 py-1.5 rounded-xl cursor-pointer"
                       style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                       {subiendo ? 'Subiendo...' : '+ Subir foto'}
@@ -233,18 +229,18 @@ export default function Albaranes() {
                     </label>
                   </div>
                   {(albDetalle.fotos_urls || []).length === 0 ? (
-                    <p className="text-sm" style={{ color: '#334155' }}>Sin fotos todavia.</p>
+                    <p className="text-sm" style={{ color: 'var(--text-subtle)' }}>Sin fotos todavia.</p>
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
                       {(albDetalle.fotos_urls || []).map((url: string, i: number) => (
                         <a key={i} href={url} target="_blank" rel="noreferrer">
-                          <img src={url} alt={`foto ${i + 1}`} className="w-full h-28 object-cover rounded-xl" style={{ border: '1px solid #1e2d3d' }} />
+                          <img src={url} alt={`foto ${i + 1}`} className="w-full h-28 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
                         </a>
                       ))}
                     </div>
                   )}
                 </div>
-                <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid #1e2d3d' }}>
+                <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid var(--border)' }}>
                   {albDetalle.estado === 'pendiente' && (
                     <button onClick={() => { cambiarEstado(albDetalle.id, 'entregado'); setDetalleId(null) }}
                       className="text-sm px-4 py-2 rounded-xl"
@@ -259,19 +255,15 @@ export default function Albaranes() {
                       Marcar firmado
                     </button>
                   )}
-                  <button onClick={() => abrirFormEditar(albDetalle)}
-                    className="text-sm px-4 py-2 rounded-xl"
+                  <button onClick={() => abrirFormEditar(albDetalle)} className="text-sm px-4 py-2 rounded-xl"
                     style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                     Editar
                   </button>
-                  <button onClick={() => eliminarAlbaran(albDetalle.id)}
-                    className="text-sm px-4 py-2 rounded-xl"
+                  <button onClick={() => eliminarAlbaran(albDetalle.id)} className="text-sm px-4 py-2 rounded-xl"
                     style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
                     Eliminar
                   </button>
-                  <button onClick={() => setDetalleId(null)}
-                    className="text-sm px-4 py-2 rounded-xl ml-auto"
-                    style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                  <button onClick={() => setDetalleId(null)} className="text-sm px-4 py-2 rounded-xl ml-auto" style={s.btnSecondary}>
                     Cerrar
                   </button>
                 </div>
@@ -287,15 +279,15 @@ export default function Albaranes() {
         ) : albaranes.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">🧾</p>
-            <p style={{ color: '#475569' }}>No hay albaranes. Crea el primero.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay albaranes. Crea el primero.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {albaranes.map(a => (
               <div key={a.id} onClick={() => setDetalleId(a.id)}
-                className="rounded-2xl p-5 cursor-pointer transition-all" style={cardStyle}
+                className="rounded-2xl p-5 cursor-pointer transition-all" style={s.cardStyle}
                 onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#1e2d3d'}>
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
                 <div className="flex items-start justify-between flex-wrap gap-3">
                   <div>
                     <div className="flex items-center gap-3 mb-2 flex-wrap">
@@ -305,15 +297,15 @@ export default function Albaranes() {
                       </span>
                       {a.firmado && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}>Firmado</span>}
                     </div>
-                    <p className="text-white font-semibold">{a.clientes?.nombre || '—'}</p>
-                    <p className="text-sm mt-1" style={{ color: '#475569' }}>{(a.descripcion || '').substring(0, 80)}{(a.descripcion || '').length > 80 ? '...' : ''}</p>
-                    <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: '#334155' }}>
+                    <p className="font-semibold" style={{ color: 'var(--text)' }}>{a.clientes?.nombre || '—'}</p>
+                    <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{(a.descripcion || '').substring(0, 80)}{(a.descripcion || '').length > 80 ? '...' : ''}</p>
+                    <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: 'var(--text-subtle)' }}>
                       {a.ordenes?.codigo && <span>OT: {a.ordenes.codigo}</span>}
                       <span>{(a.fotos_urls || []).length} fotos</span>
                       <span>{a.fecha ? new Date(a.fecha).toLocaleDateString('es-ES') : '—'}</span>
                     </div>
                   </div>
-                  <span className="text-xs" style={{ color: '#334155' }}>Ver detalle →</span>
+                  <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>Ver detalle →</span>
                 </div>
               </div>
             ))}
