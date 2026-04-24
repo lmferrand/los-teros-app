@@ -114,6 +114,7 @@ export default function Albaranes() {
     entregado: { color: '#06b6d4', bg: 'rgba(6,182,212,0.15)', label: 'Entregado' },
     firmado: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Firmado' },
     cancelado: { color: '#64748b', bg: 'rgba(71,85,105,0.15)', label: 'Cancelado' },
+facturado: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Facturado' },
   }
 
   const albDetalle = detalleId ? albaranes.find(a => a.id === detalleId) : null
@@ -161,6 +162,7 @@ export default function Albaranes() {
                   <option value="pendiente">Pendiente</option>
                   <option value="entregado">Entregado</option>
                   <option value="firmado">Firmado</option>
+                  <option value="facturado">Facturado</option>
                   <option value="cancelado">Cancelado</option>
                 </select>
               </div>
