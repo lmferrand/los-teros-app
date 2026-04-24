@@ -98,7 +98,8 @@ if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); retu
 if (!error && data) {
   const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
   const { data: { session } } = await supabase.auth.getSession()
-  await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
+  const { error: insertError } = await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
+if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
   const fotos = await cargarFotosOrden(ordenDetalle.id)
   setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
 
