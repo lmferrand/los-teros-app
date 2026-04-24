@@ -20,6 +20,8 @@ export default function Trabajadores() {
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
 
+  useEffect(() => { verificarSesion() }, [])
+
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
@@ -35,8 +37,6 @@ export default function Trabajadores() {
     if (data) setTrabajadores(data)
     setLoading(false)
   }
-
-  useEffect(() => { verificarSesion() }, [])
 
   function abrirFormNuevo() {
     setEditandoId(null); setNombre(''); setRol('tecnico')
@@ -55,18 +55,20 @@ export default function Trabajadores() {
       setMostrarForm(false); setEditandoId(null); cargarTrabajadores(); return
     }
     setEnviando(true)
-    const redirectTo = `${window.location.origin}/dashboard`
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-        emailRedirectTo: redirectTo,
-        data: { nombre, rol, telefono },
-      }
+    const res = await fetch('/api/invitar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, nombre, rol }),
     })
-    if (error) { alert('Error: ' + error.message); setEnviando(false); return }
-    setMensajeExito(`Invitacion enviada a ${email}. El trabajador recibira un email para acceder.`)
+    const data = await res.json()
+    if (data.error) {
+      alert('Error: ' + data.error)
+      setEnviando(false)
+      return
+    }
+    setMensajeExito(`Invitacion enviada a ${email}. El trabajador recibira un email para crear su contrasena y acceder a la app.`)
     setEnviando(false); setNombre(''); setEmail(''); setTelefono(''); setRol('tecnico')
+    cargarTrabajadores()
   }
 
   async function cambiarRol(id: string, nuevoRol: string) {
@@ -174,7 +176,7 @@ export default function Trabajadores() {
                 {!editandoId && (
                   <div className="md:col-span-2 rounded-2xl p-3" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.15)' }}>
                     <p className="text-xs font-semibold mb-1" style={{ color: '#06b6d4' }}>Como funciona</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>El trabajador recibira un email con enlace para acceder a la app sin necesidad de contraseña.</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>El trabajador recibira un email para crear su contrasena. A partir de ahi podra entrar siempre con email y contrasena.</p>
                   </div>
                 )}
                 <div className="md:col-span-2 flex gap-3">
