@@ -29,6 +29,7 @@ body {
   color: var(--text);
   font-family: sans-serif;
   transition: background 0.4s ease, color 0.3s ease;
+  padding-bottom: max(80px, env(safe-area-inset-bottom));
 }
 
 * {
