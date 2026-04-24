@@ -80,23 +80,77 @@ export default function Ordenes() {
   }
 
   async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipoFoto: string) {
-    const file = e.target.files?.[0]
-    if (!file || !ordenDetalle) return
-    setSubiendo(true)
-    try {
-      const comprimida = await comprimirImagen(file)
-      const nombreArchivo = `${ordenDetalle.clientes?.nombre?.replace(/[^a-zA-Z0-9]/g, '_') || ordenDetalle.id}/${new Date().toISOString().slice(0, 10)}/${tipoFoto}/${Date.now()}.jpg`
-      const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
-      if (!error && data) {
-        const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
-        const { data: { session } } = await supabase.auth.getSession()
-        await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
-        const fotos = await cargarFotosOrden(ordenDetalle.id)
-        setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+  const file = e.target.files?.[0]
+  if (!file || !ordenDetalle) return
+  setSubiendo(true)
+  try {
+    const comprimida = await comprimirImagen(file)
+    const nombreArchivo = `${ordenDetalle.clientes?.nombre?.replace(/[^a-zA-Z0-9]/g, '_') || ordenDetalle.id}/${new Date().toISOString().slice(0, 10)}/${tipoFoto}/${Date.now()}.jpg`
+    const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
+    if (!error && data) {
+      const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
+      const { data: { session } } = await supabase.auth.getSession()
+      await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
+      const fotos = await cargarFotosOrden(ordenDetalle.id)
+      setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+
+      if (tipoFoto === 'albaran') {
+        try {
+          const reader = new FileReader()
+          reader.onload = async (ev) => {
+            const base64 = ev.target?.result as string
+            const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                imagen: base64,
+                sistemaPrompt: `Eres un experto en leer albaranes. Analiza esta imagen y extrae los datos en formato JSON exacto sin texto adicional ni markdown:
+{"numero":"numero del albaran","cliente":"nombre del cliente","descripcion":"descripcion breve del trabajo realizado","fecha":"DD/MM/YYYY","importe":0.00}
+Si no encuentras algun dato deja el campo vacio o en 0.`
+              }),
+            })
+            const dataIA = await res.json()
+            try {
+              const json = JSON.parse(dataIA.respuesta.replace(/```json|```/g, '').trim())
+              const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
+              const num = String((count || 0) + 1).padStart(4, '0')
+              const numero = json.numero || `ALB-${new Date().getFullYear()}-${num}`
+              await supabase.from('albaranes').insert({
+                numero,
+                cliente_id: ordenDetalle.cliente_id || null,
+                orden_id: ordenDetalle.id,
+                descripcion: json.descripcion || ordenDetalle.descripcion || '',
+                estado: 'pendiente',
+                fecha: new Date().toISOString().slice(0, 10),
+                fotos_urls: [urlData.publicUrl],
+                observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
+              })
+              alert(`Albaran creado automaticamente en la pagina de Albaranes.`)
+            } catch {
+              const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
+              const num = String((count || 0) + 1).padStart(4, '0')
+              await supabase.from('albaranes').insert({
+                numero: `ALB-${new Date().getFullYear()}-${num}`,
+                cliente_id: ordenDetalle.cliente_id || null,
+                orden_id: ordenDetalle.id,
+                descripcion: ordenDetalle.descripcion || '',
+                estado: 'pendiente',
+                fecha: new Date().toISOString().slice(0, 10),
+                fotos_urls: [urlData.publicUrl],
+                observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
+              })
+              alert(`Albaran creado en Albaranes (sin datos de IA).`)
+            }
+          }
+          reader.readAsDataURL(file)
+        } catch {
+          console.log('Error al procesar albaran con IA')
+        }
       }
-    } catch { alert('Error al subir la foto.') }
-    setSubiendo(false)
-  }
+    }
+  } catch { alert('Error al subir la foto.') }
+  setSubiendo(false)
+}
 
   async function comprimirImagen(file: File, maxWidth = 1200, calidad = 0.75): Promise<Blob> {
     return new Promise((resolve) => {
