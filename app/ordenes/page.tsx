@@ -143,29 +143,7 @@ if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
     alert('Error al crear albaran: ' + albError.message)
   }
 }
-              alert(`Albaran creado automaticamente en la pagina de Albaranes.`)
-            } catch {
-              const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
-              const num = String((count || 0) + 1).padStart(4, '0')
-              await supabase.from('albaranes').insert({
-                numero: `ALB-${new Date().getFullYear()}-${num}`,
-                cliente_id: ordenDetalle.cliente_id || null,
-                orden_id: ordenDetalle.id,
-                descripcion: ordenDetalle.descripcion || '',
-                estado: 'pendiente',
-                fecha: new Date().toISOString().slice(0, 10),
-                fotos_urls: [urlData.publicUrl],
-                observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
-              })
-              alert(`Albaran creado en Albaranes (sin datos de IA).`)
-            }
-          }
-          reader.readAsDataURL(file)
-        } catch {
-          console.log('Error al procesar albaran con IA')
-        }
-      }
-    }
+              }
   } catch { alert('Error al subir la foto.') }
   setSubiendo(false)
 }
