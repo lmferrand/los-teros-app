@@ -206,7 +206,8 @@ export default function Inventario() {
           </div>
         ) : (
           <div className="rounded-2xl overflow-hidden" style={s.cardStyle}>
-            <table className="w-full text-sm">
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid #1e2d3d' }}>
                   {['Foto', 'Material', 'Categoria', 'Stock', 'Minimo', 'Ubicacion', ''].map(h => (
@@ -258,7 +259,8 @@ export default function Inventario() {
                 ))}
               </tbody>
             </table>
-          </div>
+  </div>
+</div>
         )}
       </div>
     </div>

@@ -111,7 +111,7 @@ export default function Movimientos() {
           </div>
         ) : (
           <div className="rounded-2xl overflow-hidden" style={s.cardStyle}>
-            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+  <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{movimientosFiltrados.length} movimientos</p>
             </div>
             <div className="flex flex-col">
