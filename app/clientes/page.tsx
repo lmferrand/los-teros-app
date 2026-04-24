@@ -208,10 +208,11 @@ export default function Clientes() {
           </div>
         ) : (
           <div className="rounded-2xl overflow-hidden" style={s.cardStyle}>
-            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
-              <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{clientes.length} clientes registrados</p>
-            </div>
-            <table className="w-full text-sm">
+  <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{clientes.length} clientes registrados</p>
+  </div>
+  <div className="overflow-x-auto">
+    <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   {['Nombre', 'Telefono', 'Email', 'Direccion', ''].map(h => (
@@ -263,7 +264,8 @@ export default function Clientes() {
                 ))}
               </tbody>
             </table>
-          </div>
+  </div>
+</div>
         )}
       </div>
     </div>
