@@ -53,28 +53,27 @@ export default function Ordenes() {
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
     return data || []
-  }async function eliminarFoto(foto: any) {
-  if (!confirm('Eliminar esta foto?')) return
-  await supabase.from('fotos_ordenes').delete().eq('id', foto.id)
-  if (foto.tipo === 'albaran') {
-    const { data: albaranes } = await supabase
-      .from('albaranes')
-      .select('id, fotos_urls')
-      .eq('orden_id', ordenDetalle.id)
-    if (albaranes && albaranes.length > 0) {
-      for (const alb of albaranes) {
-        const nuevasFotos = (alb.fotos_urls || []).filter((u: string) => u !== foto.url)
-        if (nuevasFotos.length === 0) {
-          await supabase.from('albaranes').delete().eq('id', alb.id)
-        } else {
-          await supabase.from('albaranes').update({ fotos_urls: nuevasFotos }).eq('id', alb.id)
+  }
+
+  async function eliminarFoto(foto: any) {
+    if (!confirm('Eliminar esta foto?')) return
+    await supabase.from('fotos_ordenes').delete().eq('id', foto.id)
+    if (foto.tipo === 'albaran') {
+      const { data: albs } = await supabase.from('albaranes').select('id, fotos_urls').eq('orden_id', ordenDetalle.id)
+      if (albs && albs.length > 0) {
+        for (const alb of albs) {
+          const nuevasFotos = (alb.fotos_urls || []).filter((u: string) => u !== foto.url)
+          if (nuevasFotos.length === 0) {
+            await supabase.from('albaranes').delete().eq('id', alb.id)
+          } else {
+            await supabase.from('albaranes').update({ fotos_urls: nuevasFotos }).eq('id', alb.id)
+          }
         }
       }
     }
+    const fotos = await cargarFotosOrden(ordenDetalle.id)
+    setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
   }
-  const fotos = await cargarFotosOrden(ordenDetalle.id)
-  setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
-}
 
   async function abrirDetalle(o: any) {
     const fotos = await cargarFotosOrden(o.id)
@@ -101,52 +100,52 @@ export default function Ordenes() {
   }
 
   async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipoFoto: string) {
-  const file = e.target.files?.[0]
-  if (!file || !ordenDetalle) return
-  setSubiendo(true)
-  try {
-    let comprimida: Blob = file
-try {
-  comprimida = await comprimirImagen(file)
-} catch (compError) {
-  alert('Error al comprimir: ' + compError)
-  setSubiendo(false)
-  return
-}
-const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}.jpg`
-const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
-if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
-if (!error && data) {
-  const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
-  const { data: { session } } = await supabase.auth.getSession()
-  const { error: insertError } = await supabase.from('fotos_ordenes').insert({ orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id })
-if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
-  const fotos = await cargarFotosOrden(ordenDetalle.id)
-  setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
-
-      if (tipoFoto === 'albaran') {
-  const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
-  const num = String((count || 0) + 1).padStart(4, '0')
-  const { error: albError } = await supabase.from('albaranes').insert({
-    numero: `ALB-${new Date().getFullYear()}-${num}`,
-    cliente_id: ordenDetalle.cliente_id || null,
-    orden_id: ordenDetalle.id,
-    descripcion: ordenDetalle.descripcion || '',
-    estado: 'pendiente',
-    fecha: new Date().toISOString().slice(0, 10),
-    fotos_urls: [urlData.publicUrl],
-    observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
-  })
-  if (!albError) {
-    alert('Albaran creado automaticamente en Albaranes.')
-  } else {
-    alert('Error al crear albaran: ' + albError.message)
+    const file = e.target.files?.[0]
+    if (!file || !ordenDetalle) return
+    setSubiendo(true)
+    try {
+      let comprimida: Blob = file
+      try {
+        comprimida = await comprimirImagen(file)
+      } catch { }
+      const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}.jpg`
+      const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
+      if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
+      if (data) {
+        const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
+        const { data: { session } } = await supabase.auth.getSession()
+        const { error: insertError } = await supabase.from('fotos_ordenes').insert({
+          orden_id: ordenDetalle.id,
+          tipo: tipoFoto,
+          url: urlData.publicUrl,
+          subida_por: session?.user?.id
+        })
+        if (insertError) { alert('Error al registrar foto: ' + insertError.message); setSubiendo(false); return }
+        const fotos = await cargarFotosOrden(ordenDetalle.id)
+        setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+        if (tipoFoto === 'albaran') {
+          const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
+          const num = String((count || 0) + 1).padStart(4, '0')
+          const { error: albError } = await supabase.from('albaranes').insert({
+            numero: `ALB-${new Date().getFullYear()}-${num}`,
+            cliente_id: ordenDetalle.cliente_id || null,
+            orden_id: ordenDetalle.id,
+            descripcion: ordenDetalle.descripcion || '',
+            estado: 'pendiente',
+            fecha: new Date().toISOString().slice(0, 10),
+            fotos_urls: [urlData.publicUrl],
+            observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
+          })
+          if (!albError) {
+            alert('Albaran creado automaticamente en Albaranes.')
+          } else {
+            alert('Error al crear albaran: ' + albError.message)
+          }
+        }
+      }
+    } catch { alert('Error inesperado al subir la foto.') }
+    setSubiendo(false)
   }
-}
-              }
-  } catch { alert('Error al subir la foto.') }
-  setSubiendo(false)
-}
 
   async function comprimirImagen(file: File, maxWidth = 1200, calidad = 0.75): Promise<Blob> {
     return new Promise((resolve) => {
@@ -253,8 +252,7 @@ if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
             <option value="completada">Completada</option>
             <option value="cancelada">Cancelada</option>
           </select>
-          <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium"
-            style={s.btnPrimary}>
+          <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nueva OT
           </button>
         </div>
@@ -268,9 +266,12 @@ if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Tipo</label>
                 <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
-                  <option value="limpieza">Limpieza</option><option value="sustitucion">Sustitucion</option>
-                  <option value="mantenimiento">Mantenimiento</option><option value="instalacion">Instalacion</option>
-                  <option value="revision">Revision</option><option value="otro">Otro</option>
+                  <option value="limpieza">Limpieza</option>
+                  <option value="sustitucion">Sustitucion</option>
+                  <option value="mantenimiento">Mantenimiento</option>
+                  <option value="instalacion">Instalacion</option>
+                  <option value="revision">Revision</option>
+                  <option value="otro">Otro</option>
                 </select>
               </div>
               <div>
@@ -299,25 +300,34 @@ if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Prioridad</label>
                 <select value={prioridad} onChange={e => setPrioridad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
-                  <option value="baja">Baja</option><option value="normal">Normal</option>
-                  <option value="alta">Alta</option><option value="urgente">Urgente</option>
+                  <option value="baja">Baja</option>
+                  <option value="normal">Normal</option>
+                  <option value="alta">Alta</option>
+                  <option value="urgente">Urgente</option>
                 </select>
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Estado</label>
                 <select value={estado} onChange={e => setEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
-                  <option value="pendiente">Pendiente</option><option value="en_curso">En curso</option>
-                  <option value="completada">Completada</option><option value="cancelada">Cancelada</option>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="en_curso">En curso</option>
+                  <option value="completada">Completada</option>
+                  <option value="cancelada">Cancelada</option>
                 </select>
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Duracion estimada</label>
                 <select value={duracionHoras} onChange={e => setDuracionHoras(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
-                  <option value="0.5">30 min</option><option value="1">1 hora</option>
-                  <option value="1.5">1.5 horas</option><option value="2">2 horas</option>
-                  <option value="2.5">2.5 horas</option><option value="3">3 horas</option>
-                  <option value="4">4 horas</option><option value="5">5 horas</option>
-                  <option value="6">6 horas</option><option value="8">Jornada completa</option>
+                  <option value="0.5">30 min</option>
+                  <option value="1">1 hora</option>
+                  <option value="1.5">1.5 horas</option>
+                  <option value="2">2 horas</option>
+                  <option value="2.5">2.5 horas</option>
+                  <option value="3">3 horas</option>
+                  <option value="4">4 horas</option>
+                  <option value="5">5 horas</option>
+                  <option value="6">6 horas</option>
+                  <option value="8">Jornada completa</option>
                 </select>
               </div>
               <div className="flex items-center gap-3 rounded-xl px-3 py-2 mt-auto" style={s.inputStyle}>
@@ -420,20 +430,22 @@ if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
                             <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => subirFoto(e, tf.key)} />
                           </label>
                         </div>
-                        {fotosDelTipo.map((f: any) => (
-  <div key={f.id} className="relative">
-    <a href={f.url} target="_blank" rel="noreferrer">
-      <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
-    </a>
-    <button
-      onClick={() => eliminarFoto(f)}
-      className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-      style={{ background: 'rgba(239,68,68,0.9)', color: 'white' }}
-    >
-      X
-    </button>
-  </div>
-))}
+                        {fotosDelTipo.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {fotosDelTipo.map((f: any) => (
+                              <div key={f.id} className="relative">
+                                <a href={f.url} target="_blank" rel="noreferrer">
+                                  <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
+                                </a>
+                                <button
+                                  onClick={() => eliminarFoto(f)}
+                                  className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                  style={{ background: 'rgba(239,68,68,0.9)', color: 'white' }}
+                                >
+                                  X
+                                </button>
+                              </div>
+                            ))}
                           </div>
                         ) : (
                           <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin fotos</p>
