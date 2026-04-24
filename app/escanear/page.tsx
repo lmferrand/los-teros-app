@@ -4,6 +4,7 @@ import { Suspense } from 'react'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { s } from '@/lib/styles'
 
 function EscanearContenido() {
   const [escaneando, setEscaneando] = useState(false)
@@ -120,39 +121,37 @@ function EscanearContenido() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#080b14' }}>
-      <div className="px-6 py-4 flex items-center gap-4" style={{ background: '#0d1117', borderBottom: '1px solid #1e2d3d' }}>
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="px-6 py-4 flex items-center gap-4" style={s.headerStyle}>
         {ordenId ? (
-          <button onClick={() => router.back()} className="text-sm transition-colors" style={{ color: '#475569' }}
+          <button onClick={() => router.back()} className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Volver a OT</button>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Volver a OT</button>
         ) : (
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
+          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
         )}
-        <h1 className="text-white font-bold text-lg">Escanear QR</h1>
-        {perfil && <span className="text-sm ml-auto" style={{ color: '#475569' }}>{perfil.nombre}</span>}
+        <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Escanear QR</h1>
+        {perfil && <span className="text-sm ml-auto" style={{ color: 'var(--text-muted)' }}>{perfil.nombre}</span>}
       </div>
 
       <div className="p-6 max-w-lg mx-auto">
         {orden && (
           <div className="rounded-2xl p-4 mb-6" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.2)' }}>
             <p className="font-mono text-sm mb-1" style={{ color: '#06b6d4' }}>{orden.codigo}</p>
-            <p className="text-white font-semibold">{orden.clientes?.nombre || '—'}</p>
+            <p className="font-semibold" style={{ color: 'var(--text)' }}>{orden.clientes?.nombre || '—'}</p>
             <p className="text-xs mt-1" style={{ color: '#a78bfa' }}>Materiales vinculados automaticamente a esta OT</p>
           </div>
         )}
 
         {!escaneando && !item && (
           <div className="text-center">
-            <div className="rounded-2xl p-8 mb-6" style={{ background: '#0d1117', border: '1px solid #1e2d3d' }}>
+            <div className="rounded-2xl p-8 mb-6" style={s.cardStyle}>
               <p className="text-6xl mb-4">📱</p>
-              <p className="text-white font-semibold mb-2">Escanear codigo QR</p>
-              <p className="text-sm mb-6" style={{ color: '#475569' }}>Apunta la camara al codigo QR del material o equipo</p>
-              <button onClick={iniciarScanner}
-                className="w-full py-3 rounded-xl text-white text-sm font-medium"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+              <p className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Escanear codigo QR</p>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Apunta la camara al codigo QR del material o equipo</p>
+              <button onClick={iniciarScanner} className="w-full py-3 rounded-xl text-sm font-medium" style={s.btnPrimary}>
                 Abrir camara
               </button>
             </div>
@@ -163,14 +162,12 @@ function EscanearContenido() {
                 <p className="mb-3">{mensaje}</p>
                 <div className="flex gap-2 justify-center flex-wrap">
                   <button onClick={() => { setMensaje(''); iniciarScanner() }}
-                    className="text-xs px-4 py-2 rounded-xl text-white"
-                    style={{ background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.3)' }}>
+                    className="text-xs px-4 py-2 rounded-xl"
+                    style={{ background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.3)', color: '#a78bfa' }}>
                     Escanear otro
                   </button>
                   {ordenId && (
-                    <button onClick={() => router.back()}
-                      className="text-xs px-4 py-2 rounded-xl text-white"
-                      style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+                    <button onClick={() => router.back()} className="text-xs px-4 py-2 rounded-xl" style={s.btnPrimary}>
                       Volver a OT
                     </button>
                   )}
@@ -182,53 +179,50 @@ function EscanearContenido() {
 
         {escaneando && (
           <div>
-            <p className="text-sm text-center mb-3" style={{ color: '#475569' }}>Apunta la camara al codigo QR</p>
+            <p className="text-sm text-center mb-3" style={{ color: 'var(--text-muted)' }}>Apunta la camara al codigo QR</p>
             <div id="qr-reader" className="rounded-2xl overflow-hidden mb-4"></div>
-            <button onClick={detenerScanner} className="w-full py-3 rounded-xl text-sm"
-              style={{ background: '#0d1117', color: '#64748b', border: '1px solid #1e2d3d' }}>
+            <button onClick={detenerScanner} className="w-full py-3 rounded-xl text-sm" style={s.btnSecondary}>
               Cancelar
             </button>
           </div>
         )}
 
         {item && (
-          <div className="rounded-2xl p-6" style={{ background: '#0d1117', border: '1px solid #1e2d3d' }}>
+          <div className="rounded-2xl p-6" style={s.cardStyle}>
             <div className="flex items-center gap-4 mb-5">
               <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl flex-shrink-0"
                 style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(6,182,212,0.3))', border: '1px solid rgba(124,58,237,0.3)' }}>
                 {item._tipo === 'material' ? '📦' : '⚙️'}
               </div>
               <div>
-                <p className="text-white font-bold text-lg">{item.nombre || item.codigo}</p>
+                <p className="font-bold text-lg" style={{ color: 'var(--text)' }}>{item.nombre || item.codigo}</p>
                 {item._tipo === 'material' && (
-                  <p className="text-sm" style={{ color: '#64748b' }}>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                     Stock: <span className="font-bold" style={{ color: (item.stock || 0) <= (item.minimo || 0) ? '#f87171' : '#34d399' }}>
                       {item.stock || 0} {item.unidad || ''}
                     </span>
                   </p>
                 )}
                 {item._tipo === 'equipo' && (
-                  <p className="text-sm capitalize" style={{ color: '#64748b' }}>{item.tipo} — {item.estado}</p>
+                  <p className="text-sm capitalize" style={{ color: 'var(--text-muted)' }}>{item.tipo} — {item.estado}</p>
                 )}
               </div>
             </div>
 
             {item._tipo === 'material' && (
               <div className="mb-5">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: '#475569' }}>Cantidad a retirar</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Cantidad a retirar</label>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setCantidad(prev => String(Math.max(0.5, parseFloat(prev) - 0.5)))}
-                    className="w-12 h-12 rounded-xl text-xl font-bold transition-colors"
-                    style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>-</button>
+                    className="w-12 h-12 rounded-xl text-xl font-bold" style={s.btnSecondary}>-</button>
                   <input type="number" value={cantidad} onChange={e => setCantidad(e.target.value)}
                     min="0.5" step="0.5" max={item.stock || 0}
-                    className="flex-1 rounded-xl px-3 py-3 text-white text-2xl text-center font-bold outline-none"
-                    style={{ background: '#080b14', border: '1px solid #1e2d3d' }} />
+                    className="flex-1 rounded-xl px-3 py-3 text-2xl text-center font-bold outline-none"
+                    style={s.inputStyle} />
                   <button onClick={() => setCantidad(prev => String(Math.min(item.stock || 0, parseFloat(prev) + 0.5)))}
-                    className="w-12 h-12 rounded-xl text-xl font-bold transition-colors"
-                    style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>+</button>
+                    className="w-12 h-12 rounded-xl text-xl font-bold" style={s.btnSecondary}>+</button>
                 </div>
-                <p className="text-xs mt-2 text-center" style={{ color: '#475569' }}>
+                <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-muted)' }}>
                   {item.unidad || 'unidades'} — Maximo: {item.stock || 0}
                 </p>
               </div>
@@ -255,13 +249,12 @@ function EscanearContenido() {
             <div className="flex gap-3">
               <button onClick={registrarSalida}
                 disabled={guardando || (item._tipo === 'equipo' && item.estado !== 'disponible')}
-                className="flex-1 py-3 rounded-xl text-white text-sm font-medium disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
+                className="flex-1 py-3 rounded-xl text-sm font-medium disabled:opacity-50"
+                style={s.btnPrimary}>
                 {guardando ? 'Registrando...' : item._tipo === 'material' ? 'Confirmar salida' : 'Registrar equipo'}
               </button>
               <button onClick={() => { setItem(null); setMensaje(''); setCantidad('1') }}
-                className="py-3 px-4 rounded-xl text-sm"
-                style={{ background: '#080b14', color: '#64748b', border: '1px solid #1e2d3d' }}>
+                className="py-3 px-4 rounded-xl text-sm" style={s.btnSecondary}>
                 Cancelar
               </button>
             </div>
@@ -275,7 +268,7 @@ function EscanearContenido() {
 export default function Escanear() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#080b14' }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
         <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
       </div>
     }>
