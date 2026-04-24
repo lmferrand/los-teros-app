@@ -87,6 +87,7 @@ export default function Ordenes() {
     const comprimida = await comprimirImagen(file)
     const nombreArchivo = `${ordenDetalle.clientes?.nombre?.replace(/[^a-zA-Z0-9]/g, '_') || ordenDetalle.id}/${new Date().toISOString().slice(0, 10)}/${tipoFoto}/${Date.now()}.jpg`
     const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
+    if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
     if (!error && data) {
       const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
       const { data: { session } } = await supabase.auth.getSession()
