@@ -55,15 +55,6 @@ export default function Ordenes() {
     return data || []
   }
 
-  async function cargarMovimientosOrden(ordenId: string) {
-    const { data } = await supabase
-      .from('movimientos')
-      .select('*, materiales(nombre, unidad), equipos(codigo, tipo), perfiles(nombre)')
-      .eq('orden_id', ordenId)
-      .order('fecha', { ascending: false })
-    return data || []
-  }
-
   async function eliminarFoto(foto: any) {
     if (!confirm('Eliminar esta foto?')) return
     await supabase.from('fotos_ordenes').delete().eq('id', foto.id)
@@ -84,41 +75,9 @@ export default function Ordenes() {
     setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
   }
 
-  async function eliminarMovimientoOrden(movimiento: any) {
-    if (!ordenDetalle) return
-    if (!confirm('Eliminar este movimiento de la OT? Si es consumo, se devolvera al stock.')) return
-
-    const { error: deleteError } = await supabase.from('movimientos').delete().eq('id', movimiento.id)
-    if (deleteError) {
-      alert('Error al eliminar movimiento: ' + deleteError.message)
-      return
-    }
-
-    if (movimiento.tipo === 'consumo' && movimiento.material_id && movimiento.cantidad) {
-      const { data: mat } = await supabase.from('materiales').select('stock').eq('id', movimiento.material_id).single()
-      await supabase
-        .from('materiales')
-        .update({ stock: (mat?.stock || 0) + Number(movimiento.cantidad) })
-        .eq('id', movimiento.material_id)
-    }
-
-    if (movimiento.tipo === 'salida' && movimiento.equipo_id) {
-      await supabase
-        .from('equipos')
-        .update({ estado: 'disponible', fecha_salida: null })
-        .eq('id', movimiento.equipo_id)
-    }
-
-    const movimientos = await cargarMovimientosOrden(ordenDetalle.id)
-    setOrdenDetalle((prev: any) => ({ ...prev, movimientos }))
-  }
-
   async function abrirDetalle(o: any) {
-    const [fotos, movimientos] = await Promise.all([
-      cargarFotosOrden(o.id),
-      cargarMovimientosOrden(o.id),
-    ])
-    setOrdenDetalle({ ...o, fotos, movimientos })
+    const fotos = await cargarFotosOrden(o.id)
+    setOrdenDetalle({ ...o, fotos })
   }
 
   function abrirFormNuevo() {
@@ -146,9 +105,7 @@ export default function Ordenes() {
     setSubiendo(true)
     try {
       let comprimida: Blob = file
-      try {
-        comprimida = await comprimirImagen(file)
-      } catch { }
+      try { comprimida = await comprimirImagen(file) } catch { }
       const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}.jpg`
       const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
       if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
@@ -156,10 +113,7 @@ export default function Ordenes() {
         const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
         const { data: { session } } = await supabase.auth.getSession()
         const { error: insertError } = await supabase.from('fotos_ordenes').insert({
-          orden_id: ordenDetalle.id,
-          tipo: tipoFoto,
-          url: urlData.publicUrl,
-          subida_por: session?.user?.id
+          orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id
         })
         if (insertError) { alert('Error al registrar foto: ' + insertError.message); setSubiendo(false); return }
         const fotos = await cargarFotosOrden(ordenDetalle.id)
@@ -177,11 +131,8 @@ export default function Ordenes() {
             fotos_urls: [urlData.publicUrl],
             observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
           })
-          if (!albError) {
-            alert('Albaran creado automaticamente en Albaranes.')
-          } else {
-            alert('Error al crear albaran: ' + albError.message)
-          }
+          if (!albError) alert('Albaran creado automaticamente en Albaranes.')
+          else alert('Error al crear albaran: ' + albError.message)
         }
       }
     } catch { alert('Error inesperado al subir la foto.') }
@@ -236,23 +187,23 @@ export default function Ordenes() {
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
-  if (nuevoEstado === 'completada' && ordenDetalle) {
-    const fotos = ordenDetalle.fotos || []
-    const fotosProceso = fotos.filter((f: any) => f.tipo === 'proceso')
-    const fotosCierre = fotos.filter((f: any) => f.tipo === 'cierre')
-    if (fotosProceso.length === 0) {
-      alert('Debes subir al menos una foto del proceso antes de completar la orden.')
-      return
+    if (nuevoEstado === 'completada' && ordenDetalle) {
+      const fotos = ordenDetalle.fotos || []
+      const fotosProceso = fotos.filter((f: any) => f.tipo === 'proceso')
+      const fotosCierre = fotos.filter((f: any) => f.tipo === 'cierre')
+      if (fotosProceso.length === 0) {
+        alert('Debes subir al menos una foto del proceso antes de completar la orden.')
+        return
+      }
+      if (fotosCierre.length === 0) {
+        alert('Debes subir al menos una foto de cierre antes de completar la orden.')
+        return
+      }
     }
-    if (fotosCierre.length === 0) {
-      alert('Debes subir al menos una foto de cierre antes de completar la orden.')
-      return
-    }
+    await supabase.from('ordenes').update({ estado: nuevoEstado }).eq('id', id)
+    cargarDatos()
+    if (ordenDetalle?.id === id) setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
   }
-  await supabase.from('ordenes').update({ estado: nuevoEstado }).eq('id', id)
-  cargarDatos()
-  if (ordenDetalle?.id === id) setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
-}
 
   async function eliminarOrden(id: string) {
     if (!confirm('Eliminar esta orden?')) return
@@ -282,14 +233,6 @@ export default function Ordenes() {
 
   const PRIORIDAD_COLORS: any = {
     baja: '#64748b', normal: '#06b6d4', alta: '#f59e0b', urgente: '#ef4444'
-  }
-
-  const MOVIMIENTO_COLORS: any = {
-    consumo: { label: 'Consumo material', color: '#fb923c', bg: 'rgba(249,115,22,0.15)' },
-    salida: { label: 'Salida equipo', color: '#fbbf24', bg: 'rgba(234,179,8,0.15)' },
-    retorno: { label: 'Retorno equipo', color: '#34d399', bg: 'rgba(16,185,129,0.15)' },
-    entrada: { label: 'Entrada stock', color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
-    ajuste: { label: 'Ajuste stock', color: '#a78bfa', bg: 'rgba(124,58,237,0.15)' },
   }
 
   const ordenesFiltradas = filtroEstado ? ordenes.filter(o => o.estado === filtroEstado) : ordenes
@@ -422,8 +365,8 @@ export default function Ordenes() {
         )}
 
         {ordenDetalle && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)' }}>
-            <div className="w-full max-w-2xl max-h-screen overflow-y-auto rounded-2xl" style={s.cardStyle}>
+          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" style={{ background: 'rgba(0,0,0,0.8)' }}>
+            <div className="w-full md:max-w-2xl rounded-t-2xl md:rounded-2xl overflow-y-auto" style={{ ...s.cardStyle, maxHeight: '92vh' }}>
               <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={s.headerStyle}>
                 <div>
                   <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{ordenDetalle.codigo}</span>
@@ -432,7 +375,7 @@ export default function Ordenes() {
                 <button onClick={() => setOrdenDetalle(null)} className="w-8 h-8 rounded-lg flex items-center justify-center"
                   style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
               </div>
-              <div className="p-6">
+              <div className="p-6 pb-16">
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
                     { label: 'Estado', val: <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADO_COLORS[ordenDetalle.estado]?.bg, color: ESTADO_COLORS[ordenDetalle.estado]?.color }}>{ordenDetalle.estado.replace('_', ' ')}</span> },
@@ -478,60 +421,6 @@ export default function Ordenes() {
                   </button>
                 </div>
 
-                <div className="rounded-2xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Movimientos registrados</h3>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4' }}>
-                      {(ordenDetalle.movimientos || []).length}
-                    </span>
-                  </div>
-                  {(ordenDetalle.movimientos || []).length === 0 ? (
-                    <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin materiales o equipos registrados en esta OT.</p>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {(ordenDetalle.movimientos || []).map((m: any) => (
-                        <div key={m.id} className="rounded-xl p-3 flex items-start justify-between gap-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                          <div>
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: MOVIMIENTO_COLORS[m.tipo]?.bg, color: MOVIMIENTO_COLORS[m.tipo]?.color }}>
-                                {MOVIMIENTO_COLORS[m.tipo]?.label || m.tipo}
-                              </span>
-                              <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                                {m.fecha ? new Date(m.fecha).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Sin fecha'}
-                              </span>
-                            </div>
-                            {m.materiales && (
-                              <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                                {m.materiales.nombre}
-                                <span className="font-normal ml-2" style={{ color: 'var(--text-muted)' }}>
-                                  - {m.cantidad} {m.materiales.unidad || 'uds'}
-                                </span>
-                              </p>
-                            )}
-                            {m.equipos && (
-                              <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                                <span className="font-mono" style={{ color: '#06b6d4' }}>{m.equipos.codigo}</span>
-                                <span className="font-normal ml-2 capitalize" style={{ color: 'var(--text-muted)' }}>
-                                  - {m.equipos.tipo}
-                                </span>
-                              </p>
-                            )}
-                            {m.observaciones && <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{m.observaciones}</p>}
-                            <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>Trabajador: {m.perfiles?.nombre || '—'}</p>
-                          </div>
-                          <button
-                            onClick={() => eliminarMovimientoOrden(m)}
-                            className="text-xs px-3 py-1 rounded-lg flex-shrink-0"
-                            style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
-                          >
-                            Eliminar
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
                 <div className="mb-4">
                   <h3 className="font-semibold mb-3" style={{ color: 'var(--text)' }}>Fotos</h3>
                   {subiendo && <p className="text-sm mb-3" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
@@ -553,11 +442,9 @@ export default function Ordenes() {
                                 <a href={f.url} target="_blank" rel="noreferrer">
                                   <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
                                 </a>
-                                <button
-                                  onClick={() => eliminarFoto(f)}
+                                <button onClick={() => eliminarFoto(f)}
                                   className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                  style={{ background: 'rgba(239,68,68,0.9)', color: 'white' }}
-                                >
+                                  style={{ background: 'rgba(239,68,68,0.9)', color: 'white' }}>
                                   X
                                 </button>
                               </div>
