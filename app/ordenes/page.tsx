@@ -143,15 +143,6 @@ if (insertError) { alert('Error al registrar foto: ' + insertError.message) }
     alert('Error al crear albaran: ' + albError.message)
   }
 }
-                numero,
-                cliente_id: ordenDetalle.cliente_id || null,
-                orden_id: ordenDetalle.id,
-                descripcion: json.descripcion || ordenDetalle.descripcion || '',
-                estado: 'pendiente',
-                fecha: new Date().toISOString().slice(0, 10),
-                fotos_urls: [urlData.publicUrl],
-                observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
-              })
               alert(`Albaran creado automaticamente en la pagina de Albaranes.`)
             } catch {
               const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
