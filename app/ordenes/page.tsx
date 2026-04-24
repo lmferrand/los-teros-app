@@ -422,7 +422,7 @@ Si no encuentras algun dato deja el campo vacio o en 0.`
                           <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{tf.label}</p>
                           <label className="text-xs px-3 py-1 rounded-lg cursor-pointer" style={{ background: 'var(--bg)', color: '#06b6d4', border: '1px solid var(--border)' }}>
                             + Foto
-                            <input type="file" accept="image/*" className="hidden" onChange={e => subirFoto(e, tf.key)} />
+                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => subirFoto(e, tf.key)} />
                           </label>
                         </div>
                         {fotosDelTipo.length > 0 ? (
