@@ -70,6 +70,7 @@ export type Database = {
         Row: {
           id: string
           nombre: string
+          cif: string | null
           direccion: string | null
           telefono: string | null
           email: string | null
@@ -79,6 +80,7 @@ export type Database = {
         Insert: {
           id?: string
           nombre: string
+          cif?: string | null
           direccion?: string | null
           telefono?: string | null
           email?: string | null
@@ -88,6 +90,7 @@ export type Database = {
         Update: {
           id?: string
           nombre?: string
+          cif?: string | null
           direccion?: string | null
           telefono?: string | null
           email?: string | null

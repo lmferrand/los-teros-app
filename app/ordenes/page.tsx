@@ -1,9 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
+import {
+  cargarMovimientosOrden,
+  eliminarArchivosFotosOrden,
+  eliminarMovimientoConIntegridad,
+  eliminarOrdenConIntegridad,
+  repararVinculoMovimientosOt,
+} from '@/lib/ordenes-integridad'
 
 export default function Ordenes() {
   const [ordenes, setOrdenes] = useState<any[]>([])
@@ -17,6 +24,12 @@ export default function Ordenes() {
   const [subiendo, setSubiendo] = useState(false)
   const [mostrarModalEliminar, setMostrarModalEliminar] = useState(false)
   const [ordenAEliminar, setOrdenAEliminar] = useState<any>(null)
+  const [perfil, setPerfil] = useState<any>(null)
+  const [userId, setUserId] = useState('')
+  const [soloMias, setSoloMias] = useState(false)
+  const [eliminandoOrden, setEliminandoOrden] = useState(false)
+  const [movimientoEliminandoId, setMovimientoEliminandoId] = useState<string | null>(null)
+  const ultimaSyncOtRef = useRef(0)
   const router = useRouter()
 
   const [tipo, setTipo] = useState('limpieza')
@@ -30,14 +43,32 @@ export default function Ordenes() {
   const [duracionHoras, setDuracionHoras] = useState('2')
   const [horaFija, setHoraFija] = useState(false)
 
-  useEffect(() => {
-    verificarSesion()
-    cargarDatos()
-  }, [])
+  async function inicializar() {
+    const ok = await verificarSesion()
+    if (!ok) return
+    await cargarDatos()
+  }
 
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) router.push('/login')
+    if (!session) {
+      router.push('/login')
+      return false
+    }
+
+    setUserId(session.user.id)
+    const { data: perfilData } = await supabase
+      .from('perfiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single()
+
+    setPerfil(perfilData || null)
+    if (perfilData?.rol === 'tecnico' || perfilData?.rol === 'almacen') {
+      setSoloMias(true)
+    }
+
+    return true
   }
 
   async function cargarDatos() {
@@ -52,12 +83,93 @@ export default function Ordenes() {
     setLoading(false)
   }
 
+  useEffect(() => {
+    inicializar()
+    // Carga inicial.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!ordenDetalle) return
+
+    sincronizarDetalleSiOtActualizada()
+    const timer = window.setInterval(() => {
+      sincronizarDetalleSiOtActualizada()
+    }, 1500)
+
+    const onFocus = () => {
+      sincronizarDetalleSiOtActualizada()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        sincronizarDetalleSiOtActualizada()
+      }
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+    // Reacciona a cambios del detalle abierto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ordenDetalle?.id])
+
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
     return data || []
   }
 
+  function esAdmin() {
+    return perfil?.rol === 'gerente' || perfil?.rol === 'oficina' || perfil?.rol === 'supervisor'
+  }
+
+  function esAsignado(orden: any) {
+    if (!orden || !userId) return false
+    return orden.tecnicos_ids?.includes(userId) || orden.tecnico_id === userId
+  }
+
+  function puedeGestionar(orden: any) {
+    if (esAdmin()) return true
+    return esAsignado(orden)
+  }
+
+  async function recargarDetalleOrden(ordenId: string) {
+    const codigoOt = ordenDetalle?.codigo || null
+    await repararVinculoMovimientosOt(ordenId, codigoOt)
+    const [fotos, movimientos] = await Promise.all([
+      cargarFotosOrden(ordenId),
+      cargarMovimientosOrden(ordenId, codigoOt),
+    ])
+    setOrdenDetalle((prev: any) => (prev ? { ...prev, fotos, movimientos } : prev))
+  }
+
+  async function sincronizarDetalleSiOtActualizada() {
+    if (!ordenDetalle) return
+    const raw = sessionStorage.getItem('ot_actualizada')
+    if (!raw) return
+
+    try {
+      const payload = JSON.parse(raw) as { ordenId?: string; ts?: number }
+      const ts = Number(payload?.ts || 0)
+      if (!payload?.ordenId || payload.ordenId !== ordenDetalle.id) return
+      if (ts <= ultimaSyncOtRef.current) return
+
+      ultimaSyncOtRef.current = ts
+      await repararVinculoMovimientosOt(ordenDetalle.id, ordenDetalle.codigo || null)
+      await recargarDetalleOrden(ordenDetalle.id)
+    } catch {
+      // Ignorar payload invalido
+    }
+  }
+
   async function eliminarFoto(foto: any) {
+    if (!ordenDetalle || !puedeGestionar(ordenDetalle)) {
+      alert('No tienes permiso para eliminar fotos de esta OT.')
+      return
+    }
     if (!confirm('Eliminar esta foto?')) return
     await supabase.from('fotos_ordenes').delete().eq('id', foto.id)
     if (foto.tipo === 'albaran') {
@@ -73,16 +185,23 @@ export default function Ordenes() {
         }
       }
     }
-    const fotos = await cargarFotosOrden(ordenDetalle.id)
-    setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+    await recargarDetalleOrden(ordenDetalle.id)
   }
 
   async function abrirDetalle(o: any) {
-    const fotos = await cargarFotosOrden(o.id)
-    setOrdenDetalle({ ...o, fotos })
+    await repararVinculoMovimientosOt(o.id, o.codigo)
+    const [fotos, movimientos] = await Promise.all([
+      cargarFotosOrden(o.id),
+      cargarMovimientosOrden(o.id, o.codigo),
+    ])
+    setOrdenDetalle({ ...o, fotos, movimientos })
   }
 
   function abrirFormNuevo() {
+    if (!esAdmin()) {
+      alert('Solo gerencia/oficina puede crear OT.')
+      return
+    }
     setEditandoId(null)
     setTipo('limpieza'); setClienteId(''); setTecnicosSeleccionados([])
     setFecha(''); setPrioridad('normal'); setEstado('pendiente')
@@ -91,6 +210,10 @@ export default function Ordenes() {
   }
 
   function abrirFormEditar(o: any) {
+    if (!esAdmin()) {
+      alert('Solo gerencia/oficina puede editar OT.')
+      return
+    }
     setEditandoId(o.id)
     setTipo(o.tipo || 'limpieza'); setClienteId(o.cliente_id || '')
     setTecnicosSeleccionados(o.tecnicos_ids || [])
@@ -104,11 +227,15 @@ export default function Ordenes() {
   async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipoFoto: string) {
     const file = e.target.files?.[0]
     if (!file || !ordenDetalle) return
+    if (!puedeGestionar(ordenDetalle)) {
+      alert('No tienes permiso para subir fotos en esta OT.')
+      return
+    }
     setSubiendo(true)
     try {
       let comprimida: Blob = file
       try { comprimida = await comprimirImagen(file) } catch { }
-      const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}.jpg`
+      const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${crypto.randomUUID()}.jpg`
       const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
       if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
       if (data) {
@@ -118,8 +245,7 @@ export default function Ordenes() {
           orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id
         })
         if (insertError) { alert('Error al registrar foto: ' + insertError.message); setSubiendo(false); return }
-        const fotos = await cargarFotosOrden(ordenDetalle.id)
-        setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+        await recargarDetalleOrden(ordenDetalle.id)
         if (tipoFoto === 'albaran') {
           const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
           const num = String((count || 0) + 1).padStart(4, '0')
@@ -172,6 +298,10 @@ export default function Ordenes() {
 
   async function guardarOrden(e: React.FormEvent) {
     e.preventDefault()
+    if (!esAdmin()) {
+      alert('No tienes permiso para guardar cambios en OT.')
+      return
+    }
     const datos = {
       tipo, cliente_id: clienteId, tecnico_id: tecnicosSeleccionados[0] || null,
       tecnicos_ids: tecnicosSeleccionados, fecha_programada: fecha, prioridad, estado,
@@ -189,6 +319,10 @@ export default function Ordenes() {
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
+    if (!ordenDetalle || !puedeGestionar(ordenDetalle)) {
+      alert('No tienes permiso para cambiar el estado de esta OT.')
+      return
+    }
     if (nuevoEstado === 'completada' && ordenDetalle) {
       const fotos = ordenDetalle.fotos || []
       const fotosProceso = fotos.filter((f: any) => f.tipo === 'proceso')
@@ -208,45 +342,73 @@ export default function Ordenes() {
   }
 
   function pedirEliminarOrden(o: any) {
+    if (!esAdmin()) {
+      alert('Solo gerencia/oficina puede eliminar OT.')
+      return
+    }
     setOrdenAEliminar(o)
     setMostrarModalEliminar(true)
   }
 
   async function confirmarEliminarOrden() {
     if (!ordenAEliminar) return
+    if (!esAdmin()) {
+      alert('No tienes permiso para eliminar OT.')
+      return
+    }
+
     const id = ordenAEliminar.id
+    setEliminandoOrden(true)
+    try {
+      await eliminarArchivosFotosOrden(id)
+      await eliminarOrdenConIntegridad(id)
+      setMostrarModalEliminar(false)
+      setOrdenAEliminar(null)
+      setOrdenDetalle(null)
+      await cargarDatos()
+    } catch (error) {
+      alert(`No se pudo eliminar la OT: ${getMensajeError(error)}`)
+    } finally {
+      setEliminandoOrden(false)
+    }
+  }
 
-    const { data: movimientos } = await supabase
-      .from('movimientos')
-      .select('*, materiales(stock)')
-      .eq('orden_id', id)
-      .eq('tipo', 'consumo')
+  async function eliminarMovimiento(mov: any) {
+    if (!ordenDetalle || !puedeGestionar(ordenDetalle)) {
+      alert('No tienes permiso para eliminar este movimiento.')
+      return
+    }
+    if (!confirm('Eliminar este movimiento?')) return
 
-    if (movimientos && movimientos.length > 0) {
-      for (const mov of movimientos) {
-        if (mov.material_id && mov.cantidad) {
-          const stockActual = mov.materiales?.stock || 0
-          await supabase.from('materiales').update({ stock: stockActual + mov.cantidad }).eq('id', mov.material_id)
-        }
-      }
+    let devolverMaterialAStock = true
+    let registrarDevolucion = false
+    if (mov.tipo === 'consumo' && mov.material_id) {
+      devolverMaterialAStock = confirm('¿Regresa el material al inventario?\nAceptar = SI\nCancelar = NO')
+      registrarDevolucion = devolverMaterialAStock
     }
 
-    const { data: fotos } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', id)
-    if (fotos && fotos.length > 0) {
-      for (const foto of fotos) {
-        const path = foto.url.split('/fotos-ordenes/')[1]
-        if (path) await supabase.storage.from('fotos-ordenes').remove([decodeURIComponent(path)])
-      }
-      await supabase.from('fotos_ordenes').delete().eq('orden_id', id)
+    setMovimientoEliminandoId(mov.id)
+    try {
+      await eliminarMovimientoConIntegridad(mov.id, {
+        devolverMaterialAStock,
+        registrarDevolucion,
+        tecnicoId: userId || null,
+        codigoOt: ordenDetalle.codigo || null,
+      })
+      await recargarDetalleOrden(ordenDetalle.id)
+    } catch (error) {
+      alert(`No se pudo eliminar el movimiento: ${getMensajeError(error)}`)
+    } finally {
+      setMovimientoEliminandoId(null)
     }
+  }
 
-    await supabase.from('albaranes').delete().eq('orden_id', id)
-    await supabase.from('ordenes').delete().eq('id', id)
-
-    setMostrarModalEliminar(false)
-    setOrdenAEliminar(null)
-    setOrdenDetalle(null)
-    cargarDatos()
+  function getMensajeError(error: unknown) {
+    if (error && typeof error === 'object' && 'message' in error) {
+      const msg = String((error as { message?: string }).message || '').trim()
+      if (msg) return msg
+    }
+    return 'Error desconocido'
   }
 
   function getNombresTecnicos(ids: string[]) {
@@ -273,7 +435,10 @@ export default function Ordenes() {
     baja: '#64748b', normal: '#06b6d4', alta: '#f59e0b', urgente: '#ef4444'
   }
 
-  const ordenesFiltradas = filtroEstado ? ordenes.filter(o => o.estado === filtroEstado) : ordenes
+  const filtradasPorEstado = filtroEstado ? ordenes.filter((o) => o.estado === filtroEstado) : ordenes
+  const ordenesFiltradas = soloMias ? filtradasPorEstado.filter((o) => esAsignado(o)) : filtradasPorEstado
+  const puedeCrearEditar = esAdmin()
+  const puedeEliminar = esAdmin()
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -284,13 +449,14 @@ export default function Ordenes() {
             <p className="text-xl mb-2">🗑️</p>
             <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Eliminar orden {ordenAEliminar?.codigo}</p>
             <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
-              Se eliminaran todas las fotos y albaranes asociados. El stock de materiales usados se restaurara. Los movimientos se mantienen. Esta accion no se puede deshacer.
+              Se eliminaran fotos, albaranes y movimientos asociados. El stock de materiales se restaurara automaticamente. Esta accion no se puede deshacer.
             </p>
             <div className="flex gap-3">
               <button onClick={confirmarEliminarOrden}
+                disabled={eliminandoOrden}
                 className="flex-1 py-3 rounded-xl text-sm font-semibold"
                 style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
-                Eliminar
+                {eliminandoOrden ? 'Eliminando...' : 'Eliminar'}
               </button>
               <button onClick={() => { setMostrarModalEliminar(false); setOrdenAEliminar(null) }}
                 className="flex-1 py-3 rounded-xl text-sm font-semibold" style={s.btnSecondary}>
@@ -319,14 +485,21 @@ export default function Ordenes() {
             <option value="completada">Completada</option>
             <option value="cancelada">Cancelada</option>
           </select>
-          <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-            + Nueva OT
-          </button>
+          {!!userId && (
+            <button onClick={() => setSoloMias(prev => !prev)} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnSecondary}>
+              {soloMias ? 'Ver todas' : 'Solo mis OTs'}
+            </button>
+          )}
+          {puedeCrearEditar && (
+            <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+              + Nueva OT
+            </button>
+          )}
         </div>
       </div>
 
       <div className="p-6 max-w-5xl mx-auto">
-        {mostrarForm && (
+        {mostrarForm && puedeCrearEditar && (
           <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
             <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoId ? 'Editar orden' : 'Nueva orden de trabajo'}</h2>
             <form onSubmit={guardarOrden} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -477,10 +650,69 @@ export default function Ordenes() {
                   <p className="font-medium text-sm mb-1" style={{ color: '#06b6d4' }}>Escanear material o equipo</p>
                   <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Escanea el QR para registrar salida vinculada a esta OT.</p>
                   <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
-                    className="w-full py-2.5 rounded-xl text-sm font-medium"
+                    disabled={!puedeGestionar(ordenDetalle)}
+                    className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
                     style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)', color: 'white' }}>
                     Abrir escaner QR
                   </button>
+                </div>
+
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold" style={{ color: 'var(--text)' }}>Movimientos de inventario</h3>
+                    <button
+                      onClick={() => recargarDetalleOrden(ordenDetalle.id)}
+                      className="text-xs px-3 py-1 rounded-lg"
+                      style={{ background: 'var(--bg)', color: '#06b6d4', border: '1px solid var(--border)' }}
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+                  {(!ordenDetalle.movimientos || ordenDetalle.movimientos.length === 0) ? (
+                    <div className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin movimientos vinculados a esta OT.</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {ordenDetalle.movimientos.map((mov: any) => (
+                        <div key={mov.id} className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: mov.tipo === 'consumo' ? '#fb923c' : '#fbbf24' }}>
+                                {mov.tipo === 'consumo' ? 'Consumo material' : mov.tipo === 'salida' ? 'Salida equipo' : mov.tipo}
+                              </p>
+                              {mov.materiales && (
+                                <p className="text-sm" style={{ color: 'var(--text)' }}>
+                                  {mov.materiales.nombre} - {mov.cantidad || 0} {mov.materiales.unidad || 'uds'}
+                                </p>
+                              )}
+                              {mov.equipos && (
+                                <p className="text-sm" style={{ color: 'var(--text)' }}>
+                                  {mov.equipos.codigo} - {mov.equipos.tipo}
+                                </p>
+                              )}
+                              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                                {mov.perfiles?.nombre || 'Sin tecnico'} {mov.fecha ? `- ${new Date(mov.fecha).toLocaleString('es-ES')}` : ''}
+                              </p>
+                              {mov.observaciones && (
+                                <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{mov.observaciones}</p>
+                              )}
+                            </div>
+                            {puedeGestionar(ordenDetalle) && (
+                              <button
+                                onClick={() => eliminarMovimiento(mov)}
+                                disabled={movimientoEliminandoId === mov.id}
+                                className="text-xs px-3 py-1 rounded-lg"
+                                style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
+                              >
+                                {movimientoEliminandoId === mov.id ? 'Eliminando...' : 'Eliminar'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="mb-4">
@@ -492,10 +724,12 @@ export default function Ordenes() {
                       <div key={tf.key} className="mb-4">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{tf.label}</p>
-                          <label className="text-xs px-3 py-1 rounded-lg cursor-pointer" style={{ background: 'var(--bg)', color: '#06b6d4', border: '1px solid var(--border)' }}>
-                            + Foto
-                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => subirFoto(e, tf.key)} />
-                          </label>
+                          {puedeGestionar(ordenDetalle) && (
+                            <label className="text-xs px-3 py-1 rounded-lg cursor-pointer" style={{ background: 'var(--bg)', color: '#06b6d4', border: '1px solid var(--border)' }}>
+                              + Foto
+                              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => subirFoto(e, tf.key)} />
+                            </label>
+                          )}
                         </div>
                         {fotosDelTipo.length > 0 ? (
                           <div className="grid grid-cols-3 gap-2">
@@ -504,11 +738,13 @@ export default function Ordenes() {
                                 <a href={f.url} target="_blank" rel="noreferrer">
                                   <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
                                 </a>
-                                <button onClick={() => eliminarFoto(f)}
-                                  className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                  style={{ background: 'rgba(239,68,68,0.9)', color: 'white' }}>
-                                  X
-                                </button>
+                                {puedeGestionar(ordenDetalle) && (
+                                  <button onClick={() => eliminarFoto(f)}
+                                    className="absolute top-1 right-1 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                    style={{ background: 'rgba(239,68,68,0.9)', color: 'white' }}>
+                                    X
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -521,30 +757,34 @@ export default function Ordenes() {
                 </div>
 
                 <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid var(--border)' }}>
-                  {ordenDetalle.estado === 'pendiente' && (
+                  {ordenDetalle.estado === 'pendiente' && puedeGestionar(ordenDetalle) && (
                     <button onClick={() => cambiarEstado(ordenDetalle.id, 'en_curso')}
                       className="text-sm px-4 py-2 rounded-xl font-medium"
                       style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.3)' }}>
                       Iniciar trabajo
                     </button>
                   )}
-                  {ordenDetalle.estado === 'en_curso' && (
+                  {ordenDetalle.estado === 'en_curso' && puedeGestionar(ordenDetalle) && (
                     <button onClick={() => cambiarEstado(ordenDetalle.id, 'completada')}
                       className="text-sm px-4 py-2 rounded-xl font-medium"
                       style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
                       Completar
                     </button>
                   )}
-                  <button onClick={() => abrirFormEditar(ordenDetalle)}
-                    className="text-sm px-4 py-2 rounded-xl"
-                    style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
-                    Editar OT
-                  </button>
-                  <button onClick={() => { setOrdenDetalle(null); setTimeout(() => pedirEliminarOrden(ordenDetalle), 100) }}
-                    className="text-sm px-4 py-2 rounded-xl"
-                    style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
-                    Eliminar
-                  </button>
+                  {puedeCrearEditar && (
+                    <button onClick={() => abrirFormEditar(ordenDetalle)}
+                      className="text-sm px-4 py-2 rounded-xl"
+                      style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
+                      Editar OT
+                    </button>
+                  )}
+                  {puedeEliminar && (
+                    <button onClick={() => { setOrdenDetalle(null); setTimeout(() => pedirEliminarOrden(ordenDetalle), 100) }}
+                      className="text-sm px-4 py-2 rounded-xl"
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+                      Eliminar
+                    </button>
+                  )}
                   <button onClick={() => setOrdenDetalle(null)}
                     className="text-sm px-4 py-2 rounded-xl ml-auto" style={s.btnSecondary}>
                     Cerrar
