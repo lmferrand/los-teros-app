@@ -77,33 +77,44 @@ export default function Clientes() {
   }
 
   async function importarExcel(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setImportando(true); setResultadoImport(null)
-    try {
-      const buffer = await file.arrayBuffer()
-      const workbook = XLSX.read(buffer, { type: 'array' })
-      const hoja = workbook.Sheets[workbook.SheetNames[0]]
-      const datos = XLSX.utils.sheet_to_json(hoja, { defval: '' }) as any[]
-      let importados = 0; let errores = 0
-      for (const fila of datos) {
-        const nombreCliente = fila['nombre'] || fila['Nombre'] || fila['NOMBRE'] || ''
-        if (!nombreCliente) { errores++; continue }
-        const { error } = await supabase.from('clientes').insert({
-          nombre: String(nombreCliente).trim(),
-          direccion: String(fila['direccion'] || fila['Direccion'] || '').trim(),
-          telefono: String(fila['telefono'] || fila['Telefono'] || '').trim(),
-          email: String(fila['email'] || fila['Email'] || '').trim(),
-          notas: String(fila['notas'] || fila['Notas'] || '').trim(),
-        })
-        if (error) errores++; else importados++
-      }
-      setResultadoImport({ importados, errores, total: datos.length })
-      cargarClientes()
-    } catch { setResultadoImport({ error: 'Error al leer el archivo Excel.' }) }
-    setImportando(false)
-    if (fileRef.current) fileRef.current.value = ''
+  const file = e.target.files?.[0]
+  if (!file) return
+  setImportando(true); setResultadoImport(null)
+  try {
+    const buffer = await file.arrayBuffer()
+    const workbook = XLSX.read(buffer, { type: 'array' })
+    const hoja = workbook.Sheets[workbook.SheetNames[0]]
+    const datos = XLSX.utils.sheet_to_json(hoja, { defval: '' }) as any[]
+
+    const registros = datos
+      .filter((fila: any) => fila['nombre'] || fila['Nombre'] || fila['NOMBRE'])
+      .map((fila: any) => ({
+        nombre: String(fila['nombre'] || fila['Nombre'] || fila['NOMBRE']).trim(),
+        direccion: String(fila['direccion'] || fila['Direccion'] || '').trim(),
+        telefono: String(fila['telefono'] || fila['Telefono'] || '').trim(),
+        email: String(fila['email'] || fila['Email'] || '').trim(),
+        notas: String(fila['notas'] || fila['Notas'] || '').trim(),
+      }))
+
+    const LOTE = 100
+    let importados = 0
+    let errores = 0
+
+    for (let i = 0; i < registros.length; i += LOTE) {
+      const lote = registros.slice(i, i + LOTE)
+      const { error } = await supabase.from('clientes').insert(lote)
+      if (error) errores += lote.length
+      else importados += lote.length
+    }
+
+    setResultadoImport({ importados, errores, total: registros.length })
+    cargarClientes()
+  } catch {
+    setResultadoImport({ error: 'Error al leer el archivo Excel.' })
   }
+  setImportando(false)
+  if (fileRef.current) fileRef.current.value = ''
+}
 
   function exportarExcel() {
     const datos = clientes.map(c => ({ nombre: c.nombre, direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '', notas: c.notas || '' }))
