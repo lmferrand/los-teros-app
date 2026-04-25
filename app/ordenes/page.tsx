@@ -15,6 +15,8 @@ export default function Ordenes() {
   const [ordenDetalle, setOrdenDetalle] = useState<any>(null)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [subiendo, setSubiendo] = useState(false)
+  const [mostrarModalEliminar, setMostrarModalEliminar] = useState(false)
+  const [ordenAEliminar, setOrdenAEliminar] = useState<any>(null)
   const router = useRouter()
 
   const [tipo, setTipo] = useState('limpieza')
@@ -205,10 +207,46 @@ export default function Ordenes() {
     if (ordenDetalle?.id === id) setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
   }
 
-  async function eliminarOrden(id: string) {
-    if (!confirm('Eliminar esta orden?')) return
+  function pedirEliminarOrden(o: any) {
+    setOrdenAEliminar(o)
+    setMostrarModalEliminar(true)
+  }
+
+  async function confirmarEliminarOrden() {
+    if (!ordenAEliminar) return
+    const id = ordenAEliminar.id
+
+    const { data: movimientos } = await supabase
+      .from('movimientos')
+      .select('*, materiales(stock)')
+      .eq('orden_id', id)
+      .eq('tipo', 'consumo')
+
+    if (movimientos && movimientos.length > 0) {
+      for (const mov of movimientos) {
+        if (mov.material_id && mov.cantidad) {
+          const stockActual = mov.materiales?.stock || 0
+          await supabase.from('materiales').update({ stock: stockActual + mov.cantidad }).eq('id', mov.material_id)
+        }
+      }
+    }
+
+    const { data: fotos } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', id)
+    if (fotos && fotos.length > 0) {
+      for (const foto of fotos) {
+        const path = foto.url.split('/fotos-ordenes/')[1]
+        if (path) await supabase.storage.from('fotos-ordenes').remove([decodeURIComponent(path)])
+      }
+      await supabase.from('fotos_ordenes').delete().eq('orden_id', id)
+    }
+
+    await supabase.from('albaranes').delete().eq('orden_id', id)
     await supabase.from('ordenes').delete().eq('id', id)
-    cargarDatos(); setOrdenDetalle(null)
+
+    setMostrarModalEliminar(false)
+    setOrdenAEliminar(null)
+    setOrdenDetalle(null)
+    cargarDatos()
   }
 
   function getNombresTecnicos(ids: string[]) {
@@ -239,6 +277,30 @@ export default function Ordenes() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+
+      {mostrarModalEliminar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+          <div className="w-full max-w-sm rounded-2xl p-6" style={s.cardStyle}>
+            <p className="text-xl mb-2">🗑️</p>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Eliminar orden {ordenAEliminar?.codigo}</p>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
+              Se eliminaran todas las fotos y albaranes asociados. El stock de materiales usados se restaurara. Los movimientos se mantienen. Esta accion no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={confirmarEliminarOrden}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold"
+                style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                Eliminar
+              </button>
+              <button onClick={() => { setMostrarModalEliminar(false); setOrdenAEliminar(null) }}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold" style={s.btnSecondary}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
           <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
@@ -478,7 +540,7 @@ export default function Ordenes() {
                     style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                     Editar OT
                   </button>
-                  <button onClick={() => eliminarOrden(ordenDetalle.id)}
+                  <button onClick={() => pedirEliminarOrden(ordenDetalle)}
                     className="text-sm px-4 py-2 rounded-xl"
                     style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
                     Eliminar

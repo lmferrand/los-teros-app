@@ -11,6 +11,8 @@ export default function ClienteDetalle() {
   const [loading, setLoading] = useState(true)
   const [ordenAbierta, setOrdenAbierta] = useState<string | null>(null)
   const [fotasPorOrden, setFotosPorOrden] = useState<Record<string, any[]>>({})
+  const [mostrarModalBorrar, setMostrarModalBorrar] = useState(false)
+  const [ordenABorrar, setOrdenABorrar] = useState<any>(null)
   const router = useRouter()
   const params = useParams()
   const id = params.id as string
@@ -28,7 +30,7 @@ export default function ClienteDetalle() {
   async function cargarDatos() {
     const [cli, ords] = await Promise.all([
       supabase.from('clientes').select('*').eq('id', id).single(),
-      supabase.from('ordenes').select('*').eq('cliente_id', id).eq('estado', 'completada').order('fecha_programada', { ascending: false }),
+      supabase.from('ordenes').select('*').eq('cliente_id', id).order('fecha_programada', { ascending: false }),
     ])
     if (cli.data) setCliente(cli.data)
     if (ords.data) {
@@ -50,6 +52,22 @@ export default function ClienteDetalle() {
     setOrdenAbierta(prev => prev === ordenId ? null : ordenId)
   }
 
+  async function eliminarServicio(orden: any) {
+    const { data: fotos } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', orden.id)
+    if (fotos && fotos.length > 0) {
+      for (const foto of fotos) {
+        const path = foto.url.split('/fotos-ordenes/')[1]
+        if (path) await supabase.storage.from('fotos-ordenes').remove([decodeURIComponent(path)])
+      }
+      await supabase.from('fotos_ordenes').delete().eq('orden_id', orden.id)
+    }
+    await supabase.from('albaranes').delete().eq('orden_id', orden.id)
+    await supabase.from('ordenes').delete().eq('id', orden.id)
+    setMostrarModalBorrar(false)
+    setOrdenABorrar(null)
+    cargarDatos()
+  }
+
   const TIPOS_FOTO: any = {
     proceso: { label: 'Fotos del proceso', icono: '🔧', color: '#06b6d4' },
     cierre: { label: 'Fotos de cierre', icono: '✅', color: '#34d399' },
@@ -67,6 +85,13 @@ export default function ClienteDetalle() {
     otro: { color: '#64748b', bg: 'rgba(71,85,105,0.15)' },
   }
 
+  const ESTADO_OT: any = {
+    pendiente: { color: '#a78bfa', bg: 'rgba(124,58,237,0.15)', label: 'Pendiente' },
+    en_curso: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)', label: 'En curso' },
+    completada: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Completada' },
+    cancelada: { color: '#64748b', bg: 'rgba(71,85,105,0.15)', label: 'Cancelada' },
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
@@ -81,6 +106,30 @@ export default function ClienteDetalle() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+
+      {mostrarModalBorrar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+          <div className="w-full max-w-sm rounded-2xl p-6" style={s.cardStyle}>
+            <p className="text-xl mb-2">🗑️</p>
+            <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Eliminar servicio {ordenABorrar?.codigo}</p>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
+              Se eliminaran las fotos y el albaran asociado. Los movimientos de stock se mantienen. Esta accion no se puede deshacer.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => eliminarServicio(ordenABorrar)}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold"
+                style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+                Eliminar
+              </button>
+              <button onClick={() => { setMostrarModalBorrar(false); setOrdenABorrar(null) }}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold" style={s.btnSecondary}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-6 py-4 flex items-center gap-4" style={s.headerStyle}>
         <a href="/clientes" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
           onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
@@ -128,7 +177,7 @@ export default function ClienteDetalle() {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-bold" style={{ color: '#7c3aed' }}>{ordenes.length}</p>
+              <p className="text-3xl font-bold" style={{ color: '#7c3aed' }}>{ordenes.filter(o => o.estado === 'completada').length}</p>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>servicios completados</p>
             </div>
           </div>
@@ -139,7 +188,7 @@ export default function ClienteDetalle() {
         {ordenes.length === 0 ? (
           <div className="text-center py-16 rounded-2xl" style={s.cardStyle}>
             <p className="text-4xl mb-3">📋</p>
-            <p style={{ color: 'var(--text-muted)' }}>No hay servicios completados para este cliente.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay servicios para este cliente.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -148,30 +197,35 @@ export default function ClienteDetalle() {
               const abierta = ordenAbierta === o.id
               return (
                 <div key={o.id} className="rounded-2xl overflow-hidden transition-all" style={s.cardStyle}>
-                  <button
-                    onClick={() => toggleOrden(o.id)}
-                    className="w-full px-5 py-4 flex items-center justify-between text-left"
-                    style={{ background: 'transparent' }}
-                  >
-                    <div className="flex items-center gap-3 flex-wrap">
+                  <div className="w-full px-5 py-4 flex items-center justify-between">
+                    <button className="flex items-center gap-3 flex-wrap flex-1 text-left"
+                      onClick={() => toggleOrden(o.id)}>
                       <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{o.codigo}</span>
                       <span className="text-xs px-2 py-0.5 rounded-full capitalize" style={{ background: TIPO_OT[o.tipo]?.bg, color: TIPO_OT[o.tipo]?.color }}>
                         {o.tipo}
                       </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ESTADO_OT[o.estado]?.bg, color: ESTADO_OT[o.estado]?.color }}>
+                        {ESTADO_OT[o.estado]?.label}
+                      </span>
                       <span className="text-sm" style={{ color: 'var(--text)' }}>
                         {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}>
-                        Completada
                       </span>
                       {fotos.length > 0 && (
                         <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>{fotos.length} fotos</span>
                       )}
+                    </button>
+                    <div className="flex items-center gap-2 ml-2">
+                      <button
+                        onClick={e => { e.stopPropagation(); setOrdenABorrar(o); setMostrarModalBorrar(true) }}
+                        className="text-xs px-2 py-1 rounded-lg"
+                        style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+                        Eliminar
+                      </button>
+                      <span className="text-lg" style={{ color: 'var(--text-muted)', transform: abierta ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.2s' }}>
+                        ▾
+                      </span>
                     </div>
-                    <span className="text-lg transition-transform" style={{ color: 'var(--text-muted)', transform: abierta ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                      ▾
-                    </span>
-                  </button>
+                  </div>
 
                   {abierta && (
                     <div className="px-5 pb-5" style={{ borderTop: '1px solid var(--border)' }}>
@@ -187,7 +241,6 @@ export default function ClienteDetalle() {
                           <p className="text-sm" style={{ color: 'var(--text)' }}>{o.observaciones}</p>
                         </div>
                       )}
-
                       {fotos.length === 0 ? (
                         <p className="text-sm mt-4" style={{ color: 'var(--text-subtle)' }}>Sin fotos registradas.</p>
                       ) : (
