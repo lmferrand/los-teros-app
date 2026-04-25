@@ -540,7 +540,7 @@ export default function Ordenes() {
                     style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                     Editar OT
                   </button>
-                  <button onClick={() => pedirEliminarOrden(ordenDetalle)}
+                  <button onClick={() => { setOrdenDetalle(null); setTimeout(() => pedirEliminarOrden(ordenDetalle), 100) }}
                     className="text-sm px-4 py-2 rounded-xl"
                     style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
                     Eliminar
