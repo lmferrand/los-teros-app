@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     )
 
     const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: 'https://los-teros-app.vercel.app/dashboard',
+      redirectTo: 'https://los-teros-app.vercel.app/auth/confirm',
       data: { nombre, rol }
     })
 
