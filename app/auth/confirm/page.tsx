@@ -8,15 +8,17 @@ export default function AuthConfirm() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        if (event === 'SIGNED_IN') {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        const esInvitacion = session.user.user_metadata?.nombre !== undefined
+        if (esInvitacion) {
           router.push('/auth/set-password')
         } else {
           router.push('/dashboard')
         }
       }
     })
+    return () => subscription.unsubscribe()
   }, [])
 
   return (
