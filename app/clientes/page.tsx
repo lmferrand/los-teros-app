@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { Fragment, useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import * as XLSX from 'xlsx'
 import { s } from '@/lib/styles'
+import AppHeader from '@/app/components/AppHeader'
 
 type ClienteImportado = {
   nombre: string
@@ -133,6 +135,14 @@ function normalizarClave(valor: string) {
   return normalizarCabecera(valor).trim()
 }
 
+function normalizarCif(valor: string) {
+  return String(valor || '')
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/-/g, '')
+    .trim()
+}
+
 function detectarFilaCabecera(filas: unknown[][]) {
   let mejorIndice = -1
   let mejorPuntuacion = -1
@@ -217,6 +227,8 @@ export default function Clientes() {
   const [email, setEmail] = useState('')
   const [notas, setNotas] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  const [soloSinCif, setSoloSinCif] = useState(false)
+  const [agruparPorCif, setAgruparPorCif] = useState(true)
 
   useEffect(() => {
     verificarSesion()
@@ -249,13 +261,14 @@ export default function Clientes() {
   function abrirFormEditar(c: any) {
     setEditandoId(c.id)
     setNombre(c.nombre || ''); setDireccion(c.direccion || '')
-    setCif(c.cif || ''); setTelefono(c.telefono || ''); setEmail(c.email || ''); setNotas(c.notas || '')
+    setCif(normalizarCif(c.cif || '')); setTelefono(c.telefono || ''); setEmail(c.email || ''); setNotas(c.notas || '')
     setMostrarForm(true)
   }
 
   async function guardarCliente(e: React.FormEvent) {
     e.preventDefault()
-    const datos = { nombre, cif, direccion, telefono, email, notas }
+    const cifNormalizado = normalizarCif(cif)
+    const datos = { nombre, cif: cifNormalizado || null, direccion, telefono, email, notas }
     if (editandoId) {
       await supabase.from('clientes').update(datos).eq('id', editandoId)
     } else {
@@ -320,23 +333,13 @@ export default function Clientes() {
         return
       }
 
-      const { data: existentes } = await supabase.from('clientes').select('id, nombre, cif')
-      const existentesPorNombre = new Map<string, any>()
-      const existentesPorCif = new Map<string, any>()
+      const { data: existentes } = await supabase.from('clientes').select('id, nombre, cif, direccion')
+      const existentesPorClave = new Map<string, any>()
       for (const c of existentes || []) {
-        const claveNombre = normalizarClave(String(c?.nombre || ''))
-        if (claveNombre && !existentesPorNombre.has(claveNombre)) existentesPorNombre.set(claveNombre, c)
-        const claveCif = normalizarClave(String(c?.cif || ''))
-        if (claveCif && !existentesPorCif.has(claveCif)) existentesPorCif.set(claveCif, c)
+        const clave = `${normalizarClave(String(c?.nombre || ''))}|${normalizarClave(String(c?.direccion || ''))}`
+        if (clave && !existentesPorClave.has(clave)) existentesPorClave.set(clave, c)
       }
-      const nombresExistentes = new Set(
-        (existentes || []).map((c: any) => normalizarClave(String(c?.nombre || ''))).filter(Boolean)
-      )
-      const cifsExistentes = new Set(
-        (existentes || []).map((c: any) => normalizarClave(String(c?.cif || ''))).filter(Boolean)
-      )
-      const nombresEnArchivo = new Set<string>()
-      const cifsEnArchivo = new Set<string>()
+      const clavesEnArchivo = new Set<string>()
       const actualizaciones: { id: string; cif: string }[] = []
 
       const registros: ClienteImportado[] = []
@@ -347,7 +350,7 @@ export default function Clientes() {
       for (let i = deteccion.indice + 1; i < filas.length; i++) {
         const fila = filas[i] || []
         const nombreFila = valorCelda(fila, idxNombre)
-        const cifFila = valorCelda(fila, idxCif)
+        const cifFila = normalizarCif(valorCelda(fila, idxCif))
         const direccionFila = construirDireccion([
           valorCelda(fila, idxDireccion),
           valorCelda(fila, idxPoblacion),
@@ -377,33 +380,28 @@ export default function Clientes() {
         }
 
         const claveNombre = normalizarClave(nombreFila)
-        const claveCif = normalizarClave(cifFila)
         if (!claveNombre) {
           omitidas++
           continue
         }
 
-        const duplicadoNombre = nombresExistentes.has(claveNombre) || nombresEnArchivo.has(claveNombre)
-        const duplicadoCif = !!claveCif && (cifsExistentes.has(claveCif) || cifsEnArchivo.has(claveCif))
-        if (duplicadoNombre || duplicadoCif) {
-          const existentePorNombre = existentesPorNombre.get(claveNombre)
-          const existentePorCif = claveCif ? existentesPorCif.get(claveCif) : null
-          const existente = existentePorNombre || existentePorCif
-
-          if (existente?.id && claveCif) {
-            const cifActual = normalizarClave(String(existente.cif || ''))
-            if (!cifActual || cifActual !== claveCif) {
-              actualizaciones.push({ id: existente.id, cif: cifFila })
-              if (!cifsExistentes.has(claveCif)) cifsExistentes.add(claveCif)
-              continue
-            }
+        const claveFila = `${claveNombre}|${normalizarClave(direccionFila)}`
+        const existente = existentesPorClave.get(claveFila)
+        if (existente?.id) {
+          const cifActual = normalizarCif(String(existente.cif || ''))
+          if (cifFila && (!cifActual || cifActual !== cifFila)) {
+            actualizaciones.push({ id: existente.id, cif: cifFila })
+          } else {
+            omitidasDuplicadas++
           }
+          continue
+        }
 
+        if (clavesEnArchivo.has(claveFila)) {
           omitidasDuplicadas++
           continue
         }
-        nombresEnArchivo.add(claveNombre)
-        if (claveCif) cifsEnArchivo.add(claveCif)
+        clavesEnArchivo.add(claveFila)
 
         registros.push({
           nombre: nombreFila,
@@ -512,36 +510,58 @@ export default function Clientes() {
   }
 
   const termino = normalizarClave(busqueda)
+  const baseClientes = soloSinCif
+    ? clientes.filter((c: any) => !String(c?.cif || '').trim())
+    : clientes
   const clientesFiltrados = termino
-    ? clientes.filter((c: any) =>
+    ? baseClientes.filter((c: any) =>
         [c?.nombre, c?.cif, c?.telefono, c?.email, c?.direccion]
           .map((v) => normalizarClave(String(v || '')))
           .some((v) => v.includes(termino))
       )
-    : clientes
+    : baseClientes
+  const clientesOrdenados = [...clientesFiltrados].sort((a: any, b: any) => {
+    if (!agruparPorCif) {
+      return String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es', { sensitivity: 'base' })
+    }
+
+    const cifA = normalizarCif(String(a?.cif || ''))
+    const cifB = normalizarCif(String(b?.cif || ''))
+
+    if (!cifA && cifB) return 1
+    if (cifA && !cifB) return -1
+    if (cifA !== cifB) return cifA.localeCompare(cifB, 'es', { sensitivity: 'base' })
+
+    return String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es', { sensitivity: 'base' })
+  })
+  const conteoPorCif = new Map<string, number>()
+  if (agruparPorCif) {
+    for (const c of clientesOrdenados) {
+      const key = normalizarCif(String(c?.cif || ''))
+      if (!key) continue
+      conteoPorCif.set(key, (conteoPorCif.get(key) || 0) + 1)
+    }
+  }
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
-          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Clientes</h1>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <button onClick={exportarExcel} className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
-            Exportar Excel
-          </button>
-          <label className="text-sm px-4 py-2 rounded-xl cursor-pointer" style={s.btnSecondary}>
-            {importando ? 'Importando...' : 'Importar Excel'}
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importarExcel} disabled={importando} />
-          </label>
-          <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-            + Nuevo cliente
-          </button>
-        </div>
-      </div>
+      <AppHeader
+        title="Clientes"
+        rightSlot={
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={exportarExcel} className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
+              Exportar Excel
+            </button>
+            <label className="text-sm px-4 py-2 rounded-xl cursor-pointer" style={s.btnSecondary}>
+              {importando ? 'Importando...' : 'Importar Excel'}
+              <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importarExcel} disabled={importando} />
+            </label>
+            <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+              + Nuevo cliente
+            </button>
+          </div>
+        }
+      />
 
       <div className="p-6 max-w-6xl mx-auto">
         {resultadoImport && (
@@ -607,6 +627,22 @@ export default function Clientes() {
             style={s.inputStyle}
             placeholder="Nombre, CIF, telefono, email..."
           />
+          <div className="mt-3 flex gap-2 flex-wrap">
+            <button
+              onClick={() => setSoloSinCif((prev) => !prev)}
+              className="text-xs px-3 py-1 rounded-lg"
+              style={soloSinCif ? s.btnPrimary : s.btnSecondary}
+            >
+              {soloSinCif ? 'Mostrando solo sin CIF' : 'Filtrar solo sin CIF'}
+            </button>
+            <button
+              onClick={() => setAgruparPorCif((prev) => !prev)}
+              className="text-xs px-3 py-1 rounded-lg"
+              style={agruparPorCif ? s.btnPrimary : s.btnSecondary}
+            >
+              {agruparPorCif ? 'Agrupado por CIF' : 'Sin agrupar por CIF'}
+            </button>
+          </div>
         </div>
 
         {mostrarForm && (
@@ -619,7 +655,7 @@ export default function Clientes() {
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>CIF</label>
-                <input value={cif} onChange={e => setCif(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="B12345678" />
+                <input value={cif} onChange={e => setCif(normalizarCif(e.target.value))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="B12345678" />
               </div>
               <div className="md:col-span-2">
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Direccion</label>
@@ -662,10 +698,10 @@ export default function Clientes() {
           <div className="rounded-2xl overflow-hidden" style={s.cardStyle}>
             <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                {clientesFiltrados.length} de {clientes.length} clientes
+                {clientesOrdenados.length} de {clientes.length} clientes
               </p>
             </div>
-            {clientesFiltrados.length === 0 ? (
+            {clientesOrdenados.length === 0 ? (
               <div className="p-6">
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No hay resultados para esa busqueda.</p>
               </div>
@@ -680,12 +716,33 @@ export default function Clientes() {
                   </tr>
                 </thead>
                 <tbody>
-                  {clientesFiltrados.map(c => (
+                  {clientesOrdenados.map((c, index) => {
+                    const cifActual = normalizarCif(String(c?.cif || ''))
+                    const cifPrevio = normalizarCif(String(clientesOrdenados[index - 1]?.cif || ''))
+                    const inicioGrupoCif = agruparPorCif && !!cifActual && cifActual !== cifPrevio
+                    const inicioGrupoSinCif = agruparPorCif && !cifActual && cifPrevio !== ''
+
+                    return (
+                      <Fragment key={c.id}>
+                        {inicioGrupoCif && (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(6,182,212,0.08)', color: '#06b6d4', borderBottom: '1px solid var(--border)' }}>
+                              CIF {cifActual} - {conteoPorCif.get(cifActual) || 0} locales
+                            </td>
+                          </tr>
+                        )}
+                        {inicioGrupoSinCif && (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(124,58,237,0.08)', color: '#a78bfa', borderBottom: '1px solid var(--border)' }}>
+                              Sin CIF
+                            </td>
+                          </tr>
+                        )}
                     <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.05)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                       <td className="px-4 py-3">
-                        <a href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</a>
+                        <Link href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</Link>
                         {c.notas && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.notas.substring(0, 50)}</p>}
                       </td>
                       <td className="px-4 py-3">
@@ -723,7 +780,9 @@ export default function Clientes() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

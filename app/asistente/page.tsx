@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
+import AppHeader from '@/app/components/AppHeader'
 
 export default function Asistente() {
   const [mensajes, setMensajes] = useState<any[]>([
@@ -87,18 +88,15 @@ ${(clientes.data || []).map((c: any) => c.nombre).join(', ')}
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
-          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Asistente IA</h1>
+      <AppHeader
+        title="Asistente IA"
+        leftSlot={
           <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
             powered by Groq
           </span>
-        </div>
-        {perfil && <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{perfil.nombre}</span>}
-      </div>
+        }
+        rightSlot={perfil ? <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{perfil.nombre}</span> : null}
+      />
 
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 max-w-3xl mx-auto w-full">
         <div className="flex flex-wrap gap-2 mb-2">

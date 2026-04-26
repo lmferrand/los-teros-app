@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
+import AppHeader from '@/app/components/AppHeader'
 import {
   cargarMovimientosOrden,
   eliminarArchivosFotosOrden,
@@ -467,36 +468,31 @@ export default function Ordenes() {
         </div>
       )}
 
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
-            Dashboard
-          </a>
-          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Ordenes de trabajo</h1>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
-            className="text-sm rounded-xl px-3 py-2 outline-none" style={s.inputStyle}>
-            <option value="">Todos los estados</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="en_curso">En curso</option>
-            <option value="completada">Completada</option>
-            <option value="cancelada">Cancelada</option>
-          </select>
-          {!!userId && (
-            <button onClick={() => setSoloMias(prev => !prev)} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnSecondary}>
-              {soloMias ? 'Ver todas' : 'Solo mis OTs'}
-            </button>
-          )}
-          {puedeCrearEditar && (
-            <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-              + Nueva OT
-            </button>
-          )}
-        </div>
-      </div>
+      <AppHeader
+        title="Ordenes de trabajo"
+        rightSlot={
+          <div className="flex items-center gap-3 flex-wrap">
+            <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}
+              className="text-sm rounded-xl px-3 py-2 outline-none" style={s.inputStyle}>
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="en_curso">En curso</option>
+              <option value="completada">Completada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+            {!!userId && (
+              <button onClick={() => setSoloMias(prev => !prev)} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnSecondary}>
+                {soloMias ? 'Ver todas' : 'Solo mis OTs'}
+              </button>
+            )}
+            {puedeCrearEditar && (
+              <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+                + Nueva OT
+              </button>
+            )}
+          </div>
+        }
+      />
 
       <div className="p-6 max-w-5xl mx-auto">
         {mostrarForm && puedeCrearEditar && (

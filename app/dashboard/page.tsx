@@ -4,6 +4,7 @@ import { useTheme } from '@/lib/useTheme'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
@@ -103,11 +104,11 @@ export default function Dashboard() {
     { href: '/trabajadores', icono: '👷', titulo: 'Trabajadores', desc: 'Gestion personal', soloAdmin: true },
   ]
 
-  const bgCard = tema === 'dark' ? '#0d1117' : '#ffffff'
-  const bgMain = tema === 'dark' ? '#080b14' : '#f8fafc'
-  const border = tema === 'dark' ? '#1e2d3d' : '#e2e8f0'
-  const textColor = tema === 'dark' ? 'white' : '#0f172a'
-  const textMuted = tema === 'dark' ? '#475569' : '#64748b'
+  const bgCard = 'var(--bg-card)'
+  const bgMain = 'var(--bg)'
+  const border = 'var(--border)'
+  const textColor = 'var(--text)'
+  const textMuted = 'var(--text-muted)'
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: bgMain }}>
@@ -122,7 +123,7 @@ export default function Dashboard() {
     <div className="min-h-screen" style={{ background: bgMain }}>
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={{ background: bgCard, borderBottom: `1px solid ${border}` }}>
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Los Teros" className="w-10 h-10 object-contain" style={{ mixBlendMode: tema === 'dark' ? 'screen' : 'normal' }} />
+          <img src="/logo.png" alt="Los Teros" className="w-10 h-10 object-contain" />
           <div>
             <h1 className="font-bold text-lg leading-tight" style={{ color: textColor }}>LOS TEROS</h1>
             <p className="text-xs" style={{ color: '#06b6d4' }}>Gestion Operativa</p>
@@ -174,9 +175,9 @@ export default function Dashboard() {
                 </div>
               ))}
             </div>
-            <a href="/planificacion" className="block mt-3 text-xs hover:opacity-80 transition-opacity" style={{ color: '#06b6d4' }}>
+            <Link href="/planificacion" className="block mt-3 text-xs hover:opacity-80 transition-opacity" style={{ color: '#06b6d4' }}>
               Ver todas mis ordenes →
-            </a>
+            </Link>
           </div>
         )}
 
@@ -212,14 +213,18 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {MODULOS.filter(m => m.siempre || (!esTecnico && m.soloAdmin)).map(m => (
-            <a key={m.href} href={m.href} className="rounded-xl p-5 block transition-all"
+            <Link key={m.href} href={m.href} className="rounded-xl p-5 block transition-all"
               style={{ background: bgCard, border: `1px solid ${border}` }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
               onMouseLeave={e => e.currentTarget.style.borderColor = border}>
-              <div className="text-2xl mb-3">{m.icono}</div>
+              {m.href === '/asistente' ? (
+                <img src="/assistant-ia-teros.png" alt="Asistente IA" className="w-9 h-9 object-contain mb-3" />
+              ) : (
+                <div className="text-2xl mb-3">{m.icono}</div>
+              )}
               <h2 className="font-semibold text-sm" style={{ color: textColor }}>{m.titulo}</h2>
               <p className="text-xs mt-1" style={{ color: textMuted }}>{m.desc}</p>
-            </a>
+            </Link>
           ))}
         </div>
       </div>

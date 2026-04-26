@@ -3,6 +3,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import {
+  ESTADOS_PRESUPUESTO,
+  calcularEstadoPresupuesto,
+  calcularFechaExpiracion,
+  normalizarEstadoPresupuesto,
+} from '@/lib/presupuestos'
+import AppHeader from '@/app/components/AppHeader'
 
 export default function Planificacion() {
   const [ordenes, setOrdenes] = useState<any[]>([])
@@ -34,6 +41,20 @@ export default function Planificacion() {
     cargarDatos()
   }, [])
 
+  async function sincronizarPresupuestosExpirados(items: any[]) {
+    const ahora = new Date()
+    const idsAExpirar = items
+      .filter((p) => {
+        const estadoActual = normalizarEstadoPresupuesto(p.estado)
+        if (estadoActual === 'aceptado' || estadoActual === 'cancelado' || estadoActual === 'expirado') return false
+        return calcularEstadoPresupuesto(estadoActual, p.fecha_envio, ahora) === 'expirado'
+      })
+      .map((p) => p.id)
+
+    if (idsAExpirar.length === 0) return
+    await supabase.from('presupuestos').update({ estado: 'expirado' }).in('id', idsAExpirar)
+  }
+
   async function cargarDatos() {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
@@ -47,7 +68,14 @@ export default function Planificacion() {
     if (ords.data) setOrdenes(ords.data)
     if (clis.data) setClientes(clis.data)
     if (tecs.data) setTecnicos(tecs.data)
-    if (pres.data) setPresupuestos(pres.data)
+    if (pres.data) {
+      await sincronizarPresupuestosExpirados(pres.data)
+      const ahora = new Date()
+      setPresupuestos(pres.data.map((p) => ({
+        ...p,
+        estado: calcularEstadoPresupuesto(p.estado, p.fecha_envio, ahora),
+      })))
+    }
     setLoading(false)
   }
 
@@ -299,9 +327,9 @@ export default function Planificacion() {
 
   const ESTADOS_PRES: any = {
     enviado: { clase: 'bg-blue-900 text-blue-300 border border-blue-700', label: 'Enviado' },
-    pendiente: { clase: 'bg-yellow-900 text-yellow-300 border border-yellow-700', label: 'Pendiente' },
+    esperando_respuesta: { clase: 'bg-yellow-900 text-yellow-300 border border-yellow-700', label: 'Esperando respuesta' },
     aceptado: { clase: 'bg-green-900 text-green-300 border border-green-700', label: 'Aceptado' },
-    rechazado: { clase: 'bg-red-900 text-red-300 border border-red-700', label: 'Rechazado' },
+    cancelado: { clase: 'bg-red-900 text-red-300 border border-red-700', label: 'Cancelado' },
     expirado: { clase: 'bg-gray-800 text-gray-400 border border-gray-700', label: 'Expirado' },
   }
 
@@ -322,8 +350,9 @@ export default function Planificacion() {
   }).sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
 
   const presEnviados = presupuestos.filter(p => p.estado === 'enviado').length
+  const presEsperando = presupuestos.filter(p => p.estado === 'esperando_respuesta').length
   const presAceptados = presupuestos.filter(p => p.estado === 'aceptado').length
-  const presPendientes = presupuestos.filter(p => p.estado === 'pendiente').length
+  const presAbiertos = presEnviados + presEsperando
 
   async function generarNumeroPres() {
     const { count } = await supabase.from('presupuestos').select('*', { count: 'exact', head: true })
@@ -337,7 +366,7 @@ export default function Planificacion() {
       setPresClienteId(p.cliente_id || '')
       setPresTitulo(p.titulo || '')
       setPresImporte(String(p.importe || 0))
-      setPresEstado(p.estado || 'enviado')
+      setPresEstado(normalizarEstadoPresupuesto(p.estado || 'enviado'))
       setPresFecha(p.fecha_envio || new Date().toISOString().slice(0, 10))
       setPresObs(p.observaciones || '')
     } else {
@@ -354,11 +383,12 @@ export default function Planificacion() {
 
   async function guardarPresupuesto(e: React.FormEvent) {
     e.preventDefault()
+    const estadoFinal = calcularEstadoPresupuesto(presEstado, presFecha)
     const datos = {
       cliente_id: presClienteId || null,
       titulo: presTitulo,
       importe: parseFloat(presImporte) || 0,
-      estado: presEstado,
+      estado: estadoFinal,
       fecha_envio: presFecha,
       observaciones: presObs,
     }
@@ -375,7 +405,12 @@ export default function Planificacion() {
   }
 
   async function cambiarEstadoPres(id: string, nuevoEstado: string) {
-    await supabase.from('presupuestos').update({ estado: nuevoEstado }).eq('id', id)
+    const pres = presupuestos.find(p => p.id === id)
+    if (!pres) return
+    const estadoActual = calcularEstadoPresupuesto(pres.estado, pres.fecha_envio)
+    const estadoFinal = calcularEstadoPresupuesto(nuevoEstado, pres.fecha_envio)
+    if (estadoActual === estadoFinal) return
+    await supabase.from('presupuestos').update({ estado: estadoFinal }).eq('id', id)
     cargarDatos()
   }
 
@@ -393,24 +428,25 @@ export default function Planificacion() {
 
   return (
     <div className="min-h-screen bg-gray-950">
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-gray-400 hover:text-white text-sm">Dashboard</a>
-          <h1 className="text-xl font-bold text-white">Planificacion</h1>
-        </div>
-        {vistaActiva === 'calendario' && (
-          <div className="flex items-center gap-3">
-            <button onClick={mesAnterior} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm">Anterior</button>
-            <span className="text-white font-mono font-bold text-sm min-w-40 text-center">{tituloMes}</span>
-            <button onClick={mesSiguiente} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm">Siguiente</button>
-          </div>
-        )}
-        {vistaActiva === 'presupuestos' && (
-          <button onClick={() => abrirFormPres()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
-            + Nuevo presupuesto
-          </button>
-        )}
-      </div>
+      <AppHeader
+        title="Planificacion"
+        rightSlot={
+          <>
+            {vistaActiva === 'calendario' && (
+              <div className="flex items-center gap-3">
+                <button onClick={mesAnterior} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm">Anterior</button>
+                <span className="text-white font-mono font-bold text-sm min-w-40 text-center">{tituloMes}</span>
+                <button onClick={mesSiguiente} className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm">Siguiente</button>
+              </div>
+            )}
+            {vistaActiva === 'presupuestos' && (
+              <button onClick={() => abrirFormPres()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                + Nuevo presupuesto
+              </button>
+            )}
+          </>
+        }
+      />
 
       <div className="p-6">
         <div className="flex gap-2 mb-6 flex-wrap">
@@ -425,8 +461,8 @@ export default function Planificacion() {
           </button>
           <button onClick={() => setVistaActiva('presupuestos')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vistaActiva === 'presupuestos' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
             Presupuestos
-            {presEnviados > 0 && (
-              <span className="ml-1 bg-yellow-600 text-white text-xs px-1.5 py-0.5 rounded-full">{presEnviados}</span>
+            {presAbiertos > 0 && (
+              <span className="ml-1 bg-yellow-600 text-white text-xs px-1.5 py-0.5 rounded-full">{presAbiertos}</span>
             )}
           </button>
           <button onClick={() => setVistaActiva('rutas')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vistaActiva === 'rutas' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
@@ -582,18 +618,22 @@ export default function Planificacion() {
 
         {vistaActiva === 'presupuestos' && (
           <div>
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-blue-950 border border-blue-800 rounded-xl p-4 text-center">
                 <p className="text-blue-300 text-2xl font-bold">{presEnviados}</p>
                 <p className="text-blue-400 text-sm">Enviados</p>
               </div>
               <div className="bg-yellow-950 border border-yellow-800 rounded-xl p-4 text-center">
-                <p className="text-yellow-300 text-2xl font-bold">{presPendientes}</p>
-                <p className="text-yellow-400 text-sm">Pendientes</p>
+                <p className="text-yellow-300 text-2xl font-bold">{presEsperando}</p>
+                <p className="text-yellow-400 text-sm">Esperando</p>
               </div>
               <div className="bg-green-950 border border-green-800 rounded-xl p-4 text-center">
                 <p className="text-green-300 text-2xl font-bold">{presAceptados}</p>
                 <p className="text-green-400 text-sm">Aceptados</p>
+              </div>
+              <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 text-center">
+                <p className="text-slate-300 text-2xl font-bold">{presupuestos.filter(p => p.estado === 'expirado').length}</p>
+                <p className="text-slate-400 text-sm">Expirados</p>
               </div>
             </div>
 
@@ -641,9 +681,9 @@ export default function Planificacion() {
                     <label className="text-gray-400 text-xs uppercase mb-1 block">Estado</label>
                     <select value={presEstado} onChange={e => setPresEstado(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm">
                       <option value="enviado">Enviado</option>
-                      <option value="pendiente">Pendiente respuesta</option>
+                      <option value="esperando_respuesta">Esperando respuesta</option>
                       <option value="aceptado">Aceptado</option>
-                      <option value="rechazado">Rechazado</option>
+                      <option value="cancelado">Cancelado</option>
                       <option value="expirado">Expirado</option>
                     </select>
                   </div>
@@ -670,13 +710,18 @@ export default function Planificacion() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {presupuestos.map(p => (
+                {presupuestos.map(p => {
+                  const estadoPres = calcularEstadoPresupuesto(p.estado, p.fecha_envio)
+                  const configEstado = ESTADOS_PRES[estadoPres]
+                  const fechaExpiracion = calcularFechaExpiracion(p.fecha_envio)
+
+                  return (
                   <div key={p.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                     <div className="flex items-start justify-between flex-wrap gap-3 mb-3">
                       <div>
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <span className="text-blue-400 font-mono text-sm">{p.numero}</span>
-                          <span className={`text-xs px-2 py-1 rounded-full ${ESTADOS_PRES[p.estado]?.clase}`}>{ESTADOS_PRES[p.estado]?.label}</span>
+                          <span className={`text-xs px-2 py-1 rounded-full ${configEstado?.clase}`}>{configEstado?.label}</span>
                         </div>
                         <p className="text-white font-semibold">{p.titulo}</p>
                         <p className="text-gray-400 text-sm">{p.clientes?.nombre || '—'}</p>
@@ -697,6 +742,7 @@ export default function Planificacion() {
                             </div>
                           ) : null
                         })()}
+                        {fechaExpiracion && <p className="text-gray-500 text-xs mt-1">Caduca: {fechaExpiracion.toLocaleDateString('es-ES')}</p>}
                         {p.observaciones && <p className="text-gray-500 text-xs mt-1">{p.observaciones}</p>}
                       </div>
                       <div className="text-right">
@@ -706,17 +752,21 @@ export default function Planificacion() {
                     </div>
                     <div className="border-t border-gray-800 pt-3 flex flex-wrap gap-2 items-center">
                       <p className="text-gray-500 text-xs mr-1">Estado:</p>
-                      {Object.entries(ESTADOS_PRES).map(([key, val]: any) => (
-                        <button key={key} onClick={() => cambiarEstadoPres(p.id, key)}
-                          className={`text-xs px-3 py-1 rounded-full border transition-opacity ${val.clase} ${p.estado === key ? 'opacity-100 ring-2 ring-white ring-opacity-30' : 'opacity-40 hover:opacity-80'}`}>
-                          {val.label}
-                        </button>
-                      ))}
+                      {ESTADOS_PRESUPUESTO.map((key) => {
+                        const val: any = ESTADOS_PRES[key]
+                        return (
+                          <button key={key} onClick={() => cambiarEstadoPres(p.id, key)}
+                            className={`text-xs px-3 py-1 rounded-full border transition-opacity ${val.clase} ${estadoPres === key ? 'opacity-100 ring-2 ring-white ring-opacity-30' : 'opacity-40 hover:opacity-80'}`}>
+                            {val.label}
+                          </button>
+                        )
+                      })}
                       <button onClick={() => abrirFormPres(p)} className="ml-auto bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1 rounded text-xs">Editar</button>
                       <button onClick={() => eliminarPres(p.id)} className="bg-gray-800 hover:bg-gray-700 text-red-400 px-3 py-1 rounded text-xs">Eliminar</button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

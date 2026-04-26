@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { s } from '@/lib/styles'
 import { eliminarArchivosFotosOrden, eliminarOrdenConIntegridad } from '@/lib/ordenes-integridad'
+import AppHeader from '@/app/components/AppHeader'
 
 export default function ClienteDetalle() {
   const [cliente, setCliente] = useState<any>(null)
@@ -13,6 +14,7 @@ export default function ClienteDetalle() {
   const [fotosPorOrden, setFotosPorOrden] = useState<Record<string, any[]>>({})
   const [loading, setLoading] = useState(true)
   const [ordenAbierta, setOrdenAbierta] = useState<string | null>(null)
+  const [localesMismoCif, setLocalesMismoCif] = useState<any[]>([])
   const [perfil, setPerfil] = useState<any>(null)
   const [mostrarModalBorrar, setMostrarModalBorrar] = useState(false)
   const [ordenABorrar, setOrdenABorrar] = useState<any>(null)
@@ -52,7 +54,21 @@ export default function ClienteDetalle() {
       supabase.from('ordenes').select('*').eq('cliente_id', id).order('fecha_programada', { ascending: false }),
     ])
 
-    if (cli.data) setCliente(cli.data)
+    if (cli.data) {
+      setCliente(cli.data)
+      const cif = String(cli.data.cif || '').trim()
+      if (cif) {
+        const { data: relacionados } = await supabase
+          .from('clientes')
+          .select('id, nombre, direccion')
+          .eq('cif', cif)
+          .neq('id', id)
+          .order('nombre')
+        setLocalesMismoCif(relacionados || [])
+      } else {
+        setLocalesMismoCif([])
+      }
+    }
     if (ords.data) {
       setOrdenes(ords.data)
       const ordenIds = ords.data.map((o: any) => o.id)
@@ -181,21 +197,23 @@ export default function ClienteDetalle() {
         </div>
       )}
 
-      <div className="px-6 py-4 flex items-center gap-4" style={s.headerStyle}>
-        <Link
-          href="/clientes"
-          className="text-sm transition-colors"
-          style={{ color: 'var(--text-muted)' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = '#06b6d4')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-        >
-          Clientes
-        </Link>
-        <span style={{ color: 'var(--text-subtle)' }}>{'>'}</span>
-        <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>
-          {cliente.nombre}
-        </h1>
-      </div>
+      <AppHeader
+        title={cliente.nombre}
+        leftSlot={
+          <>
+            <Link
+              href="/clientes"
+              className="text-sm transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#06b6d4')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+            >
+              Clientes
+            </Link>
+            <span style={{ color: 'var(--text-subtle)' }}>{'>'}</span>
+          </>
+        }
+      />
 
       <div className="p-6 max-w-4xl mx-auto">
         <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
@@ -242,6 +260,21 @@ export default function ClienteDetalle() {
             </div>
           </div>
         </div>
+
+        {localesMismoCif.length > 0 && (
+          <div className="rounded-2xl p-4 mb-6" style={{ ...s.cardStyle, background: 'rgba(6,182,212,0.06)' }}>
+            <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
+              Otros locales con este CIF
+            </p>
+            <div className="flex flex-col gap-2">
+              {localesMismoCif.map((l: any) => (
+                <Link key={l.id} href={`/clientes/${l.id}`} className="text-sm hover:underline" style={{ color: '#06b6d4' }}>
+                  {l.nombre}{l.direccion ? ` - ${l.direccion}` : ''}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         <h2 className="font-semibold text-lg mb-4" style={{ color: 'var(--text)' }}>
           Historial de servicios

@@ -4,6 +4,13 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
+import AppHeader from '@/app/components/AppHeader'
+import {
+  ESTADOS_PRESUPUESTO,
+  calcularEstadoPresupuesto,
+  calcularFechaExpiracion,
+  normalizarEstadoPresupuesto,
+} from '@/lib/presupuestos'
 
 export default function Planificacion() {
   const [ordenes, setOrdenes] = useState<any[]>([])
@@ -22,6 +29,9 @@ export default function Planificacion() {
   const [calculando, setCalculando] = useState(false)
   const [escaneando, setEscaneando] = useState(false)
   const [datosEscaneados, setDatosEscaneados] = useState<any>(null)
+  const [mapaPeriodo, setMapaPeriodo] = useState<'dia' | 'semana' | 'mes'>('dia')
+  const [fechaMapa, setFechaMapa] = useState(new Date().toISOString().slice(0, 10))
+  const [rutaMapaId, setRutaMapaId] = useState('general')
   const router = useRouter()
 
   const [presClienteId, setPresClienteId] = useState('')
@@ -30,8 +40,23 @@ export default function Planificacion() {
   const [presEstado, setPresEstado] = useState('enviado')
   const [presFecha, setPresFecha] = useState('')
   const [presObs, setPresObs] = useState('')
+  const DIRECCION_BASE_RUTA = 'Calle Leonardo Da Vinci 12, Elche'
 
   useEffect(() => { cargarDatos() }, [])
+
+  async function sincronizarPresupuestosExpirados(items: any[]) {
+    const ahora = new Date()
+    const idsAExpirar = items
+      .filter((p) => {
+        const estadoActual = normalizarEstadoPresupuesto(p.estado)
+        if (estadoActual === 'aceptado' || estadoActual === 'cancelado' || estadoActual === 'expirado') return false
+        return calcularEstadoPresupuesto(estadoActual, p.fecha_envio, ahora) === 'expirado'
+      })
+      .map((p) => p.id)
+
+    if (idsAExpirar.length === 0) return
+    await supabase.from('presupuestos').update({ estado: 'expirado' }).in('id', idsAExpirar)
+  }
 
   async function cargarDatos() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -46,7 +71,14 @@ export default function Planificacion() {
     if (ords.data) setOrdenes(ords.data)
     if (clis.data) setClientes(clis.data)
     if (tecs.data) setTecnicos(tecs.data)
-    if (pres.data) setPresupuestos(pres.data)
+    if (pres.data) {
+      await sincronizarPresupuestosExpirados(pres.data)
+      const ahora = new Date()
+      setPresupuestos(pres.data.map((p) => ({
+        ...p,
+        estado: calcularEstadoPresupuesto(p.estado, p.fecha_envio, ahora),
+      })))
+    }
     setLoading(false)
   }
 
@@ -86,6 +118,84 @@ export default function Planificacion() {
       const f = new Date(o.fecha_programada)
       return f.getDate() === dia.getDate() && f.getMonth() === dia.getMonth() && f.getFullYear() === dia.getFullYear()
     })
+  }
+
+  function calcularRangoMapa(periodo: 'dia' | 'semana' | 'mes', fechaBaseIso: string) {
+    const base = new Date(`${fechaBaseIso}T12:00:00`)
+    if (Number.isNaN(base.getTime())) {
+      const ahora = new Date()
+      return { inicio: ahora, fin: ahora, etiqueta: ahora.toLocaleDateString('es-ES') }
+    }
+
+    const inicio = new Date(base)
+    const fin = new Date(base)
+
+    if (periodo === 'dia') {
+      inicio.setHours(0, 0, 0, 0)
+      fin.setHours(23, 59, 59, 999)
+      return {
+        inicio,
+        fin,
+        etiqueta: inicio.toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }),
+      }
+    }
+
+    if (periodo === 'semana') {
+      const diaSemana = base.getDay() === 0 ? 6 : base.getDay() - 1
+      inicio.setDate(base.getDate() - diaSemana)
+      inicio.setHours(0, 0, 0, 0)
+      fin.setTime(inicio.getTime())
+      fin.setDate(inicio.getDate() + 6)
+      fin.setHours(23, 59, 59, 999)
+      return {
+        inicio,
+        fin,
+        etiqueta: `Semana ${inicio.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} - ${fin.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`,
+      }
+    }
+
+    inicio.setDate(1)
+    inicio.setHours(0, 0, 0, 0)
+    fin.setMonth(inicio.getMonth() + 1, 0)
+    fin.setHours(23, 59, 59, 999)
+    return {
+      inicio,
+      fin,
+      etiqueta: inicio.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
+    }
+  }
+
+  function normalizarDirecciones(lista: string[]) {
+    const vistas = new Set<string>()
+    const result: string[] = []
+    for (const dir of lista) {
+      const limpia = String(dir || '').trim()
+      if (!limpia) continue
+      const clave = limpia.toLowerCase()
+      if (vistas.has(clave)) continue
+      vistas.add(clave)
+      result.push(limpia)
+    }
+    return result
+  }
+
+  function crearMapaEmbedUrl(direcciones: string[]) {
+    if (direcciones.length === 0) return null
+    const paradas = direcciones.slice(0, 8)
+    if (paradas.length === 1) return `https://maps.google.com/maps?q=${encodeURIComponent(paradas[0])}&output=embed`
+    const daddr = encodeURIComponent(paradas.join(' to '))
+    return `https://maps.google.com/maps?saddr=${encodeURIComponent(DIRECCION_BASE_RUTA)}&daddr=${daddr}&dirflg=d&output=embed`
+  }
+
+  function crearRutaGoogleMapsUrl(direcciones: string[]) {
+    if (direcciones.length === 0) return null
+    const paradas = direcciones.slice(0, 10)
+    if (paradas.length === 1) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(paradas[0])}`
+    const destino = paradas[paradas.length - 1]
+    const waypoints = paradas.slice(0, -1).join('|')
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(DIRECCION_BASE_RUTA)}&destination=${encodeURIComponent(destino)}&travelmode=driving`
+    if (waypoints) url += `&waypoints=${encodeURIComponent(waypoints)}`
+    return url
   }
 
   const ZONAS: any = {
@@ -223,9 +333,9 @@ export default function Planificacion() {
 
   const ESTADOS_PRES: any = {
     enviado: { color: '#06b6d4', bg: 'rgba(6,182,212,0.15)', border: 'rgba(6,182,212,0.3)', label: 'Enviado' },
-    pendiente: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)', border: 'rgba(234,179,8,0.3)', label: 'Pendiente' },
+    esperando_respuesta: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)', border: 'rgba(234,179,8,0.3)', label: 'Esperando respuesta' },
     aceptado: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.3)', label: 'Aceptado' },
-    rechazado: { color: '#f87171', bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)', label: 'Rechazado' },
+    cancelado: { color: '#f87171', bg: 'rgba(239,68,68,0.15)', border: 'rgba(239,68,68,0.3)', label: 'Cancelado' },
     expirado: { color: '#64748b', bg: 'rgba(71,85,105,0.15)', border: 'rgba(71,85,105,0.3)', label: 'Expirado' },
   }
 
@@ -245,9 +355,64 @@ export default function Planificacion() {
     return f >= lunes && f <= domingo
   }).sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
 
+  const { inicio: inicioMapa, fin: finMapa, etiqueta: etiquetaMapa } = calcularRangoMapa(mapaPeriodo, fechaMapa)
+
+  const ordenesMapa = ordenes
+    .filter((o) => {
+      if (!o.fecha_programada) return false
+      const fecha = new Date(o.fecha_programada)
+      return fecha >= inicioMapa && fecha <= finMapa
+    })
+    .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
+
+  const direccionesGenerales: string[] = []
+  const rutasMapaPorTecnico = new Map<string, { id: string; nombre: string; ordenes: any[]; direcciones: string[] }>()
+
+  for (const o of ordenesMapa) {
+    const cliente = clientes.find((c) => c.id === o.cliente_id)
+    const direccion = String(cliente?.direccion || '').trim()
+    if (direccion) direccionesGenerales.push(direccion)
+
+    let tecnicosAsignados: string[] = []
+    if (Array.isArray(o.tecnicos_ids) && o.tecnicos_ids.length > 0) tecnicosAsignados = o.tecnicos_ids
+    else if (o.tecnico_id) tecnicosAsignados = [o.tecnico_id]
+    else tecnicosAsignados = ['sin_asignar']
+
+    for (const tecnicoId of tecnicosAsignados) {
+      const key = `tec-${tecnicoId}`
+      if (!rutasMapaPorTecnico.has(key)) {
+        const nombreTecnico = tecnicoId === 'sin_asignar'
+          ? 'Sin asignar'
+          : tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico'
+        rutasMapaPorTecnico.set(key, { id: key, nombre: nombreTecnico, ordenes: [], direcciones: [] })
+      }
+      const rutaTec = rutasMapaPorTecnico.get(key)!
+      rutaTec.ordenes.push(o)
+      if (direccion) rutaTec.direcciones.push(direccion)
+    }
+  }
+
+  const rutasMapa = [
+    {
+      id: 'general',
+      nombre: 'Ruta general empresa',
+      ordenes: ordenesMapa,
+      direcciones: normalizarDirecciones(direccionesGenerales),
+    },
+    ...Array.from(rutasMapaPorTecnico.values())
+      .map((ruta) => ({ ...ruta, direcciones: normalizarDirecciones(ruta.direcciones) }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+  ]
+
+  const rutaMapaActiva = rutasMapa.find((r) => r.id === rutaMapaId) || rutasMapa[0]
+  const rutaMapaEmbedUrl = rutaMapaActiva ? crearMapaEmbedUrl(rutaMapaActiva.direcciones) : null
+  const rutaMapaAbrirUrl = rutaMapaActiva ? crearRutaGoogleMapsUrl(rutaMapaActiva.direcciones) : null
+  const paradasMapaEmbed = rutaMapaActiva ? Math.min(rutaMapaActiva.direcciones.length, 8) : 0
+
   const presEnviados = presupuestos.filter(p => p.estado === 'enviado').length
+  const presEsperando = presupuestos.filter(p => p.estado === 'esperando_respuesta').length
   const presAceptados = presupuestos.filter(p => p.estado === 'aceptado').length
-  const presPendientes = presupuestos.filter(p => p.estado === 'pendiente').length
+  const presAbiertos = presEnviados + presEsperando
 
   async function generarNumeroPres() {
     const { count } = await supabase.from('presupuestos').select('*', { count: 'exact', head: true })
@@ -258,7 +423,7 @@ export default function Planificacion() {
   function abrirFormPres(p?: any) {
     if (p) {
       setEditandoPres(p); setPresClienteId(p.cliente_id || ''); setPresTitulo(p.titulo || '')
-      setPresImporte(String(p.importe || 0)); setPresEstado(p.estado || 'enviado')
+      setPresImporte(String(p.importe || 0)); setPresEstado(normalizarEstadoPresupuesto(p.estado || 'enviado'))
       setPresFecha(p.fecha_envio || new Date().toISOString().slice(0, 10)); setPresObs(p.observaciones || '')
     } else {
       setEditandoPres(null); setPresClienteId(''); setPresTitulo('')
@@ -270,7 +435,8 @@ export default function Planificacion() {
 
   async function guardarPresupuesto(e: React.FormEvent) {
     e.preventDefault()
-    const datos = { cliente_id: presClienteId || null, titulo: presTitulo, importe: parseFloat(presImporte) || 0, estado: presEstado, fecha_envio: presFecha, observaciones: presObs }
+    const estadoFinal = calcularEstadoPresupuesto(presEstado, presFecha)
+    const datos = { cliente_id: presClienteId || null, titulo: presTitulo, importe: parseFloat(presImporte) || 0, estado: estadoFinal, fecha_envio: presFecha, observaciones: presObs }
     if (editandoPres) {
       const { error } = await supabase.from('presupuestos').update(datos).eq('id', editandoPres.id)
       if (error) { alert('Error: ' + error.message); return }
@@ -283,19 +449,24 @@ export default function Planificacion() {
   }
 
   async function cambiarEstadoPres(id: string, nuevoEstado: string) {
-    await supabase.from('presupuestos').update({ estado: nuevoEstado }).eq('id', id)
-    if (nuevoEstado === 'aceptado') {
-      const pres = presupuestos.find(p => p.id === id)
-      if (pres) {
-        const { error } = await supabase.from('ordenes').insert({
-          codigo: `OT-${pres.numero || id.slice(0, 6).toUpperCase()}`,
-          tipo: 'otro', cliente_id: pres.cliente_id || null, estado: 'pendiente', prioridad: 'normal',
-          descripcion: pres.titulo || 'Trabajo pendiente de agendar',
-          observaciones: `Creado desde presupuesto ${pres.numero || ''} aceptado. Importe: ${(pres.importe || 0).toFixed(2)} EUR`,
-          duracion_horas: 2, hora_fija: false, tecnicos_ids: [],
-        })
-        if (!error) alert('Presupuesto aceptado. Se ha creado una OT en borrador en el calendario.')
-      }
+    const pres = presupuestos.find(p => p.id === id)
+    if (!pres) return
+    const estadoActual = calcularEstadoPresupuesto(pres.estado, pres.fecha_envio)
+    const estadoFinal = calcularEstadoPresupuesto(nuevoEstado, pres.fecha_envio)
+    if (estadoActual === estadoFinal) return
+
+    const { error: errorEstado } = await supabase.from('presupuestos').update({ estado: estadoFinal }).eq('id', id)
+    if (errorEstado) { alert('Error: ' + errorEstado.message); return }
+
+    if (estadoFinal === 'aceptado' && estadoActual !== 'aceptado') {
+      const { error } = await supabase.from('ordenes').insert({
+        codigo: `OT-${pres.numero || id.slice(0, 6).toUpperCase()}`,
+        tipo: 'otro', cliente_id: pres.cliente_id || null, estado: 'pendiente', prioridad: 'normal',
+        descripcion: pres.titulo || 'Trabajo pendiente de agendar',
+        observaciones: `Creado desde presupuesto ${pres.numero || ''} aceptado. Importe: ${(pres.importe || 0).toFixed(2)} EUR`,
+        duracion_horas: 2, hora_fija: false, tecnicos_ids: [],
+      })
+      if (!error) alert('Presupuesto aceptado. Se ha creado una OT en borrador en el calendario.')
     }
     cargarDatos()
   }
@@ -314,33 +485,32 @@ export default function Planificacion() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
-          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Planificacion</h1>
-        </div>
-        {vistaActiva === 'calendario' && (
-          <div className="flex items-center gap-3">
-            <button onClick={mesAnterior} className="text-sm px-3 py-2 rounded-xl" style={s.btnSecondary}>Anterior</button>
-            <span className="font-mono font-bold text-sm min-w-40 text-center" style={{ color: 'var(--text)' }}>{tituloMes}</span>
-            <button onClick={mesSiguiente} className="text-sm px-3 py-2 rounded-xl" style={s.btnSecondary}>Siguiente</button>
-          </div>
-        )}
-        {vistaActiva === 'presupuestos' && (
-          <button onClick={() => abrirFormPres()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-            + Nuevo presupuesto
-          </button>
-        )}
-      </div>
+      <AppHeader
+        title="Planificacion"
+        rightSlot={
+          <>
+            {vistaActiva === 'calendario' && (
+              <div className="flex items-center gap-3">
+                <button onClick={mesAnterior} className="text-sm px-3 py-2 rounded-xl" style={s.btnSecondary}>Anterior</button>
+                <span className="font-mono font-bold text-sm min-w-40 text-center" style={{ color: 'var(--text)' }}>{tituloMes}</span>
+                <button onClick={mesSiguiente} className="text-sm px-3 py-2 rounded-xl" style={s.btnSecondary}>Siguiente</button>
+              </div>
+            )}
+            {vistaActiva === 'presupuestos' && (
+              <button onClick={() => abrirFormPres()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+                + Nuevo presupuesto
+              </button>
+            )}
+          </>
+        }
+      />
 
       <div className="p-6 max-w-6xl mx-auto">
         <div className="flex gap-2 mb-6 flex-wrap">
           {[
             { key: 'calendario', label: 'Calendario' },
             { key: 'mis_ordenes', label: 'Mis ordenes', badge: misOrdenesPendientes.length },
-            { key: 'presupuestos', label: 'Presupuestos', badge: presEnviados },
+            { key: 'presupuestos', label: 'Presupuestos', badge: presAbiertos },
             { key: 'rutas', label: 'Optimizar rutas' },
           ].map(tab => (
             <button key={tab.key} onClick={() => setVistaActiva(tab.key as any)}
@@ -422,6 +592,106 @@ export default function Planificacion() {
                   )
                 })}
               </div>
+            </div>
+
+            <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h2 className="font-semibold" style={{ color: 'var(--text)' }}>Mapa de planificacion</h2>
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                    Visualiza la ruta diaria, semanal o mensual de los trabajos programados.
+                  </p>
+                </div>
+                {rutaMapaAbrirUrl && (
+                  <a
+                    href={rutaMapaAbrirUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm px-3 py-2 rounded-xl"
+                    style={s.btnSecondary}
+                  >
+                    Abrir ruta en Google Maps
+                  </a>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap mt-4">
+                {[
+                  { key: 'dia', label: 'Dia' },
+                  { key: 'semana', label: 'Semana' },
+                  { key: 'mes', label: 'Mes' },
+                ].map((p2) => (
+                  <button
+                    key={p2.key}
+                    onClick={() => setMapaPeriodo(p2.key as 'dia' | 'semana' | 'mes')}
+                    className="text-sm px-3 py-2 rounded-xl"
+                    style={mapaPeriodo === p2.key ? s.btnPrimary : s.btnSecondary}
+                  >
+                    {p2.label}
+                  </button>
+                ))}
+                <input
+                  type="date"
+                  value={fechaMapa}
+                  onChange={(e) => setFechaMapa(e.target.value)}
+                  className="rounded-xl px-3 py-2 text-sm outline-none"
+                  style={s.inputStyle}
+                />
+              </div>
+
+              <p className="text-xs mt-3" style={{ color: 'var(--text-subtle)' }}>
+                {etiquetaMapa} - {ordenesMapa.length} OT planificadas
+              </p>
+
+              {ordenesMapa.length === 0 ? (
+                <div className="mt-4 rounded-xl p-4 text-sm" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                  No hay trabajos programados para este periodo.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-4 mt-4">
+                  <div className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-subtle)' }}>Rutas disponibles</p>
+                    <div className="flex flex-col gap-2 max-h-72 overflow-auto pr-1">
+                      {rutasMapa.map((ruta) => (
+                        <button
+                          key={ruta.id}
+                          onClick={() => setRutaMapaId(ruta.id)}
+                          className="text-left rounded-lg px-3 py-2 transition-all"
+                          style={rutaMapaActiva?.id === ruta.id
+                            ? { background: 'rgba(124,58,237,0.18)', border: '1px solid rgba(124,58,237,0.35)', color: '#c4b5fd' }
+                            : { background: 'transparent', border: '1px solid var(--border)', color: 'var(--text)' }}
+                        >
+                          <p className="text-sm font-medium">{ruta.nombre}</p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            {ruta.ordenes.length} OT - {ruta.direcciones.length} paradas
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                    {rutaMapaActiva && rutaMapaActiva.direcciones.length > 8 && (
+                      <p className="text-xs mt-3" style={{ color: 'var(--text-subtle)' }}>
+                        Mostrando {paradasMapaEmbed} de {rutaMapaActiva.direcciones.length} paradas en el mapa embebido.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
+                    {rutaMapaEmbedUrl ? (
+                      <iframe
+                        title="Mapa de rutas planificadas"
+                        src={rutaMapaEmbedUrl}
+                        className="w-full h-[360px] md:h-[420px]"
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                    ) : (
+                      <div className="h-[360px] md:h-[420px] flex items-center justify-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                        Esta ruta no tiene direcciones para mostrar en el mapa.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl p-5" style={s.cardStyle}>
@@ -523,11 +793,12 @@ export default function Planificacion() {
 
         {vistaActiva === 'presupuestos' && (
           <div>
-            <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
                 { label: 'Enviados', valor: presEnviados, color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', border: 'rgba(6,182,212,0.2)' },
-                { label: 'Pendientes', valor: presPendientes, color: '#fbbf24', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.2)' },
+                { label: 'Esperando', valor: presEsperando, color: '#fbbf24', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.2)' },
                 { label: 'Aceptados', valor: presAceptados, color: '#34d399', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)' },
+                { label: 'Expirados', valor: presupuestos.filter(p => p.estado === 'expirado').length, color: '#94a3b8', bg: 'rgba(71,85,105,0.08)', border: 'rgba(71,85,105,0.2)' },
               ].map((s2, i) => (
                 <div key={i} className="rounded-2xl p-4 text-center" style={{ background: s2.bg, border: `1px solid ${s2.border}` }}>
                   <p className="text-3xl font-bold" style={{ color: s2.color }}>{s2.valor}</p>
@@ -581,9 +852,9 @@ export default function Planificacion() {
                     <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Estado</label>
                     <select value={presEstado} onChange={e => setPresEstado(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                       <option value="enviado">Enviado</option>
-                      <option value="pendiente">Pendiente respuesta</option>
+                      <option value="esperando_respuesta">Esperando respuesta</option>
                       <option value="aceptado">Aceptado</option>
-                      <option value="rechazado">Rechazado</option>
+                      <option value="cancelado">Cancelado</option>
                       <option value="expirado">Expirado</option>
                     </select>
                   </div>
@@ -611,7 +882,12 @@ export default function Planificacion() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {presupuestos.map(p => (
+                {presupuestos.map(p => {
+                  const estadoPres = calcularEstadoPresupuesto(p.estado, p.fecha_envio)
+                  const configEstado = ESTADOS_PRES[estadoPres]
+                  const fechaExpiracion = calcularFechaExpiracion(p.fecha_envio)
+
+                  return (
                   <div key={p.id} className="rounded-2xl p-5 transition-all" style={s.cardStyle}
                     onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
                     onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
@@ -619,8 +895,8 @@ export default function Planificacion() {
                       <div>
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{p.numero}</span>
-                          <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADOS_PRES[p.estado]?.bg, color: ESTADOS_PRES[p.estado]?.color, border: `1px solid ${ESTADOS_PRES[p.estado]?.border}` }}>
-                            {ESTADOS_PRES[p.estado]?.label}
+                          <span className="text-xs px-2 py-1 rounded-full" style={{ background: configEstado?.bg, color: configEstado?.color, border: `1px solid ${configEstado?.border}` }}>
+                            {configEstado?.label}
                           </span>
                         </div>
                         <p className="font-semibold" style={{ color: 'var(--text)' }}>{p.titulo}</p>
@@ -634,6 +910,9 @@ export default function Planificacion() {
                             </div>
                           ) : null
                         })()}
+                        {fechaExpiracion && (
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>Caduca: {fechaExpiracion.toLocaleDateString('es-ES')}</p>
+                        )}
                         {p.observaciones && <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{p.observaciones}</p>}
                       </div>
                       <div className="text-right">
@@ -643,20 +922,24 @@ export default function Planificacion() {
                     </div>
                     <div className="flex flex-wrap gap-2 items-center pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                       <p className="text-xs mr-1" style={{ color: 'var(--text-subtle)' }}>Estado:</p>
-                      {Object.entries(ESTADOS_PRES).map(([key, val]: any) => (
-                        <button key={key} onClick={() => cambiarEstadoPres(p.id, key)}
-                          className="text-xs px-3 py-1 rounded-full transition-all"
-                          style={{ background: val.bg, color: val.color, border: `1px solid ${val.border}`, opacity: p.estado === key ? 1 : 0.4 }}>
-                          {val.label}
-                        </button>
-                      ))}
+                      {ESTADOS_PRESUPUESTO.map((key) => {
+                        const val: any = ESTADOS_PRES[key]
+                        return (
+                          <button key={key} onClick={() => cambiarEstadoPres(p.id, key)}
+                            className="text-xs px-3 py-1 rounded-full transition-all"
+                            style={{ background: val.bg, color: val.color, border: `1px solid ${val.border}`, opacity: estadoPres === key ? 1 : 0.4 }}>
+                            {val.label}
+                          </button>
+                        )
+                      })}
                       <button onClick={() => abrirFormPres(p)} className="ml-auto text-xs px-3 py-1 rounded-lg"
                         style={{ background: 'rgba(124,58,237,0.1)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.2)' }}>Editar</button>
                       <button onClick={() => eliminarPres(p.id)} className="text-xs px-3 py-1 rounded-lg"
                         style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>Eliminar</button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

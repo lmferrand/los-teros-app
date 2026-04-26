@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --bg: #080b14;
   --bg-card: #0d1117;
   --border: #1e2d3d;
@@ -16,6 +17,7 @@
 }
 
 .light {
+  color-scheme: light;
   --bg: #f1f5f9;
   --bg-card: #ffffff;
   --border: #e2e8f0;
@@ -28,12 +30,35 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: sans-serif;
-  transition: background 0.4s ease, color 0.3s ease;
-  padding-bottom: max(80px, env(safe-area-inset-bottom));
+  padding-bottom: max(88px, env(safe-area-inset-bottom));
 }
 
-* {
-  transition: background-color 0.4s ease, color 0.3s ease, border-color 0.3s ease;
+html,
+body {
+  background-color: #080b14;
+}
+
+html.light,
+html.light body {
+  background-color: #f1f5f9;
+}
+
+html.theme-transition,
+html.theme-transition body,
+html.theme-transition * {
+  transition:
+    background-color 220ms ease,
+    color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    fill 220ms ease,
+    stroke 220ms ease;
+}
+
+html.no-theme-transition,
+html.no-theme-transition *,
+html.no-theme-transition body {
+  transition: none !important;
 }
 
 ::-webkit-scrollbar { width: 6px; }

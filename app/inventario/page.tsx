@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
+import AppHeader from '@/app/components/AppHeader'
 
 export default function Inventario() {
   const [materiales, setMateriales] = useState<any[]>([])
@@ -117,24 +118,20 @@ export default function Inventario() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.cardStyle}>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: '#475569' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = '#475569'}>Dashboard</a>
-          <h1 className="text-white font-bold text-lg">Inventario</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push('/escanear')} className="text-sm px-4 py-2 rounded-xl font-medium"
-            style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
-            Escanear QR
-          </button>
-          <button onClick={() => abrirForm()} className="text-white text-sm px-4 py-2 rounded-xl font-medium"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #06b6d4)' }}>
-            + Nuevo material
-          </button>
-        </div>
-      </div>
+      <AppHeader
+        title="Inventario"
+        rightSlot={
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={() => router.push('/escanear')} className="text-sm px-4 py-2 rounded-xl font-medium"
+              style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
+              Escanear QR
+            </button>
+            <button onClick={() => abrirForm()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+              + Nuevo material
+            </button>
+          </div>
+        }
+      />
 
       <div className="p-6 max-w-6xl mx-auto">
         {stockBajo.length > 0 && (

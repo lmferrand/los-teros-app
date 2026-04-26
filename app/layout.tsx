@@ -19,32 +19,29 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${inter.variable} h-full antialiased`}>
+    <html lang="es" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: `
           (function() {
             try {
-              var tema = localStorage.getItem('tema') || 'dark';
-              var vars = tema === 'light' ? {
-                '--bg': '#f1f5f9',
-                '--bg-card': '#ffffff',
-                '--border': '#e2e8f0',
-                '--text': '#0f172a',
-                '--text-muted': '#64748b',
-                '--text-subtle': '#94a3b8',
-              } : {
-                '--bg': '#080b14',
-                '--bg-card': '#0d1117',
-                '--border': '#1e2d3d',
-                '--text': '#e2e8f0',
-                '--text-muted': '#475569',
-                '--text-subtle': '#334155',
-              };
               var root = document.documentElement;
-              Object.keys(vars).forEach(function(key) {
-                root.style.setProperty(key, vars[key]);
-              });
+              root.classList.add('no-theme-transition');
+              var tema = localStorage.getItem('tema') === 'light' ? 'light' : 'dark';
+              var bg = tema === 'light' ? '#f1f5f9' : '#080b14';
+              root.setAttribute('data-theme', tema);
               if (tema === 'light') root.classList.add('light');
+              else root.classList.remove('light');
+              root.style.backgroundColor = bg;
+              if (document.body) {
+                document.body.style.backgroundColor = bg;
+              } else {
+                document.addEventListener('DOMContentLoaded', function() {
+                  document.body.style.backgroundColor = bg;
+                }, { once: true });
+              }
+              requestAnimationFrame(function() {
+                root.classList.remove('no-theme-transition');
+              });
             } catch(e) {}
           })();
         `}} />

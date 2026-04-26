@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { s } from '@/lib/styles'
 import { registrarConsumoMaterialOt, registrarSalidaEquipoOt } from '@/lib/ordenes-integridad'
+import AppHeader from '@/app/components/AppHeader'
 
 function EscanearContenido() {
   const [escaneando, setEscaneando] = useState(false)
@@ -279,8 +280,9 @@ function EscanearContenido() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center gap-4" style={s.headerStyle}>
-        {ordenId ? (
+      <AppHeader
+        title="Escanear QR"
+        leftSlot={ordenId ? (
           <button
             onClick={() => router.back()}
             className="text-sm transition-colors"
@@ -290,26 +292,9 @@ function EscanearContenido() {
           >
             Volver a OT
           </button>
-        ) : (
-          <a
-            href="/dashboard"
-            className="text-sm transition-colors"
-            style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#06b6d4')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
-          >
-            Dashboard
-          </a>
-        )}
-        <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>
-          Escanear QR
-        </h1>
-        {perfil && (
-          <span className="text-sm ml-auto" style={{ color: 'var(--text-muted)' }}>
-            {perfil.nombre}
-          </span>
-        )}
-      </div>
+        ) : null}
+        rightSlot={perfil ? <span className="text-sm" style={{ color: 'var(--text-muted)' }}>{perfil.nombre}</span> : null}
+      />
 
       <div className="p-6 max-w-lg mx-auto">
         {orden && (

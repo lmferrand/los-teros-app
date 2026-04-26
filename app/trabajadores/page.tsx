@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { s } from '@/lib/styles'
+import AppHeader from '@/app/components/AppHeader'
 
 export default function Trabajadores() {
   const [trabajadores, setTrabajadores] = useState<any[]>([])
@@ -105,26 +107,23 @@ export default function Trabajadores() {
         <p className="text-5xl mb-4">🔒</p>
         <p className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Acceso restringido</p>
         <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Solo gerentes y oficina pueden ver este modulo.</p>
-        <a href="/dashboard" className="text-sm px-6 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-          Volver al dashboard
-        </a>
+        <Link href="/dashboard" className="text-sm px-6 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+          Volver al inicio
+        </Link>
       </div>
     </div>
   )
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
-          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Trabajadores</h1>
-        </div>
-        <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-          + Nuevo trabajador
-        </button>
-      </div>
+      <AppHeader
+        title="Trabajadores"
+        rightSlot={
+          <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+            + Nuevo trabajador
+          </button>
+        }
+      />
 
       <div className="p-6 max-w-5xl mx-auto">
         {mostrarForm && (
