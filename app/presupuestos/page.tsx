@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import {
@@ -37,11 +37,7 @@ export default function Planificacion() {
   const [presFecha, setPresFecha] = useState('')
   const [presObs, setPresObs] = useState('')
 
-  useEffect(() => {
-    cargarDatos()
-  }, [])
-
-  async function sincronizarPresupuestosExpirados(items: any[]) {
+  const sincronizarPresupuestosExpirados = useCallback(async (items: any[]) => {
     const ahora = new Date()
     const idsAExpirar = items
       .filter((p) => {
@@ -53,9 +49,9 @@ export default function Planificacion() {
 
     if (idsAExpirar.length === 0) return
     await supabase.from('presupuestos').update({ estado: 'expirado' }).in('id', idsAExpirar)
-  }
+  }, [])
 
-  async function cargarDatos() {
+  const cargarDatos = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
     setUserId(session.user.id)
@@ -77,7 +73,11 @@ export default function Planificacion() {
       })))
     }
     setLoading(false)
-  }
+  }, [router, sincronizarPresupuestosExpirados])
+
+  useEffect(() => {
+    void cargarDatos()
+  }, [cargarDatos])
 
   function getNombreCliente(id: string) {
     return clientes.find(c => c.id === id)?.nombre || '—'

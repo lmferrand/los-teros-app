@@ -75,6 +75,8 @@ export type Database = {
           telefono: string | null
           email: string | null
           notas: string | null
+          es_recurrente: boolean | null
+          frecuencia_recurrencia: string | null
           created_at: string | null
         }
         Insert: {
@@ -85,6 +87,8 @@ export type Database = {
           telefono?: string | null
           email?: string | null
           notas?: string | null
+          es_recurrente?: boolean | null
+          frecuencia_recurrencia?: string | null
           created_at?: string | null
         }
         Update: {
@@ -95,6 +99,8 @@ export type Database = {
           telefono?: string | null
           email?: string | null
           notas?: string | null
+          es_recurrente?: boolean | null
+          frecuencia_recurrencia?: string | null
           created_at?: string | null
         }
         Relationships: []
@@ -441,6 +447,60 @@ export type Database = {
             columns: ['cliente_id']
             isOneToOne: false
             referencedRelation: 'clientes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      servicios_clientes: {
+        Row: {
+          id: string
+          cliente_id: string
+          fecha_servicio: string
+          origen: string
+          numero_documento: string | null
+          descripcion: string | null
+          importe: number | null
+          metadata: Json | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cliente_id: string
+          fecha_servicio: string
+          origen?: string
+          numero_documento?: string | null
+          descripcion?: string | null
+          importe?: number | null
+          metadata?: Json | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cliente_id?: string
+          fecha_servicio?: string
+          origen?: string
+          numero_documento?: string | null
+          descripcion?: string | null
+          importe?: number | null
+          metadata?: Json | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'servicios_clientes_cliente_id_fkey'
+            columns: ['cliente_id']
+            isOneToOne: false
+            referencedRelation: 'clientes'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'servicios_clientes_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'perfiles'
             referencedColumns: ['id']
           },
         ]

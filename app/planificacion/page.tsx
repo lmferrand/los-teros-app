@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
@@ -23,6 +23,10 @@ export default function Planificacion() {
   const [calculando, setCalculando] = useState(false)
   const [escaneando, setEscaneando] = useState(false)
   const [datosEscaneados, setDatosEscaneados] = useState<any>(null)
+  const [mapaPeriodo, setMapaPeriodo] = useState<'dia' | 'semana' | 'mes'>('dia')
+  const [fechaMapa, setFechaMapa] = useState(new Date().toISOString().slice(0, 10))
+  const [rutaMapaId, setRutaMapaId] = useState('general')
+  const [mensajeCompartirRuta, setMensajeCompartirRuta] = useState('')
   const router = useRouter()
 
   const [presClienteId, setPresClienteId] = useState('')
@@ -32,9 +36,7 @@ export default function Planificacion() {
   const [presFecha, setPresFecha] = useState('')
   const [presObs, setPresObs] = useState('')
 
-  useEffect(() => { cargarDatos() }, [])
-
-  async function cargarDatos() {
+  const cargarDatos = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
     setUserId(session.user.id)
@@ -53,7 +55,9 @@ export default function Planificacion() {
     if (tecs.data) setTecnicos(tecs.data)
     if (pres.data) setPresupuestos(pres.data)
     setLoading(false)
-  }
+  }, [router])
+
+  useEffect(() => { void cargarDatos() }, [cargarDatos])
 
   function getNombreCliente(id: string) {
     return clientes.find(c => c.id === id)?.nombre || '—'
@@ -93,6 +97,125 @@ export default function Planificacion() {
     })
   }
 
+  function calcularRangoMapa(periodo: 'dia' | 'semana' | 'mes', fechaBaseIso: string) {
+    const base = new Date(`${fechaBaseIso}T12:00:00`)
+    if (Number.isNaN(base.getTime())) {
+      const ahora = new Date()
+      return { inicio: ahora, fin: ahora, etiqueta: ahora.toLocaleDateString('es-ES') }
+    }
+
+    const inicio = new Date(base)
+    const fin = new Date(base)
+
+    if (periodo === 'dia') {
+      inicio.setHours(0, 0, 0, 0)
+      fin.setHours(23, 59, 59, 999)
+      return {
+        inicio,
+        fin,
+        etiqueta: inicio.toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' }),
+      }
+    }
+
+    if (periodo === 'semana') {
+      const diaSemana = base.getDay() === 0 ? 6 : base.getDay() - 1
+      inicio.setDate(base.getDate() - diaSemana)
+      inicio.setHours(0, 0, 0, 0)
+      fin.setTime(inicio.getTime())
+      fin.setDate(inicio.getDate() + 6)
+      fin.setHours(23, 59, 59, 999)
+      return {
+        inicio,
+        fin,
+        etiqueta: `Semana ${inicio.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} - ${fin.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}`,
+      }
+    }
+
+    inicio.setDate(1)
+    inicio.setHours(0, 0, 0, 0)
+    fin.setMonth(inicio.getMonth() + 1, 0)
+    fin.setHours(23, 59, 59, 999)
+    return {
+      inicio,
+      fin,
+      etiqueta: inicio.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
+    }
+  }
+
+  function normalizarDirecciones(lista: string[]) {
+    const vistos = new Set<string>()
+    const result: string[] = []
+    for (const dir of lista) {
+      const limpia = String(dir || '').trim()
+      if (!limpia) continue
+      const clave = limpia.toLowerCase()
+      if (vistos.has(clave)) continue
+      vistos.add(clave)
+      result.push(limpia)
+    }
+    return result
+  }
+
+  function crearMapaEmbedUrl(direcciones: string[]) {
+    if (direcciones.length === 0) return null
+    const paradas = direcciones.slice(0, 8)
+    if (paradas.length === 1) return `https://maps.google.com/maps?q=${encodeURIComponent(paradas[0])}&output=embed`
+    const daddr = encodeURIComponent(paradas.join(' to '))
+    return `https://maps.google.com/maps?saddr=${encodeURIComponent('Calle Leonardo Da Vinci 12, Elche')}&daddr=${daddr}&dirflg=d&output=embed`
+  }
+
+  function crearRutaGoogleMapsUrl(direcciones: string[]) {
+    if (direcciones.length === 0) return null
+    const paradas = direcciones.slice(0, 10)
+    if (paradas.length === 1) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(paradas[0])}`
+    const destino = paradas[paradas.length - 1]
+    const waypoints = paradas.slice(0, -1).join('|')
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent('Calle Leonardo Da Vinci 12, Elche')}&destination=${encodeURIComponent(destino)}&travelmode=driving`
+    if (waypoints) url += `&waypoints=${encodeURIComponent(waypoints)}`
+    return url
+  }
+
+  function construirRutasMapa(ordenesBase: any[]) {
+    const direccionesGenerales: string[] = []
+    const rutasPorTecnico = new Map<string, { id: string; nombre: string; ordenes: any[]; direcciones: string[] }>()
+
+    for (const o of ordenesBase) {
+      const cliente = clientes.find((c) => c.id === o.cliente_id)
+      const direccion = String(cliente?.direccion || '').trim()
+      if (direccion) direccionesGenerales.push(direccion)
+
+      let tecnicosAsignados: string[] = []
+      if (Array.isArray(o.tecnicos_ids) && o.tecnicos_ids.length > 0) tecnicosAsignados = o.tecnicos_ids
+      else if (o.tecnico_id) tecnicosAsignados = [o.tecnico_id]
+      else tecnicosAsignados = ['sin_asignar']
+
+      for (const tecnicoId of tecnicosAsignados) {
+        const key = `tec-${tecnicoId}`
+        if (!rutasPorTecnico.has(key)) {
+          const nombreTecnico = tecnicoId === 'sin_asignar'
+            ? 'Sin asignar'
+            : tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico'
+          rutasPorTecnico.set(key, { id: key, nombre: nombreTecnico, ordenes: [], direcciones: [] })
+        }
+        const rutaTec = rutasPorTecnico.get(key)!
+        rutaTec.ordenes.push(o)
+        if (direccion) rutaTec.direcciones.push(direccion)
+      }
+    }
+
+    return [
+      {
+        id: 'general',
+        nombre: 'Ruta general empresa',
+        ordenes: ordenesBase,
+        direcciones: normalizarDirecciones(direccionesGenerales),
+      },
+      ...Array.from(rutasPorTecnico.values())
+        .map((ruta) => ({ ...ruta, direcciones: normalizarDirecciones(ruta.direcciones) }))
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
+    ]
+  }
+
   const ZONAS: any = {
     'alicante': { nombre: 'Alicante', orden: 2, tiempo_desde_elche: 30 },
     'elche': { nombre: 'Elche', orden: 1, tiempo_desde_elche: 0 },
@@ -125,35 +248,248 @@ export default function Planificacion() {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
 
-  function optimizarRutaTecnico(otsDelDia: any[], tecnicoId: string) {
-    const INICIO = 8 * 60; const FIN = 16 * 60
-    const otsTecnico = otsDelDia.filter(o => o.tecnicos_ids?.includes(tecnicoId) || o.tecnico_id === tecnicoId)
-    const otsConHora = otsTecnico.filter(o => o.hora_fija && o.fecha_programada).sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
-    const otsSinHora = otsTecnico.filter(o => !o.hora_fija).sort((a, b) => {
-      const zA = detectarZona(clientes.find((c: any) => c.id === a.cliente_id)?.direccion || '')
-      const zB = detectarZona(clientes.find((c: any) => c.id === b.cliente_id)?.direccion || '')
-      return (ZONAS[zA]?.orden || 99) - (ZONAS[zB]?.orden || 99)
+  function prioridadPeso(prioridad: string) {
+    if (prioridad === 'urgente') return 30
+    if (prioridad === 'alta') return 18
+    if (prioridad === 'baja') return -4
+    return 8
+  }
+
+  function obtenerTecnicosOt(ot: any) {
+    if (Array.isArray(ot.tecnicos_ids) && ot.tecnicos_ids.length > 0) return ot.tecnicos_ids
+    if (ot.tecnico_id) return [ot.tecnico_id]
+    return []
+  }
+
+  function obtenerClienteOt(ot: any) {
+    return clientes.find((c: any) => c.id === ot.cliente_id)
+  }
+
+  function duracionOtMin(ot: any) {
+    return Math.max(15, Number(ot.duracion_horas || 2) * 60)
+  }
+
+  function horaOtMin(ot: any) {
+    if (!ot?.fecha_programada) return null
+    const fechaOt = new Date(ot.fecha_programada)
+    if (Number.isNaN(fechaOt.getTime())) return null
+    return fechaOt.getHours() * 60 + fechaOt.getMinutes()
+  }
+
+  function calcularTrasladoBase(otsTecnico: any[]) {
+    if (otsTecnico.length <= 1) return 0
+    let zonaActual = 'elche'
+    let traslado = 0
+    const ordenBase = [...otsTecnico].sort((a, b) => {
+      const fa = new Date(a.fecha_programada || 0).getTime()
+      const fb = new Date(b.fecha_programada || 0).getTime()
+      return fa - fb
     })
+    for (const ot of ordenBase) {
+      const clienteOt = obtenerClienteOt(ot)
+      const zonaOt = detectarZona(clienteOt?.direccion || '')
+      traslado += calcularTiempoEntreZonas(zonaActual, zonaOt)
+      zonaActual = zonaOt
+    }
+    traslado += calcularTiempoEntreZonas(zonaActual, 'elche')
+    return traslado
+  }
+
+  function optimizarRutaTecnico(otsDelDia: any[], tecnicoId: string) {
+    const INICIO = 8 * 60
+    const FIN = 16 * 60
+    const otsTecnico = otsDelDia.filter((o) => obtenerTecnicosOt(o).includes(tecnicoId))
+    const otsConHora = otsTecnico
+      .filter((o) => o.hora_fija && o.fecha_programada)
+      .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
+
+    const pendientesFlexibles = otsTecnico
+      .filter((o) => !o.hora_fija)
+      .sort((a, b) => prioridadPeso(b.prioridad || 'normal') - prioridadPeso(a.prioridad || 'normal'))
+
     const ruta: any[] = []
-    let horaActual = INICIO; let zonaActual = 'elche'
-    for (const ot of otsConHora) {
-      const horaOT = new Date(ot.fecha_programada)
-      const minutos = horaOT.getHours() * 60 + horaOT.getMinutes()
-      const zona = detectarZona(clientes.find((c: any) => c.id === ot.cliente_id)?.direccion || '')
-      const duracion = (ot.duracion_horas || 2) * 60
-      ruta.push({ ot, horaInicio: minutos, horaFin: minutos + duracion, zona, horaFija: true, traslado: 0, fueraDeJornada: minutos + duracion > FIN, cliente: clientes.find((c: any) => c.id === ot.cliente_id) })
-      horaActual = minutos + duracion; zonaActual = zona
+    const advertencias: string[] = []
+    let horaActual = INICIO
+    let zonaActual = 'elche'
+    let totalTraslado = 0
+    let totalEspera = 0
+    let totalTrabajo = 0
+
+    function elegirSiguienteOt(hastaMin: number | null) {
+      let mejorIndice = -1
+      let mejorPuntaje = Number.POSITIVE_INFINITY
+
+      for (let i = 0; i < pendientesFlexibles.length; i++) {
+        const ot = pendientesFlexibles[i]
+        const clienteOt = obtenerClienteOt(ot)
+        const zonaOt = detectarZona(clienteOt?.direccion || '')
+        const traslado = calcularTiempoEntreZonas(zonaActual, zonaOt)
+        const duracion = duracionOtMin(ot)
+        const inicioTentativo = horaActual + traslado
+        const finTentativo = inicioTentativo + duracion
+        if (hastaMin !== null && finTentativo > hastaMin) continue
+
+        const penalizaJornada = finTentativo > FIN ? (finTentativo - FIN) * 1.8 : 0
+        const bonusPrioridad = prioridadPeso(ot.prioridad || 'normal')
+        const puntaje = traslado * 1.5 + penalizaJornada - bonusPrioridad
+
+        if (puntaje < mejorPuntaje) {
+          mejorPuntaje = puntaje
+          mejorIndice = i
+        }
+      }
+
+      return mejorIndice
     }
-    for (const ot of otsSinHora) {
-      const zona = detectarZona(clientes.find((c: any) => c.id === ot.cliente_id)?.direccion || '')
-      const tiempoTraslado = calcularTiempoEntreZonas(zonaActual, zona)
-      const duracion = (ot.duracion_horas || 2) * 60
-      const horaInicio = horaActual + tiempoTraslado
-      const horaFin = horaInicio + duracion
-      ruta.push({ ot, horaInicio, horaFin, zona, horaFija: false, traslado: tiempoTraslado, fueraDeJornada: horaFin > FIN, cliente: clientes.find((c: any) => c.id === ot.cliente_id) })
-      horaActual = horaFin; zonaActual = zona
+
+    function insertarFlexibles(hastaMin: number | null) {
+      while (pendientesFlexibles.length > 0) {
+        const idx = elegirSiguienteOt(hastaMin)
+        if (idx < 0) break
+
+        const [ot] = pendientesFlexibles.splice(idx, 1)
+        const clienteOt = obtenerClienteOt(ot)
+        const zonaOt = detectarZona(clienteOt?.direccion || '')
+        const traslado = calcularTiempoEntreZonas(zonaActual, zonaOt)
+        const inicio = horaActual + traslado
+        const duracion = duracionOtMin(ot)
+        const fin = inicio + duracion
+
+        totalTraslado += traslado
+        totalTrabajo += duracion
+        ruta.push({
+          ot,
+          horaInicio: inicio,
+          horaFin: fin,
+          zona: zonaOt,
+          horaFija: false,
+          traslado,
+          fueraDeJornada: fin > FIN,
+          cliente: clienteOt,
+        })
+        horaActual = fin
+        zonaActual = zonaOt
+      }
     }
-    return { ruta, horasTotales: otsTecnico.reduce((acc, o) => acc + (o.duracion_horas || 2), 0), cabeEnJornada: horaActual <= FIN, horaFinal: horaActual }
+
+    for (const otFija of otsConHora) {
+      const horaFija = horaOtMin(otFija)
+      if (horaFija === null) continue
+
+      insertarFlexibles(horaFija)
+
+      const clienteOt = obtenerClienteOt(otFija)
+      const zonaOt = detectarZona(clienteOt?.direccion || '')
+      const traslado = calcularTiempoEntreZonas(zonaActual, zonaOt)
+      const llegada = horaActual + traslado
+      const inicio = Math.max(horaFija, llegada)
+      const espera = Math.max(0, horaFija - llegada)
+      const duracion = duracionOtMin(otFija)
+      const fin = inicio + duracion
+
+      totalTraslado += traslado
+      totalEspera += espera
+      totalTrabajo += duracion
+
+      if (llegada > horaFija) {
+        advertencias.push(`Conflicto de hora fija en ${otFija.codigo}: llegada ${formatHora(llegada)}.`)
+      }
+
+      ruta.push({
+        ot: otFija,
+        horaInicio: inicio,
+        horaFin: fin,
+        zona: zonaOt,
+        horaFija: true,
+        traslado,
+        fueraDeJornada: fin > FIN,
+        cliente: clienteOt,
+      })
+      horaActual = fin
+      zonaActual = zonaOt
+    }
+
+    insertarFlexibles(null)
+
+    const trasladoRegreso = ruta.length > 0 ? calcularTiempoEntreZonas(zonaActual, 'elche') : 0
+    totalTraslado += trasladoRegreso
+    const horaFinalConRegreso = horaActual + trasladoRegreso
+    const extraMin = Math.max(0, horaFinalConRegreso - FIN)
+    const horasTotales = Number((totalTrabajo / 60).toFixed(1))
+    const utilizacion = Math.min(100, Math.round((totalTrabajo / (FIN - INICIO)) * 100))
+    const trasladoBase = calcularTrasladoBase(otsTecnico)
+    const ahorroTrasladoMin = Math.max(0, trasladoBase - totalTraslado)
+
+    return {
+      ruta,
+      horasTotales,
+      cabeEnJornada: horaFinalConRegreso <= FIN,
+      horaFinal: horaFinalConRegreso,
+      horaFinalTrabajo: horaActual,
+      zonaFinal: zonaActual,
+      trasladoTotalMin: totalTraslado,
+      esperaTotalMin: totalEspera,
+      extraMin,
+      utilizacionPct: utilizacion,
+      ahorroTrasladoMin,
+      advertencias,
+    }
+  }
+
+  function sugerirAsignaciones(otsSinAsignar: any[], resultadosBase: any[]) {
+    if (!otsSinAsignar.length || !resultadosBase.length) return []
+
+    const estadoTecnicos = resultadosBase.map((res: any) => ({
+      tecnicoId: res.tecnico.id,
+      tecnicoNombre: res.tecnico.nombre,
+      horaActual: res.horaFinalTrabajo || (8 * 60),
+      zonaActual: res.zonaFinal || 'elche',
+      extraActual: res.extraMin || 0,
+    }))
+
+    const sugerencias: any[] = []
+
+    const pendientes = [...otsSinAsignar].sort((a, b) => {
+      const p = prioridadPeso(b.prioridad || 'normal') - prioridadPeso(a.prioridad || 'normal')
+      if (p !== 0) return p
+      return duracionOtMin(b) - duracionOtMin(a)
+    })
+
+    for (const ot of pendientes) {
+      const clienteOt = obtenerClienteOt(ot)
+      const zonaOt = detectarZona(clienteOt?.direccion || '')
+      const duracion = duracionOtMin(ot)
+
+      let mejor: any = null
+      for (const st of estadoTecnicos) {
+        const traslado = calcularTiempoEntreZonas(st.zonaActual, zonaOt)
+        const inicio = st.horaActual + traslado
+        const finTrabajo = inicio + duracion
+        const regreso = calcularTiempoEntreZonas(zonaOt, 'elche')
+        const extra = Math.max(0, finTrabajo + regreso - 16 * 60)
+        const coste = traslado + extra * 2.2 + st.extraActual * 0.5
+        if (!mejor || coste < mejor.coste) {
+          mejor = { st, traslado, inicio, finTrabajo, extra, coste }
+        }
+      }
+
+      if (!mejor) continue
+      sugerencias.push({
+        ot,
+        tecnicoId: mejor.st.tecnicoId,
+        tecnicoNombre: mejor.st.tecnicoNombre,
+        horaInicio: mejor.inicio,
+        horaFin: mejor.finTrabajo,
+        trasladoMin: mejor.traslado,
+        extraMin: mejor.extra,
+      })
+
+      mejor.st.horaActual = mejor.finTrabajo
+      mejor.st.zonaActual = zonaOt
+      mejor.st.extraActual = mejor.extra
+    }
+
+    return sugerencias
   }
 
   function calcularRutas() {
@@ -167,7 +503,20 @@ export default function Planificacion() {
     const tecnicosDelDia = tecnicos.filter(t => otsDelDia.some(o => o.tecnicos_ids?.includes(t.id) || o.tecnico_id === t.id))
     const resultados = tecnicosDelDia.map(t => ({ tecnico: t, ...optimizarRutaTecnico(otsDelDia, t.id) }))
     const otsSinAsignar = otsDelDia.filter(o => (!o.tecnicos_ids || o.tecnicos_ids.length === 0) && !o.tecnico_id)
-    setResultadoRuta({ resultados, otsSinAsignar, fecha: fechaRuta, totalOTs: otsDelDia.length })
+    const sugerencias = sugerirAsignaciones(otsSinAsignar, resultados)
+    const totalTraslado = resultados.reduce((acc: number, r: any) => acc + Number(r.trasladoTotalMin || 0), 0)
+    const totalAhorro = resultados.reduce((acc: number, r: any) => acc + Number(r.ahorroTrasladoMin || 0), 0)
+    const totalExtra = resultados.reduce((acc: number, r: any) => acc + Number(r.extraMin || 0), 0)
+    setResultadoRuta({
+      resultados,
+      otsSinAsignar,
+      sugerencias,
+      fecha: fechaRuta,
+      totalOTs: otsDelDia.length,
+      totalTraslado,
+      totalAhorro,
+      totalExtra,
+    })
     setCalculando(false)
   }
 
@@ -250,6 +599,31 @@ export default function Planificacion() {
     return f >= lunes && f <= domingo
   }).sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
 
+  const { inicio: inicioMapa, fin: finMapa, etiqueta: etiquetaMapa } = calcularRangoMapa(mapaPeriodo, fechaMapa)
+  const ordenesMapa = ordenes
+    .filter((o) => {
+      if (!o.fecha_programada) return false
+      const fecha = new Date(o.fecha_programada)
+      return fecha >= inicioMapa && fecha <= finMapa
+    })
+    .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
+
+  const rutasMapa = construirRutasMapa(ordenesMapa)
+  const rutaMapaActiva = rutasMapa.find((r) => r.id === rutaMapaId) || rutasMapa[0]
+  const rutaMapaEmbedUrl = rutaMapaActiva ? crearMapaEmbedUrl(rutaMapaActiva.direcciones) : null
+  const rutaMapaAbrirUrl = rutaMapaActiva ? crearRutaGoogleMapsUrl(rutaMapaActiva.direcciones) : null
+  const paradasMapaEmbed = rutaMapaActiva ? Math.min(rutaMapaActiva.direcciones.length, 8) : 0
+
+  const { inicio: inicioRutaDiaria, fin: finRutaDiaria } = calcularRangoMapa('dia', fechaMapa)
+  const ordenesRutaDiaria = ordenes.filter((o) => {
+    if (!o.fecha_programada) return false
+    const fecha = new Date(o.fecha_programada)
+    return fecha >= inicioRutaDiaria && fecha <= finRutaDiaria
+  })
+  const rutasMapaDiaria = construirRutasMapa(ordenesRutaDiaria)
+  const rutaDiariaActiva = rutasMapaDiaria.find((r) => r.id === rutaMapaId) || rutasMapaDiaria[0]
+  const rutaDiariaCompartirUrl = rutaDiariaActiva ? crearRutaGoogleMapsUrl(rutaDiariaActiva.direcciones) : null
+
   const presEnviados = presupuestos.filter(p => p.estado === 'enviado').length
   const presAceptados = presupuestos.filter(p => p.estado === 'aceptado').length
   const presPendientes = presupuestos.filter(p => p.estado === 'pendiente').length
@@ -311,6 +685,43 @@ export default function Planificacion() {
     if (!confirm('Eliminar este presupuesto?')) return
     await supabase.from('presupuestos').delete().eq('id', id)
     cargarDatos()
+  }
+
+  async function compartirRutaDiaria() {
+    if (!rutaDiariaCompartirUrl) {
+      setMensajeCompartirRuta('No hay direcciones en la ruta diaria para compartir.')
+      return
+    }
+
+    const fechaLabel = new Date(`${fechaMapa}T12:00:00`).toLocaleDateString('es-ES', {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+    const texto = `Ruta diaria (${fechaLabel})`
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title: 'Ruta diaria Los Teros',
+          text: texto,
+          url: rutaDiariaCompartirUrl,
+        })
+        setMensajeCompartirRuta('Ruta diaria compartida.')
+        return
+      }
+
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(rutaDiariaCompartirUrl)
+        setMensajeCompartirRuta('Enlace diario copiado al portapapeles.')
+        return
+      }
+
+      setMensajeCompartirRuta(`Enlace diario: ${rutaDiariaCompartirUrl}`)
+    } catch {
+      setMensajeCompartirRuta(`Enlace diario: ${rutaDiariaCompartirUrl}`)
+    }
   }
 
   if (loading) return (
@@ -674,8 +1085,110 @@ export default function Planificacion() {
         {vistaActiva === 'rutas' && (
           <div>
             <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
+              <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Mapa de rutas</h2>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+                Visualiza las ubicaciones por dia, semana o mes, y comparte la ruta diaria por enlace de Google Maps.
+              </p>
+
+              <div className="flex gap-2 flex-wrap mb-4">
+                {[
+                  { key: 'dia', label: 'Diaria' },
+                  { key: 'semana', label: 'Semanal' },
+                  { key: 'mes', label: 'Mensual' },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => setMapaPeriodo(item.key as 'dia' | 'semana' | 'mes')}
+                    className="px-3 py-2 rounded-xl text-sm font-medium"
+                    style={mapaPeriodo === item.key ? s.btnPrimary : s.btnSecondary}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3 items-end flex-wrap mb-4">
+                <div>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha base</label>
+                  <input
+                    type="date"
+                    value={fechaMapa}
+                    onChange={(e) => setFechaMapa(e.target.value)}
+                    className="rounded-xl px-3 py-2 text-sm outline-none"
+                    style={s.inputStyle}
+                  />
+                </div>
+
+                <div className="min-w-64">
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Ruta</label>
+                  <select
+                    value={rutaMapaActiva?.id || 'general'}
+                    onChange={(e) => setRutaMapaId(e.target.value)}
+                    className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                    style={s.inputStyle}
+                  >
+                    {rutasMapa.map((ruta) => (
+                      <option key={ruta.id} value={ruta.id}>
+                        {ruta.nombre} ({ruta.ordenes.length} OT)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {rutaMapaAbrirUrl && (
+                  <a
+                    href={rutaMapaAbrirUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm px-4 py-2 rounded-xl"
+                    style={s.btnSecondary}
+                  >
+                    Abrir en Google Maps
+                  </a>
+                )}
+
+                <button
+                  onClick={compartirRutaDiaria}
+                  disabled={!rutaDiariaCompartirUrl}
+                  className="text-sm px-4 py-2 rounded-xl font-medium disabled:opacity-50"
+                  style={s.btnPrimary}
+                >
+                  Compartir ruta diaria
+                </button>
+              </div>
+
+              <p className="text-xs mb-3" style={{ color: 'var(--text-subtle)' }}>
+                Periodo seleccionado: {etiquetaMapa}. Paradas visibles en mapa: {paradasMapaEmbed}.
+              </p>
+              {mensajeCompartirRuta && (
+                <p className="text-xs mb-3" style={{ color: '#34d399' }}>
+                  {mensajeCompartirRuta}
+                </p>
+              )}
+
+              {rutaMapaEmbedUrl ? (
+                <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <iframe
+                    title="Mapa de rutas"
+                    src={rutaMapaEmbedUrl}
+                    className="w-full"
+                    style={{ height: '360px', border: '0' }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+              ) : (
+                <div className="rounded-xl p-4 text-sm" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                  No hay direcciones suficientes para mostrar el mapa en este periodo.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
               <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Optimizador de rutas</h2>
-              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Selecciona un dia y el sistema calculara la ruta optima partiendo desde Elche.</p>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+                Optimiza por hora, trabajador asignado, duracion, prioridad y proximidad geografica para reducir traslados.
+              </p>
               <div className="flex gap-3 items-end flex-wrap">
                 <div>
                   <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Dia a planificar</label>
@@ -684,7 +1197,7 @@ export default function Planificacion() {
                 </div>
                 <button onClick={calcularRutas} disabled={calculando}
                   className="px-6 py-2 rounded-xl text-sm font-medium disabled:opacity-50" style={s.btnPrimary}>
-                  {calculando ? 'Calculando...' : 'Calcular ruta optima'}
+                  {calculando ? 'Calculando...' : 'Optimizar ruta'}
                 </button>
               </div>
             </div>
@@ -700,7 +1213,21 @@ export default function Planificacion() {
               <div className="flex flex-col gap-6">
                 <div className="rounded-2xl p-4" style={s.cardStyle}>
                   <p className="font-semibold" style={{ color: 'var(--text)' }}>{new Date(resultadoRuta.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</p>
-                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{resultadoRuta.totalOTs} ordenes — {resultadoRuta.resultados.length} trabajadores</p>
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{resultadoRuta.totalOTs} ordenes - {resultadoRuta.resultados.length} trabajadores</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                    <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Traslado total</p>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{resultadoRuta.totalTraslado || 0} min</p>
+                    </div>
+                    <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Ahorro estimado</p>
+                      <p className="text-sm font-semibold" style={{ color: '#34d399' }}>{resultadoRuta.totalAhorro || 0} min</p>
+                    </div>
+                    <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Horas extra previstas</p>
+                      <p className="text-sm font-semibold" style={{ color: (resultadoRuta.totalExtra || 0) > 0 ? '#f87171' : '#34d399' }}>{resultadoRuta.totalExtra || 0} min</p>
+                    </div>
+                  </div>
                 </div>
 
                 {resultadoRuta.resultados.map((res: any) => (
@@ -708,7 +1235,12 @@ export default function Planificacion() {
                     <div className="px-5 py-3 flex items-center justify-between flex-wrap gap-2" style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
                       <div>
                         <p className="font-semibold" style={{ color: 'var(--text)' }}>{res.tecnico.nombre}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Salida 08:00 desde Elche — {res.ruta.length} paradas — {res.horasTotales}h</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Salida 08:00 desde Elche - {res.ruta.length} paradas - {res.horasTotales}h trabajo
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
+                          Traslado {res.trasladoTotalMin || 0} min - Esperas {res.esperaTotalMin || 0} min - Utilizacion {res.utilizacionPct || 0}%
+                        </p>
                       </div>
                       <span className="text-xs px-3 py-1 rounded-full font-medium"
                         style={res.cabeEnJornada
@@ -731,6 +1263,16 @@ export default function Planificacion() {
                             <p className="font-mono text-sm font-bold" style={{ color: '#34d399' }}>08:00</p>
                           </div>
                         </div>
+
+                        {(res.advertencias || []).length > 0 && (
+                          <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                            {(res.advertencias || []).slice(0, 2).map((msg: string, idx: number) => (
+                              <p key={`${res.tecnico.id}-warn-${idx}`} className="text-xs" style={{ color: '#f87171' }}>
+                                {msg}
+                              </p>
+                            ))}
+                          </div>
+                        )}
 
                         {res.ruta.map((parada: any, idx: number) => (
                           <div key={parada.ot.id}>
@@ -810,6 +1352,29 @@ export default function Planificacion() {
                             <span className="text-sm" style={{ color: 'var(--text)' }}>{clientes.find((c: any) => c.id === o.cliente_id)?.nombre || '—'}</span>
                           </div>
                           <span className="text-xs" style={{ color: '#fbbf24' }}>{o.duracion_horas || 2}h</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {resultadoRuta.sugerencias?.length > 0 && (
+                  <div className="rounded-2xl p-5" style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.25)' }}>
+                    <p className="font-semibold mb-3" style={{ color: '#06b6d4' }}>Sugerencias de asignacion IA</p>
+                    <div className="flex flex-col gap-2">
+                      {resultadoRuta.sugerencias.map((sug: any) => (
+                        <div key={`sug-${sug.ot.id}-${sug.tecnicoId}`} className="rounded-lg px-3 py-2 flex items-center justify-between gap-3 flex-wrap" style={{ background: 'rgba(6,182,212,0.08)' }}>
+                          <div>
+                            <p className="text-sm" style={{ color: 'var(--text)' }}>
+                              {sug.ot.codigo} - {clientes.find((c: any) => c.id === sug.ot.cliente_id)?.nombre || 'Sin cliente'}
+                            </p>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                              Asignar a <strong>{sug.tecnicoNombre}</strong> a las {formatHora(sug.horaInicio)}
+                            </p>
+                          </div>
+                          <p className="text-xs" style={{ color: '#06b6d4' }}>
+                            traslado {sug.trasladoMin} min{(sug.extraMin || 0) > 0 ? ` - extra ${sug.extraMin} min` : ''}
+                          </p>
                         </div>
                       ))}
                     </div>

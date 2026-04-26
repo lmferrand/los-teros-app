@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
@@ -14,12 +14,12 @@ export default function Movimientos() {
   const [tecnicos, setTecnicos] = useState<any[]>([])
   const router = useRouter()
 
-  async function verificarSesion() {
+  const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) router.push('/login')
-  }
+  }, [router])
 
-  async function cargarDatos() {
+  const cargarDatos = useCallback(async () => {
     const [movs, tecs] = await Promise.all([
       supabase.from('movimientos').select('*, materiales(nombre, unidad), equipos(codigo, tipo), ordenes(codigo), perfiles(nombre)').order('fecha', { ascending: false }).limit(200),
       supabase.from('perfiles').select('*').order('nombre'),
@@ -27,12 +27,12 @@ export default function Movimientos() {
     if (movs.data) setMovimientos(movs.data)
     if (tecs.data) setTecnicos(tecs.data)
     setLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
-    verificarSesion()
-    cargarDatos()
-  }, [])
+    void verificarSesion()
+    void cargarDatos()
+  }, [verificarSesion, cargarDatos])
 
   const TIPOS: any = {
     consumo: { label: 'Consumo material', color: '#fb923c', bg: 'rgba(249,115,22,0.15)', icono: '📦' },

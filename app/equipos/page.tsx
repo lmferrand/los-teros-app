@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
@@ -22,21 +22,21 @@ export default function Equipos() {
   const [ubicacion, setUbicacion] = useState('')
   const [notas, setNotas] = useState('')
 
-  useEffect(() => {
-    verificarSesion()
-    cargarEquipos()
-  }, [])
-
-  async function verificarSesion() {
+  const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) router.push('/login')
-  }
+  }, [router])
 
-  async function cargarEquipos() {
+  const cargarEquipos = useCallback(async () => {
     const { data } = await supabase.from('equipos').select('*').order('codigo')
     if (data) setEquipos(data)
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    void verificarSesion()
+    void cargarEquipos()
+  }, [verificarSesion, cargarEquipos])
 
   function abrirForm(eq?: any) {
     if (eq) {
@@ -94,11 +94,13 @@ export default function Equipos() {
   }
 
   async function generarQRTodos() {
-    for (const eq of equipos) {
-      const datos = JSON.stringify({ tipo: 'equipo', id: eq.id, codigo: eq.codigo })
-      const url = await QRCode.toDataURL(datos, { width: 200, margin: 1 })
-      eq._qrUrl = url
-    }
+    const equiposConQr = await Promise.all(
+      equipos.map(async (eq) => {
+        const datos = JSON.stringify({ tipo: 'equipo', id: eq.id, codigo: eq.codigo })
+        const qrUrl = await QRCode.toDataURL(datos, { width: 200, margin: 1 })
+        return { ...eq, qrUrl }
+      })
+    )
     const win = window.open('', '_blank')
     if (win) {
       win.document.write(`<html><head><title>QR Todos los equipos</title>
@@ -110,8 +112,8 @@ export default function Equipos() {
       @media print{button{display:none}}</style></head>
       <body><h1>Los Teros — QR todos los equipos</h1>
       <button onclick="window.print()" style="padding:10px 20px;font-size:14px;cursor:pointer;background:#7c3aed;color:#fff;border:none;border-radius:6px;margin-bottom:20px">Imprimir todos</button>
-      <div class="grid">${equipos.map(eq => `<div class="etiqueta">
-        <img src="${eq._qrUrl}" style="width:140px;height:140px">
+      <div class="grid">${equiposConQr.map(eq => `<div class="etiqueta">
+        <img src="${eq.qrUrl}" style="width:140px;height:140px">
         <h3>${eq.codigo}</h3><p>${eq.tipo} ${eq.marca || ''}</p><p>${eq.modelo || ''}</p>
       </div>`).join('')}</div></body></html>`)
       win.document.close()

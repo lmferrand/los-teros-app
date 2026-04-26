@@ -19,7 +19,7 @@ export default function AuthConfirm() {
       }
     })
     return () => subscription.unsubscribe()
-  }, [])
+  }, [router])
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: '#080b14' }}>

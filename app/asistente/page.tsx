@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
@@ -20,23 +20,18 @@ export default function Asistente() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
-  useEffect(() => {
-    verificarSesion()
-    cargarContexto()
-  }, [])
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [mensajes])
-
-  async function verificarSesion() {
+  const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
-    const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+    const { data } = await supabase
+      .from('perfiles')
+      .select('id, nombre, rol')
+      .eq('id', session.user.id)
+      .single()
     setPerfil(data)
-  }
+  }, [router])
 
-  async function cargarContexto() {
+  const cargarContexto = useCallback(async () => {
     const [ordenes, materiales, equipos, clientes] = await Promise.all([
       supabase.from('ordenes').select('codigo, tipo, estado, fecha_programada, descripcion').in('estado', ['pendiente', 'en_curso']).limit(20),
       supabase.from('materiales').select('nombre, stock, minimo, unidad').limit(30),
@@ -55,7 +50,16 @@ CLIENTES (${(clientes.data || []).length} registrados):
 ${(clientes.data || []).map((c: any) => c.nombre).join(', ')}
     `.trim()
     setContexto(ctx)
-  }
+  }, [])
+
+  useEffect(() => {
+    void verificarSesion()
+    void cargarContexto()
+  }, [verificarSesion, cargarContexto])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [mensajes])
 
   async function enviarMensaje(e: React.FormEvent) {
     e.preventDefault()

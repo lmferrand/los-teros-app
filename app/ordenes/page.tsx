@@ -10,13 +10,48 @@ import {
   eliminarArchivosFotosOrden,
   eliminarMovimientoConIntegridad,
   eliminarOrdenConIntegridad,
+  registrarConsumoMaterialOt,
   repararVinculoMovimientosOt,
 } from '@/lib/ordenes-integridad'
+
+function aDatetimeLocal(iso?: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 16)
+}
+
+function redondearMediaHora(value: string) {
+  if (!value || !value.includes('T')) return value
+  const [fechaPart, horaPart] = value.split('T')
+  if (!fechaPart || !horaPart) return value
+
+  const [hhStr, mmStr] = horaPart.split(':')
+  const hh = Number(hhStr)
+  const mm = Number(mmStr)
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return value
+
+  const base = new Date(`${fechaPart}T00:00:00`)
+  if (Number.isNaN(base.getTime())) return value
+
+  const totalMin = hh * 60 + mm
+  const redondeado = Math.round(totalMin / 30) * 30
+  base.setMinutes(redondeado)
+
+  const yyyy = base.getFullYear()
+  const mes = String(base.getMonth() + 1).padStart(2, '0')
+  const dia = String(base.getDate()).padStart(2, '0')
+  const horas = String(base.getHours()).padStart(2, '0')
+  const mins = String(base.getMinutes()).padStart(2, '0')
+  return `${yyyy}-${mes}-${dia}T${horas}:${mins}`
+}
 
 export default function Ordenes() {
   const [ordenes, setOrdenes] = useState<any[]>([])
   const [clientes, setClientes] = useState<any[]>([])
   const [tecnicos, setTecnicos] = useState<any[]>([])
+  const [materiales, setMateriales] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -30,6 +65,10 @@ export default function Ordenes() {
   const [soloMias, setSoloMias] = useState(false)
   const [eliminandoOrden, setEliminandoOrden] = useState(false)
   const [movimientoEliminandoId, setMovimientoEliminandoId] = useState<string | null>(null)
+  const [materialManualId, setMaterialManualId] = useState('')
+  const [cantidadManual, setCantidadManual] = useState('1')
+  const [notaManual, setNotaManual] = useState('')
+  const [guardandoManual, setGuardandoManual] = useState(false)
   const ultimaSyncOtRef = useRef(0)
   const router = useRouter()
 
@@ -73,14 +112,16 @@ export default function Ordenes() {
   }
 
   async function cargarDatos() {
-    const [ords, clis, tecs] = await Promise.all([
+    const [ords, clis, tecs, mats] = await Promise.all([
       supabase.from('ordenes').select('*, clientes(nombre)').order('created_at', { ascending: false }),
       supabase.from('clientes').select('*').order('nombre'),
       supabase.from('perfiles').select('*').order('nombre'),
+      supabase.from('materiales').select('id, nombre, stock, unidad').order('nombre'),
     ])
     if (ords.data) setOrdenes(ords.data)
     if (clis.data) setClientes(clis.data)
     if (tecs.data) setTecnicos(tecs.data)
+    if (mats.data) setMateriales(mats.data)
     setLoading(false)
   }
 
@@ -117,6 +158,13 @@ export default function Ordenes() {
     // Reacciona a cambios del detalle abierto.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ordenDetalle?.id])
+
+  useEffect(() => {
+    if (!ordenDetalle) return
+    if (materialManualId) return
+    const primero = materiales.find((m: any) => Number(m.stock || 0) > 0)
+    if (primero?.id) setMaterialManualId(primero.id)
+  }, [ordenDetalle, materiales, materialManualId])
 
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
@@ -195,6 +243,9 @@ export default function Ordenes() {
       cargarFotosOrden(o.id),
       cargarMovimientosOrden(o.id, o.codigo),
     ])
+    setCantidadManual('1')
+    setNotaManual('')
+    setMaterialManualId('')
     setOrdenDetalle({ ...o, fotos, movimientos })
   }
 
@@ -218,7 +269,7 @@ export default function Ordenes() {
     setEditandoId(o.id)
     setTipo(o.tipo || 'limpieza'); setClienteId(o.cliente_id || '')
     setTecnicosSeleccionados(o.tecnicos_ids || [])
-    setFecha(o.fecha_programada ? new Date(o.fecha_programada).toISOString().slice(0, 16) : '')
+    setFecha(redondearMediaHora(aDatetimeLocal(o.fecha_programada)))
     setPrioridad(o.prioridad || 'normal'); setEstado(o.estado || 'pendiente')
     setDescripcion(o.descripcion || ''); setObservaciones(o.observaciones || '')
     setDuracionHoras(String(o.duracion_horas || 2)); setHoraFija(o.hora_fija || false)
@@ -404,6 +455,55 @@ export default function Ordenes() {
     }
   }
 
+  async function registrarConsumoManual() {
+    if (!ordenDetalle || !puedeGestionar(ordenDetalle)) {
+      alert('No tienes permiso para registrar material en esta OT.')
+      return
+    }
+    if (!userId) {
+      alert('No se pudo identificar el tecnico actual.')
+      return
+    }
+    if (!materialManualId) {
+      alert('Selecciona un material.')
+      return
+    }
+
+    const cantidad = Number(cantidadManual)
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      alert('La cantidad debe ser mayor que 0.')
+      return
+    }
+
+    setGuardandoManual(true)
+    try {
+      const material = materiales.find((m: any) => m.id === materialManualId)
+      const observaciones = notaManual.trim()
+        ? `Consumo manual OT ${ordenDetalle.codigo}: ${notaManual.trim()}`
+        : `Consumo manual desde OT ${ordenDetalle.codigo} [id:${ordenDetalle.id}]`
+
+      const { stockActual } = await registrarConsumoMaterialOt({
+        materialId: materialManualId,
+        cantidad,
+        tecnicoId: userId,
+        ordenId: ordenDetalle.id,
+        observaciones,
+      })
+
+      setMateriales((prev: any[]) =>
+        prev.map((m: any) => (m.id === materialManualId ? { ...m, stock: stockActual } : m))
+      )
+      setCantidadManual('1')
+      setNotaManual('')
+      await recargarDetalleOrden(ordenDetalle.id)
+      alert(`Material registrado en OT${material?.nombre ? `: ${material.nombre}` : ''}.`)
+    } catch (error) {
+      alert(`No se pudo registrar el material: ${getMensajeError(error)}`)
+    } finally {
+      setGuardandoManual(false)
+    }
+  }
+
   function getMensajeError(error: unknown) {
     if (error && typeof error === 'object' && 'message' in error) {
       const msg = String((error as { message?: string }).message || '').trim()
@@ -438,6 +538,7 @@ export default function Ordenes() {
 
   const filtradasPorEstado = filtroEstado ? ordenes.filter((o) => o.estado === filtroEstado) : ordenes
   const ordenesFiltradas = soloMias ? filtradasPorEstado.filter((o) => esAsignado(o)) : filtradasPorEstado
+  const materialesDisponibles = materiales.filter((m: any) => Number(m.stock || 0) > 0)
   const puedeCrearEditar = esAdmin()
   const puedeEliminar = esAdmin()
 
@@ -531,7 +632,15 @@ export default function Ordenes() {
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha programada</label>
-                <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+                <input
+                  type="datetime-local"
+                  step={1800}
+                  value={fecha}
+                  onChange={e => setFecha(redondearMediaHora(e.target.value))}
+                  required
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                  style={s.inputStyle}
+                />
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Prioridad</label>
@@ -643,14 +752,66 @@ export default function Ordenes() {
                 )}
 
                 <div className="rounded-2xl p-4 mb-4" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.2)' }}>
-                  <p className="font-medium text-sm mb-1" style={{ color: '#06b6d4' }}>Escanear material o equipo</p>
-                  <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Escanea el QR para registrar salida vinculada a esta OT.</p>
-                  <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
-                    disabled={!puedeGestionar(ordenDetalle)}
-                    className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)', color: 'white' }}>
-                    Abrir escaner QR
-                  </button>
+                  <p className="font-medium text-sm mb-1" style={{ color: '#06b6d4' }}>Inventario en OT</p>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+                    Puedes registrar material/equipo por QR o cargar material manualmente en esta OT.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
+                      disabled={!puedeGestionar(ordenDetalle)}
+                      className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+                      style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)', color: 'white' }}>
+                      Abrir escaner QR
+                    </button>
+
+                    <div className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Alta manual de material</p>
+                      <select
+                        value={materialManualId}
+                        onChange={(e) => setMaterialManualId(e.target.value)}
+                        className="w-full rounded-lg px-2 py-2 text-sm mb-2 outline-none"
+                        style={s.inputStyle}
+                        disabled={!puedeGestionar(ordenDetalle) || guardandoManual}
+                      >
+                        <option value="">Selecciona material...</option>
+                        {materialesDisponibles.map((mat: any) => (
+                          <option key={mat.id} value={mat.id}>
+                            {mat.nombre} ({mat.stock || 0} {mat.unidad || 'uds'})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={cantidadManual}
+                          onChange={(e) => setCantidadManual(e.target.value)}
+                          className="w-28 rounded-lg px-2 py-2 text-sm outline-none"
+                          style={s.inputStyle}
+                          placeholder="Cantidad"
+                          disabled={!puedeGestionar(ordenDetalle) || guardandoManual}
+                        />
+                        <input
+                          value={notaManual}
+                          onChange={(e) => setNotaManual(e.target.value)}
+                          className="flex-1 rounded-lg px-2 py-2 text-sm outline-none"
+                          style={s.inputStyle}
+                          placeholder="Nota (opcional)"
+                          disabled={!puedeGestionar(ordenDetalle) || guardandoManual}
+                        />
+                      </div>
+                      <button
+                        onClick={registrarConsumoManual}
+                        disabled={!puedeGestionar(ordenDetalle) || guardandoManual || !materialManualId}
+                        className="w-full py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                        style={s.btnPrimary}
+                      >
+                        {guardandoManual ? 'Guardando...' : 'Registrar material manual'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mb-4">

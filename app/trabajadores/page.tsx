@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -22,23 +22,30 @@ export default function Trabajadores() {
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
 
-  useEffect(() => { verificarSesion() }, [])
+  const cargarTrabajadores = useCallback(async () => {
+    const { data } = await supabase
+      .from('perfiles')
+      .select('id, nombre, rol, telefono, activo')
+      .order('nombre')
+    if (data) setTrabajadores(data)
+    setLoading(false)
+  }, [])
 
-  async function verificarSesion() {
+  const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
-    const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+    const { data } = await supabase
+      .from('perfiles')
+      .select('rol')
+      .eq('id', session.user.id)
+      .single()
     if (data?.rol !== 'gerente' && data?.rol !== 'oficina' && data?.rol !== 'supervisor') {
       setAccesoDenegado(true); setLoading(false); return
     }
-    cargarTrabajadores()
-  }
+    void cargarTrabajadores()
+  }, [router, cargarTrabajadores])
 
-  async function cargarTrabajadores() {
-    const { data } = await supabase.from('perfiles').select('*').order('nombre')
-    if (data) setTrabajadores(data)
-    setLoading(false)
-  }
+  useEffect(() => { void verificarSesion() }, [verificarSesion])
 
   function abrirFormNuevo() {
     setEditandoId(null); setNombre(''); setRol('tecnico')

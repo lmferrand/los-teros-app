@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
@@ -24,17 +24,12 @@ export default function Albaranes() {
   const [fecha, setFecha] = useState('')
   const [observaciones, setObservaciones] = useState('')
 
-  useEffect(() => {
-    verificarSesion()
-    cargarDatos()
-  }, [])
-
-  async function verificarSesion() {
+  const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) router.push('/login')
-  }
+  }, [router])
 
-  async function cargarDatos() {
+  const cargarDatos = useCallback(async () => {
     const [albs, clis, ords] = await Promise.all([
       supabase.from('albaranes').select('*, clientes(nombre), ordenes(codigo)').order('created_at', { ascending: false }),
       supabase.from('clientes').select('*').order('nombre'),
@@ -44,7 +39,12 @@ export default function Albaranes() {
     if (clis.data) setClientes(clis.data)
     if (ords.data) setOrdenes(ords.data)
     setLoading(false)
-  }
+  }, [])
+
+  useEffect(() => {
+    void verificarSesion()
+    void cargarDatos()
+  }, [verificarSesion, cargarDatos])
 
   function abrirFormNuevo() {
     setEditandoId(null); setClienteId(''); setOrdenId('')

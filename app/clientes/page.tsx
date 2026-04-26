@@ -30,6 +30,22 @@ type ResultadoImport = {
   error?: string
 }
 
+type FrecuenciaRecurrencia = '15_dias' | 'mensual' | 'trimestral' | 'anual'
+
+const FRECUENCIAS_RECURRENCIA: { key: FrecuenciaRecurrencia; label: string }[] = [
+  { key: '15_dias', label: 'Cada 15 dias' },
+  { key: 'mensual', label: 'Mensual' },
+  { key: 'trimestral', label: 'Trimestral' },
+  { key: 'anual', label: 'Anual' },
+]
+
+const FRECUENCIA_LABEL: Record<FrecuenciaRecurrencia, string> = {
+  '15_dias': 'Cada 15 dias',
+  mensual: 'Mensual',
+  trimestral: 'Trimestral',
+  anual: 'Anual',
+}
+
 const ALIASES = {
   nombre: [
     'nombre',
@@ -143,6 +159,18 @@ function normalizarCif(valor: string) {
     .trim()
 }
 
+function normalizarFrecuenciaRecurrencia(valor: string): FrecuenciaRecurrencia {
+  if (valor === '15_dias' || valor === 'mensual' || valor === 'trimestral' || valor === 'anual') {
+    return valor
+  }
+  return 'mensual'
+}
+
+function esTablaServiciosNoDisponible(error: any) {
+  const txt = String(error?.message || '').toLowerCase()
+  return txt.includes('servicios_clientes') && (txt.includes('does not exist') || txt.includes('relation') || txt.includes('schema cache'))
+}
+
 function detectarFilaCabecera(filas: unknown[][]) {
   let mejorIndice = -1
   let mejorPuntuacion = -1
@@ -212,6 +240,7 @@ function detectarMejorHoja(workbook: XLSX.WorkBook) {
 
 export default function Clientes() {
   const [clientes, setClientes] = useState<any[]>([])
+  const [historialPorCliente, setHistorialPorCliente] = useState<Map<string, { fecha: Date; diasSinServicio: number; origen: 'ot' | 'factura' }>>(new Map())
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
@@ -226,14 +255,21 @@ export default function Clientes() {
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
   const [notas, setNotas] = useState('')
+  const [esRecurrente, setEsRecurrente] = useState(false)
+  const [frecuenciaRecurrencia, setFrecuenciaRecurrencia] = useState<FrecuenciaRecurrencia>('mensual')
   const [busqueda, setBusqueda] = useState('')
   const [soloSinCif, setSoloSinCif] = useState(false)
   const [agruparPorCif, setAgruparPorCif] = useState(true)
+  const [filtroSinServicio, setFiltroSinServicio] = useState(false)
 
   useEffect(() => {
+    const query = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+    const filtroQuery = query?.get('filtro') === 'sin_servicio'
+    setFiltroSinServicio(filtroQuery)
+    if (filtroQuery) setAgruparPorCif(false)
     verificarSesion()
     cargarClientes()
-    // Se ejecuta solo al montar; estas funciones internas no deben disparar re-ejecuciones.
+    // Se ejecuta al montar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -249,12 +285,62 @@ export default function Clientes() {
   async function cargarClientes() {
     const { data } = await supabase.from('clientes').select('*').order('nombre')
     if (data) setClientes(data)
+
+    const ids = (data || []).map((c: any) => c.id).filter(Boolean)
+    const historialMap = new Map<string, { fecha: Date; diasSinServicio: number; origen: 'ot' | 'factura' }>()
+    if (ids.length > 0) {
+      const [ordenesRes, serviciosRes] = await Promise.all([
+        supabase
+          .from('ordenes')
+          .select('cliente_id, fecha_cierre, fecha_programada, created_at')
+          .eq('estado', 'completada')
+          .in('cliente_id', ids),
+        supabase
+          .from('servicios_clientes')
+          .select('cliente_id, fecha_servicio')
+          .in('cliente_id', ids),
+      ])
+
+      for (const ot of ordenesRes.data || []) {
+        if (!ot?.cliente_id) continue
+        const fechaRef = ot.fecha_cierre || ot.fecha_programada || ot.created_at
+        if (!fechaRef) continue
+        const fecha = new Date(fechaRef)
+        if (Number.isNaN(fecha.getTime())) continue
+        const previa = historialMap.get(ot.cliente_id)
+        if (!previa || fecha.getTime() > previa.fecha.getTime()) {
+          historialMap.set(ot.cliente_id, {
+            fecha,
+            diasSinServicio: Math.floor((Date.now() - fecha.getTime()) / 86400000),
+            origen: 'ot',
+          })
+        }
+      }
+
+      if (!serviciosRes.error || !esTablaServiciosNoDisponible(serviciosRes.error)) {
+        for (const srv of serviciosRes.data || []) {
+          if (!srv?.cliente_id || !srv?.fecha_servicio) continue
+          const fecha = new Date(`${srv.fecha_servicio}T12:00:00`)
+          if (Number.isNaN(fecha.getTime())) continue
+          const previa = historialMap.get(srv.cliente_id)
+          if (!previa || fecha.getTime() > previa.fecha.getTime()) {
+            historialMap.set(srv.cliente_id, {
+              fecha,
+              diasSinServicio: Math.floor((Date.now() - fecha.getTime()) / 86400000),
+              origen: 'factura',
+            })
+          }
+        }
+      }
+    }
+    setHistorialPorCliente(historialMap)
     setLoading(false)
   }
 
   function abrirFormNuevo() {
     setEditandoId(null)
     setNombre(''); setCif(''); setDireccion(''); setTelefono(''); setEmail(''); setNotas('')
+    setEsRecurrente(false); setFrecuenciaRecurrencia('mensual')
     setMostrarForm(true)
   }
 
@@ -262,17 +348,37 @@ export default function Clientes() {
     setEditandoId(c.id)
     setNombre(c.nombre || ''); setDireccion(c.direccion || '')
     setCif(normalizarCif(c.cif || '')); setTelefono(c.telefono || ''); setEmail(c.email || ''); setNotas(c.notas || '')
+    setEsRecurrente(Boolean(c.es_recurrente))
+    setFrecuenciaRecurrencia(normalizarFrecuenciaRecurrencia(String(c.frecuencia_recurrencia || 'mensual')))
     setMostrarForm(true)
   }
 
   async function guardarCliente(e: React.FormEvent) {
     e.preventDefault()
     const cifNormalizado = normalizarCif(cif)
-    const datos = { nombre, cif: cifNormalizado || null, direccion, telefono, email, notas }
-    if (editandoId) {
-      await supabase.from('clientes').update(datos).eq('id', editandoId)
-    } else {
-      await supabase.from('clientes').insert(datos)
+    const datosBase = { nombre, cif: cifNormalizado || null, direccion, telefono, email, notas }
+    const datosConRecurrencia = {
+      ...datosBase,
+      es_recurrente: esRecurrente,
+      frecuencia_recurrencia: esRecurrente ? frecuenciaRecurrencia : null,
+    }
+
+    const guardarCon = async (datos: any) => {
+      if (editandoId) return supabase.from('clientes').update(datos).eq('id', editandoId)
+      return supabase.from('clientes').insert(datos)
+    }
+
+    let { error } = await guardarCon(datosConRecurrencia)
+    if (error && /column .*es_recurrente|column .*frecuencia_recurrencia|does not exist/i.test(String(error.message || ''))) {
+      const fallback = await guardarCon(datosBase)
+      error = fallback.error
+      if (!error) {
+        alert('Cliente guardado, pero faltan columnas de recurrencia en BD. Ejecuta la migracion de clientes recurrentes en SQL Editor.')
+      }
+    }
+    if (error) {
+      alert(`No se pudo guardar el cliente: ${error.message}`)
+      return
     }
     setMostrarForm(false); setEditandoId(null); cargarClientes()
   }
@@ -502,7 +608,16 @@ export default function Clientes() {
   }
 
   function exportarExcel() {
-    const datos = clientes.map(c => ({ nombre: c.nombre, cif: c.cif || '', direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '', notas: c.notas || '' }))
+    const datos = clientes.map((c) => ({
+      nombre: c.nombre,
+      cif: c.cif || '',
+      direccion: c.direccion || '',
+      telefono: c.telefono || '',
+      email: c.email || '',
+      notas: c.notas || '',
+      recurrente: c.es_recurrente ? 'si' : 'no',
+      frecuencia_recurrencia: c.es_recurrente ? (FRECUENCIA_LABEL[normalizarFrecuenciaRecurrencia(String(c.frecuencia_recurrencia || 'mensual'))] || '') : '',
+    }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
@@ -510,9 +625,12 @@ export default function Clientes() {
   }
 
   const termino = normalizarClave(busqueda)
-  const baseClientes = soloSinCif
+  let baseClientes = soloSinCif
     ? clientes.filter((c: any) => !String(c?.cif || '').trim())
     : clientes
+  if (filtroSinServicio) {
+    baseClientes = baseClientes.filter((c: any) => historialPorCliente.has(c.id))
+  }
   const clientesFiltrados = termino
     ? baseClientes.filter((c: any) =>
         [c?.nombre, c?.cif, c?.telefono, c?.email, c?.direccion]
@@ -521,6 +639,13 @@ export default function Clientes() {
       )
     : baseClientes
   const clientesOrdenados = [...clientesFiltrados].sort((a: any, b: any) => {
+    if (filtroSinServicio) {
+      const diasA = historialPorCliente.get(a.id)?.diasSinServicio ?? -1
+      const diasB = historialPorCliente.get(b.id)?.diasSinServicio ?? -1
+      if (diasA !== diasB) return diasB - diasA
+      return String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es', { sensitivity: 'base' })
+    }
+
     if (!agruparPorCif) {
       return String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es', { sensitivity: 'base' })
     }
@@ -535,7 +660,7 @@ export default function Clientes() {
     return String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es', { sensitivity: 'base' })
   })
   const conteoPorCif = new Map<string, number>()
-  if (agruparPorCif) {
+  if (agruparPorCif && !filtroSinServicio) {
     for (const c of clientesOrdenados) {
       const key = normalizarCif(String(c?.cif || ''))
       if (!key) continue
@@ -636,12 +761,35 @@ export default function Clientes() {
               {soloSinCif ? 'Mostrando solo sin CIF' : 'Filtrar solo sin CIF'}
             </button>
             <button
+              onClick={() => {
+                setFiltroSinServicio((prev) => {
+                  const next = !prev
+                  if (next) setAgruparPorCif(false)
+                  return next
+                })
+              }}
+              className="text-xs px-3 py-1 rounded-lg"
+              style={filtroSinServicio ? s.btnPrimary : s.btnSecondary}
+            >
+              {filtroSinServicio ? 'Filtrado: mas tiempo sin servicio' : 'Filtrar por inactividad'}
+            </button>
+            <button
               onClick={() => setAgruparPorCif((prev) => !prev)}
+              disabled={filtroSinServicio}
               className="text-xs px-3 py-1 rounded-lg"
               style={agruparPorCif ? s.btnPrimary : s.btnSecondary}
             >
               {agruparPorCif ? 'Agrupado por CIF' : 'Sin agrupar por CIF'}
             </button>
+            {filtroSinServicio && (
+              <button
+                onClick={() => setFiltroSinServicio(false)}
+                className="text-xs px-3 py-1 rounded-lg"
+                style={s.btnSecondary}
+              >
+                Quitar filtro inactividad
+              </button>
+            )}
           </div>
         </div>
 
@@ -672,6 +820,35 @@ export default function Clientes() {
               <div className="md:col-span-2">
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Notas</label>
                 <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle} placeholder="Instrucciones de acceso, contacto..." />
+              </div>
+              <div className="md:col-span-2 rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="text-sm flex items-center gap-2 cursor-pointer" style={{ color: 'var(--text)' }}>
+                    <input
+                      type="checkbox"
+                      checked={esRecurrente}
+                      onChange={(e) => setEsRecurrente(e.target.checked)}
+                      className="w-4 h-4"
+                      style={{ accentColor: '#06b6d4' }}
+                    />
+                    Cliente recurrente
+                  </label>
+
+                  <select
+                    value={frecuenciaRecurrencia}
+                    onChange={(e) => setFrecuenciaRecurrencia(normalizarFrecuenciaRecurrencia(e.target.value))}
+                    disabled={!esRecurrente}
+                    className="rounded-xl px-3 py-2 text-sm outline-none disabled:opacity-50"
+                    style={s.inputStyle}
+                  >
+                    {FRECUENCIAS_RECURRENCIA.map((f) => (
+                      <option key={f.key} value={f.key}>{f.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                  Sirve para detectar renovaciones automaticas y planificar servicios repetidos.
+                </p>
               </div>
               <div className="md:col-span-2 flex gap-3">
                 <button type="submit" className="px-5 py-2 rounded-xl text-sm font-medium" style={s.btnPrimary}>
@@ -710,7 +887,7 @@ export default function Clientes() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Nombre', 'CIF', 'Telefono', 'Email', 'Direccion', ''].map(h => (
+                    {['Nombre', 'CIF', 'Telefono', 'Email', 'Direccion', 'Recurrencia', 'Ultimo servicio', ''].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                     ))}
                   </tr>
@@ -726,14 +903,14 @@ export default function Clientes() {
                       <Fragment key={c.id}>
                         {inicioGrupoCif && (
                           <tr>
-                            <td colSpan={6} className="px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(6,182,212,0.08)', color: '#06b6d4', borderBottom: '1px solid var(--border)' }}>
+                            <td colSpan={8} className="px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(6,182,212,0.08)', color: '#06b6d4', borderBottom: '1px solid var(--border)' }}>
                               CIF {cifActual} - {conteoPorCif.get(cifActual) || 0} locales
                             </td>
                           </tr>
                         )}
                         {inicioGrupoSinCif && (
                           <tr>
-                            <td colSpan={6} className="px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(124,58,237,0.08)', color: '#a78bfa', borderBottom: '1px solid var(--border)' }}>
+                            <td colSpan={8} className="px-4 py-2 text-xs font-semibold" style={{ background: 'rgba(124,58,237,0.08)', color: '#a78bfa', borderBottom: '1px solid var(--border)' }}>
                               Sin CIF
                             </td>
                           </tr>
@@ -760,6 +937,31 @@ export default function Clientes() {
                       </td>
                       <td className="px-4 py-3 text-xs max-w-xs truncate" style={{ color: 'var(--text-muted)' }}>
                         {c.direccion || '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.es_recurrente ? (
+                          <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.25)' }}>
+                            {FRECUENCIA_LABEL[normalizarFrecuenciaRecurrencia(String(c.frecuencia_recurrencia || 'mensual'))]}
+                          </span>
+                        ) : (
+                          <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>No</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const hist = historialPorCliente.get(c.id)
+                          if (!hist) return <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin historial</span>
+                          return (
+                            <div>
+                              <p className="text-xs font-medium" style={{ color: 'var(--text)' }}>
+                                {hist.diasSinServicio} dias
+                              </p>
+                              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                                {hist.fecha.toLocaleDateString('es-ES')} - {hist.origen === 'factura' ? 'Factura' : 'OT'}
+                              </p>
+                            </div>
+                          )
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2 justify-end">

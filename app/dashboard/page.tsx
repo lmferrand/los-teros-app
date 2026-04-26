@@ -1,7 +1,7 @@
 'use client'
 
 import { useTheme } from '@/lib/useTheme'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -12,77 +12,158 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     otActivas: 0, otMes: 0, stockBajo: 0,
-    equiposCampo: 0, clientes: 0, otPendientes: 0,
+    equiposCampo: 0, clientes: 0, otPendientes: 0, clientesReactivar: 0,
   })
   const [misOrdenes, setMisOrdenes] = useState<any[]>([])
   const [alertas, setAlertas] = useState<{ tipo: string; texto: string }[]>([])
   const router = useRouter()
   const { tema, toggleTema } = useTheme()
 
-  useEffect(() => { cargarDatos() }, [])
+  const cargarDatos = useCallback(async () => {
+    setLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { router.push('/login'); return }
+      setUser(session.user)
 
-  async function cargarDatos() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { router.push('/login'); return }
-    setUser(session.user)
+      let { data: perfilData } = await supabase
+        .from('perfiles')
+        .select('id, nombre, rol')
+        .eq('id', session.user.id)
+        .single()
 
-    let { data: perfilData } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
-    if (!perfilData) {
-      const { data: nuevoPerfil } = await supabase.from('perfiles').insert({
-        id: session.user.id,
-        nombre: session.user.email?.split('@')[0] || 'Usuario',
-        rol: 'tecnico',
-      }).select().single()
-      perfilData = nuevoPerfil
-    }
-    setPerfil(perfilData)
+      if (!perfilData) {
+        const { data: nuevoPerfil } = await supabase
+          .from('perfiles')
+          .insert({
+            id: session.user.id,
+            nombre: session.user.email?.split('@')[0] || 'Usuario',
+            rol: 'tecnico',
+          })
+          .select('id, nombre, rol')
+          .single()
+        perfilData = nuevoPerfil
+      }
+      setPerfil(perfilData)
 
-    const [ordenes, materiales, equipos, clientes] = await Promise.all([
-      supabase.from('ordenes').select('*'),
-      supabase.from('materiales').select('*'),
-      supabase.from('equipos').select('*'),
-      supabase.from('clientes').select('*'),
-    ])
-    const hoy = new Date()
-    const mes = hoy.getMonth()
-    const anio = hoy.getFullYear()
-    const todasOrdenes = ordenes.data || []
-    const todosMateriales = materiales.data || []
-    const todosEquipos = equipos.data || []
-    const otActivas = todasOrdenes.filter(o => o.estado === 'pendiente' || o.estado === 'en_curso')
-    const otMes = todasOrdenes.filter(o => {
-      if (!o.created_at || o.estado !== 'completada') return false
-      const d = new Date(o.created_at)
-      return d.getMonth() === mes && d.getFullYear() === anio
-    })
-    const stockBajo = todosMateriales.filter(m => (m.stock || 0) < (m.minimo || 0))
-    const equiposCampo = todosEquipos.filter(e => e.estado === 'en_cliente')
-    const misMisOrdenes = todasOrdenes.filter(o =>
-      (o.tecnicos_ids?.includes(session.user.id) || o.tecnico_id === session.user.id) &&
-      (o.estado === 'pendiente' || o.estado === 'en_curso')
-    ).slice(0, 5)
-    setStats({
-      otActivas: otActivas.length, otMes: otMes.length,
-      stockBajo: stockBajo.length, equiposCampo: equiposCampo.length,
-      clientes: (clientes.data || []).length,
-      otPendientes: todasOrdenes.filter(o => o.estado === 'pendiente').length,
-    })
-    setMisOrdenes(misMisOrdenes)
-    const nuevasAlertas: { tipo: string; texto: string }[] = []
-    stockBajo.forEach(m => nuevasAlertas.push({ tipo: 'warning', texto: `Stock bajo: ${m.nombre} (${m.stock || 0} ${m.unidad || ''})` }))
-    equiposCampo.forEach(e => {
-      if (e.fecha_salida) {
+      const [ordenes, materiales, equipos, clientes, servicios] = await Promise.all([
+        supabase.from('ordenes').select('id, codigo, descripcion, estado, cliente_id, tecnico_id, tecnicos_ids, created_at, fecha_programada, fecha_cierre'),
+        supabase.from('materiales').select('id, nombre, stock, minimo, unidad'),
+        supabase.from('equipos').select('id, codigo, estado, fecha_salida'),
+        supabase.from('clientes').select('id'),
+        supabase.from('servicios_clientes').select('cliente_id, fecha_servicio'),
+      ])
+
+      const hoy = new Date()
+      const mes = hoy.getMonth()
+      const anio = hoy.getFullYear()
+      const todasOrdenes = ordenes.data || []
+      const todosMateriales = materiales.data || []
+      const todosEquipos = equipos.data || []
+      const serviciosClientes = servicios.error ? [] : (servicios.data || [])
+
+      const otActivas = todasOrdenes.filter((o) => o.estado === 'pendiente' || o.estado === 'en_curso')
+      const otMes = todasOrdenes.filter((o) => {
+        if (!o.created_at || o.estado !== 'completada') return false
+        const d = new Date(o.created_at)
+        return d.getMonth() === mes && d.getFullYear() === anio
+      })
+      const stockBajo = todosMateriales.filter((m) => Number(m.stock || 0) < Number(m.minimo || 0))
+      const equiposCampo = todosEquipos.filter((e) => e.estado === 'en_cliente')
+      const misMisOrdenes = todasOrdenes
+        .filter((o) =>
+          (o.tecnicos_ids?.includes(session.user.id) || o.tecnico_id === session.user.id) &&
+          (o.estado === 'pendiente' || o.estado === 'en_curso')
+        )
+        .slice(0, 5)
+      setMisOrdenes(misMisOrdenes)
+
+      const nuevasAlertas: { tipo: string; texto: string }[] = []
+      stockBajo.forEach((m) => {
+        nuevasAlertas.push({
+          tipo: 'warning',
+          texto: `Stock bajo: ${m.nombre} (${m.stock || 0} ${m.unidad || ''})`,
+        })
+      })
+      equiposCampo.forEach((e) => {
+        if (!e.fecha_salida) return
         const dias = Math.floor((Date.now() - new Date(e.fecha_salida).getTime()) / 86400000)
         if (dias > 14) nuevasAlertas.push({ tipo: 'danger', texto: `${e.codigo} lleva ${dias} dias en cliente` })
+      })
+      setAlertas(nuevasAlertas)
+
+      const ultimaOtPorCliente = new Map<string, Date>()
+      for (const ot of todasOrdenes) {
+        if (!ot?.cliente_id || ot?.estado !== 'completada') continue
+        const fechaRef = ot.fecha_cierre || ot.fecha_programada || ot.created_at
+        if (!fechaRef) continue
+        const fechaOt = new Date(fechaRef)
+        if (Number.isNaN(fechaOt.getTime())) continue
+        const anterior = ultimaOtPorCliente.get(ot.cliente_id)
+        if (!anterior || fechaOt.getTime() > anterior.getTime()) {
+          ultimaOtPorCliente.set(ot.cliente_id, fechaOt)
+        }
       }
-    })
-    setAlertas(nuevasAlertas)
-    setLoading(false)
-  }
+
+      for (const srv of serviciosClientes) {
+        if (!srv?.cliente_id || !srv?.fecha_servicio) continue
+        const fechaSrv = new Date(`${srv.fecha_servicio}T12:00:00`)
+        if (Number.isNaN(fechaSrv.getTime())) continue
+        const anterior = ultimaOtPorCliente.get(srv.cliente_id)
+        if (!anterior || fechaSrv.getTime() > anterior.getTime()) {
+          ultimaOtPorCliente.set(srv.cliente_id, fechaSrv)
+        }
+      }
+
+      const idsClientes = new Set((clientes.data || []).map((c: any) => c.id))
+      const rankingClientes = Array.from(ultimaOtPorCliente.entries())
+        .filter(([clienteId]) => idsClientes.has(clienteId))
+        .map(([, ultimaFecha]) => {
+          const diasSinServicio = Math.floor((Date.now() - ultimaFecha.getTime()) / 86400000)
+          return { ultimaFecha, diasSinServicio }
+        })
+        .sort((a: any, b: any) => b.diasSinServicio - a.diasSinServicio)
+        .slice(0, 10)
+
+      setStats({
+        otActivas: otActivas.length,
+        otMes: otMes.length,
+        stockBajo: stockBajo.length,
+        equiposCampo: equiposCampo.length,
+        clientes: idsClientes.size,
+        otPendientes: todasOrdenes.filter((o) => o.estado === 'pendiente').length,
+        clientesReactivar: rankingClientes.length,
+      })
+    } catch (error) {
+      console.error('Error cargando dashboard', error)
+      setAlertas([{ tipo: 'danger', texto: 'No se pudieron cargar algunos datos del dashboard.' }])
+    } finally {
+      setLoading(false)
+    }
+  }, [router])
+
+  useEffect(() => { void cargarDatos() }, [cargarDatos])
 
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  function abrirKpi(kpi: 'ot_activas' | 'completadas_mes' | 'clientes' | 'stock_bajo' | 'sin_servicio') {
+    if (kpi === 'sin_servicio') { router.push('/clientes?filtro=sin_servicio'); return }
+    if (kpi === 'ot_activas') {
+      router.push('/ordenes')
+      return
+    }
+    if (kpi === 'completadas_mes') {
+      router.push('/ordenes')
+      return
+    }
+    if (kpi === 'clientes') {
+      router.push('/clientes')
+      return
+    }
+    router.push('/inventario')
   }
 
   const ROLES: any = {
@@ -196,18 +277,32 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-8">
           {[
-            { label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, color: '#06b6d4' },
-            { label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', color: '#10b981' },
-            { label: 'Clientes', valor: stats.clientes, sub: 'registrados', color: '#8b5cf6' },
-            { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', color: stats.stockBajo > 0 ? '#f59e0b' : '#10b981' },
-          ].map((s, i) => (
-            <div key={i} className="rounded-xl p-4" style={{ background: bgCard, border: `1px solid ${border}` }}>
-              <p className="text-xs uppercase tracking-wider mb-2" style={{ color: textMuted }}>{s.label}</p>
-              <p className="text-3xl font-bold" style={{ color: s.color }}>{s.valor}</p>
-              <p className="text-xs mt-1" style={{ color: textMuted }}>{s.sub}</p>
-            </div>
+            { key: 'ot_activas', label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, color: '#06b6d4' },
+            { key: 'completadas_mes', label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', color: '#10b981' },
+            { key: 'clientes', label: 'Clientes', valor: stats.clientes, sub: 'registrados', color: '#8b5cf6' },
+            { key: 'stock_bajo', label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', color: stats.stockBajo > 0 ? '#f59e0b' : '#10b981' },
+            {
+              key: 'sin_servicio',
+              label: 'Sin servicio',
+              valor: stats.clientesReactivar,
+              sub: 'top 10 clientes',
+              color: '#06b6d4',
+            },
+          ].map((s: any, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => abrirKpi(s.key)}
+              className="rounded-lg p-3 text-left transition-all hover:-translate-y-0.5 active:translate-y-0"
+              style={{ background: 'var(--bg)', border: `1px solid ${border}` }}
+              title={`Ir a ${s.label}`}
+            >
+              <p className="text-[11px] uppercase tracking-wider mb-1" style={{ color: textMuted }}>{s.label}</p>
+              <p className="text-2xl leading-none font-bold" style={{ color: s.color }}>{s.valor}</p>
+              <p className="text-[11px] mt-1" style={{ color: textMuted }}>{s.sub}</p>
+            </button>
           ))}
         </div>
 
@@ -218,7 +313,12 @@ export default function Dashboard() {
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
               onMouseLeave={e => e.currentTarget.style.borderColor = border}>
               {m.href === '/asistente' ? (
-                <img src="/assistant-ia-teros.png" alt="Asistente IA" className="w-9 h-9 object-contain mb-3" />
+                <img
+                  src="/assistant-ia-teros.png?v=20260426a"
+                  alt="Asistente IA"
+                  className="w-9 h-9 object-contain mb-3"
+                  style={{ backgroundColor: 'transparent' }}
+                />
               ) : (
                 <div className="text-2xl mb-3">{m.icono}</div>
               )}
