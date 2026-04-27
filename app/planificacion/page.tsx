@@ -45,7 +45,7 @@ export default function Planificacion() {
     if (perfilUsuario) setMiRol(perfilUsuario.rol)
 
     const [ords, clis, tecs, pres] = await Promise.all([
-      supabase.from('ordenes').select('*').neq('estado', 'cancelada'),
+      supabase.from('ordenes').select('*, clientes(id, nombre, nombre_comercial, nombre_fiscal, cif, poblacion, direccion)').neq('estado', 'cancelada'),
       supabase.from('clientes').select('*'),
       supabase.from('perfiles').select('*'),
       supabase.from('presupuestos').select('*, clientes(nombre)').order('created_at', { ascending: false }),
@@ -59,8 +59,31 @@ export default function Planificacion() {
 
   useEffect(() => { void cargarDatos() }, [cargarDatos])
 
-  function getNombreCliente(id: string) {
-    return clientes.find(c => c.id === id)?.nombre || '—'
+  function nombreComercialCliente(c: any) {
+    return String(c?.nombre_comercial || c?.nombre || '').trim()
+  }
+
+  function nombreFiscalCliente(c: any) {
+    return String(c?.nombre_fiscal || '').trim()
+  }
+
+  function getClienteOt(ot: any) {
+    if (!ot) return null
+    if (ot.clientes) return ot.clientes
+    return clientes.find((c: any) => c.id === ot.cliente_id) || null
+  }
+
+  function getNombreClienteOt(ot: any) {
+    const cliente = getClienteOt(ot)
+    return nombreComercialCliente(cliente) || cliente?.nombre || 'Sin cliente'
+  }
+
+  function getTextoClienteSecundarioOt(ot: any) {
+    const cliente = getClienteOt(ot)
+    const fiscal = nombreFiscalCliente(cliente)
+    const cif = String(cliente?.cif || '').trim()
+    const poblacion = String(cliente?.poblacion || '').trim()
+    return [fiscal, cif, poblacion].filter(Boolean).join(' | ')
   }
 
   function getNombresTecnicos(ids: string[]) {
@@ -180,7 +203,7 @@ export default function Planificacion() {
     const rutasPorTecnico = new Map<string, { id: string; nombre: string; ordenes: any[]; direcciones: string[] }>()
 
     for (const o of ordenesBase) {
-      const cliente = clientes.find((c) => c.id === o.cliente_id)
+      const cliente = getClienteOt(o)
       const direccion = String(cliente?.direccion || '').trim()
       if (direccion) direccionesGenerales.push(direccion)
 
@@ -248,6 +271,22 @@ export default function Planificacion() {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
 
+  function obtenerOpcionesNegociables(parada: any) {
+    if (!parada || parada.horaFija) return []
+    const inicioJornada = 6 * 60
+    const finJornada = 15 * 60
+    const duracion = Math.max(30, Number(parada.horaFin || 0) - Number(parada.horaInicio || 0))
+
+    const candidatos = [parada.horaInicio - 30, parada.horaInicio, parada.horaInicio + 30]
+      .map((min: number) => {
+        const inicio = Math.max(inicioJornada, Math.min(min, finJornada - duracion))
+        return Math.round(inicio / 5) * 5
+      })
+
+    const unicos = Array.from(new Set(candidatos)).sort((a, b) => a - b).slice(0, 3)
+    return unicos.map((inicio) => ({ inicio, fin: inicio + duracion }))
+  }
+
   function prioridadPeso(prioridad: string) {
     const p = String(prioridad || '').trim().toLowerCase()
     if (p === '3' || p === 'alta' || p === 'urgente') return 24
@@ -262,7 +301,7 @@ export default function Planificacion() {
   }
 
   function obtenerClienteOt(ot: any) {
-    return clientes.find((c: any) => c.id === ot.cliente_id)
+    return getClienteOt(ot)
   }
 
   function duracionOtMin(ot: any) {
@@ -296,8 +335,8 @@ export default function Planificacion() {
   }
 
   function optimizarRutaTecnico(otsDelDia: any[], tecnicoId: string) {
-    const INICIO = 8 * 60
-    const FIN = 16 * 60
+    const INICIO = 6 * 60
+    const FIN = 15 * 60
     const otsTecnico = otsDelDia.filter((o) => obtenerTecnicosOt(o).includes(tecnicoId))
     const otsConHora = otsTecnico
       .filter((o) => o.hora_fija && o.fecha_programada)
@@ -442,7 +481,7 @@ export default function Planificacion() {
     const estadoTecnicos = resultadosBase.map((res: any) => ({
       tecnicoId: res.tecnico.id,
       tecnicoNombre: res.tecnico.nombre,
-      horaActual: res.horaFinalTrabajo || (8 * 60),
+      horaActual: res.horaFinalTrabajo || (6 * 60),
       zonaActual: res.zonaFinal || 'elche',
       extraActual: res.extraMin || 0,
     }))
@@ -466,7 +505,7 @@ export default function Planificacion() {
         const inicio = st.horaActual + traslado
         const finTrabajo = inicio + duracion
         const regreso = calcularTiempoEntreZonas(zonaOt, 'elche')
-        const extra = Math.max(0, finTrabajo + regreso - 16 * 60)
+        const extra = Math.max(0, finTrabajo + regreso - 15 * 60)
         const coste = traslado + extra * 2.2 + st.extraActual * 0.5
         if (!mejor || coste < mejor.coste) {
           mejor = { st, traslado, inicio, finTrabajo, extra, coste }
@@ -545,7 +584,12 @@ export default function Planificacion() {
           setPresImporte(String(json.importe || 0))
           setPresFecha(json.fecha ? convertirFecha(json.fecha) : new Date().toISOString().slice(0, 10))
           setPresObs(`Presupuesto ${json.numero || ''} escaneado automaticamente`)
-          const clienteEncontrado = clientes.find(c => c.nombre.toLowerCase().includes((json.cliente || '').toLowerCase()) || (json.cliente || '').toLowerCase().includes(c.nombre.toLowerCase()))
+          const objetivo = String(json.cliente || '').toLowerCase().trim()
+          const clienteEncontrado = clientes.find((c: any) => {
+            const comercial = nombreComercialCliente(c).toLowerCase()
+            const fiscal = nombreFiscalCliente(c).toLowerCase()
+            return comercial.includes(objetivo) || fiscal.includes(objetivo) || objetivo.includes(comercial)
+          })
           if (clienteEncontrado) setPresClienteId(clienteEncontrado.id)
           setMostrarFormPres(true)
         } catch { alert('No se pudieron extraer los datos. Intentalo de nuevo.') }
@@ -780,7 +824,7 @@ export default function Planificacion() {
               <div className="sticky top-0 px-6 py-4 flex items-start justify-between rounded-t-2xl" style={s.headerStyle}>
                 <div>
                   <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{ordenSeleccionada.codigo}</span>
-                  <h2 className="font-bold text-lg mt-1" style={{ color: 'var(--text)' }}>{getNombreCliente(ordenSeleccionada.cliente_id)}</h2>
+                  <h2 className="font-bold text-lg mt-1" style={{ color: 'var(--text)' }}>{getNombreClienteOt(ordenSeleccionada)}</h2>
                 </div>
                 <button onClick={() => setOrdenSeleccionada(null)} className="w-8 h-8 rounded-lg flex items-center justify-center mt-1"
                   style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
@@ -835,7 +879,7 @@ export default function Planificacion() {
                         <button key={o.id} onClick={() => setOrdenSeleccionada(o)}
                           className="w-full text-left text-xs px-1.5 py-1 rounded-lg mb-1 truncate"
                           style={{ background: COLORES_OT[o.tipo]?.bg, color: COLORES_OT[o.tipo]?.color }}>
-                          {o.codigo}
+                          {getNombreClienteOt(o)}
                         </button>
                       ))}
                     </div>
@@ -864,7 +908,10 @@ export default function Planificacion() {
                             <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,0.2)', color: '#a78bfa' }}>Mi OT</span>
                           )}
                         </div>
-                        <p className="font-medium text-sm" style={{ color: 'var(--text)' }}>{getNombreCliente(o.cliente_id)}</p>
+                        <p className="font-medium text-sm" style={{ color: 'var(--text)' }}>{getNombreClienteOt(o)}</p>
+                        {getTextoClienteSecundarioOt(o) && (
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{getTextoClienteSecundarioOt(o)}</p>
+                        )}
                         <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{(o.descripcion || '').substring(0, 80)}</p>
                       </div>
                       <div className="text-right ml-4">
@@ -903,7 +950,7 @@ export default function Planificacion() {
                             <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ESTADOS_OT[o.estado]?.bg, color: ESTADOS_OT[o.estado]?.color }}>{o.estado.replace('_', ' ')}</span>
                             <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: COLORES_OT[o.tipo]?.bg, color: COLORES_OT[o.tipo]?.color }}>{o.tipo}</span>
                           </div>
-                          <p className="font-semibold" style={{ color: 'var(--text)' }}>{getNombreCliente(o.cliente_id)}</p>
+                          <p className="font-semibold" style={{ color: 'var(--text)' }}>{getNombreClienteOt(o)}</p>
                           <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{(o.descripcion || '').substring(0, 120)}</p>
                           {o.observaciones && <p className="text-xs mt-1" style={{ color: '#fbbf24' }}>Nota: {o.observaciones}</p>}
                         </div>
@@ -929,7 +976,7 @@ export default function Planificacion() {
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="font-mono text-xs mr-2" style={{ color: '#06b6d4' }}>{o.codigo}</span>
-                          <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreCliente(o.cliente_id)}</span>
+                          <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreClienteOt(o)}</span>
                         </div>
                         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399' }}>Completada</span>
                       </div>
@@ -1044,9 +1091,9 @@ export default function Planificacion() {
                           </span>
                         </div>
                         <p className="font-semibold" style={{ color: 'var(--text)' }}>{p.titulo}</p>
-                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{p.clientes?.nombre || '—'}</p>
+                        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{nombreComercialCliente(p.clientes) || p.clientes?.nombre || '—'}</p>
                         {(() => {
-                          const cli = clientes.find(c => c.id === p.cliente_id)
+                          const cli = clientes.find((c: any) => c.id === p.cliente_id)
                           return cli ? (
                             <div className="flex gap-4 mt-2 flex-wrap">
                               {cli.telefono && <a href={`tel:${cli.telefono}`} className="text-xs font-medium" style={{ color: '#34d399' }}>📞 {cli.telefono}</a>}
@@ -1187,7 +1234,7 @@ export default function Planificacion() {
             <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
               <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Optimizador de rutas</h2>
               <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                Optimiza por hora, trabajador asignado, duracion, grado de intervencion y proximidad geografica para reducir traslados.
+                Optimiza por hora, trabajador asignado, duracion, grado de intervencion y proximidad geografica para reducir traslados (jornada objetivo 06:00-15:00).
               </p>
               <div className="flex gap-3 items-end flex-wrap">
                 <div>
@@ -1236,7 +1283,7 @@ export default function Planificacion() {
                       <div>
                         <p className="font-semibold" style={{ color: 'var(--text)' }}>{res.tecnico.nombre}</p>
                         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          Salida 08:00 desde Elche - {res.ruta.length} paradas - {res.horasTotales}h trabajo
+                          Salida 06:00 desde Elche - {res.ruta.length} paradas - {res.horasTotales}h trabajo
                         </p>
                         <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
                           Traslado {res.trasladoTotalMin || 0} min - Esperas {res.esperaTotalMin || 0} min - Utilizacion {res.utilizacionPct || 0}%
@@ -1246,7 +1293,7 @@ export default function Planificacion() {
                         style={res.cabeEnJornada
                           ? { background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }
                           : { background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
-                        {res.cabeEnJornada ? 'Cabe en jornada 8-16h' : 'Excede jornada'}
+                        {res.cabeEnJornada ? 'Cabe en jornada 6-15h' : 'Excede jornada'}
                       </span>
                     </div>
                     <div className="p-5">
@@ -1260,7 +1307,7 @@ export default function Planificacion() {
                               <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>Salida nave Elche</p>
                               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>C/ Leonardo Da Vinci 12</p>
                             </div>
-                            <p className="font-mono text-sm font-bold" style={{ color: '#34d399' }}>08:00</p>
+                            <p className="font-mono text-sm font-bold" style={{ color: '#34d399' }}>06:00</p>
                           </div>
                         </div>
 
@@ -1304,13 +1351,18 @@ export default function Planificacion() {
                                       {parada.horaFija && <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(234,179,8,0.2)', color: '#fbbf24' }}>Hora fija</span>}
                                       {parada.fueraDeJornada && <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171' }}>Fuera de jornada</span>}
                                     </div>
-                                    <p className="font-medium text-sm" style={{ color: 'var(--text)' }}>{parada.cliente?.nombre || '—'}</p>
+                                    <p className="font-medium text-sm" style={{ color: 'var(--text)' }}>{nombreComercialCliente(parada.cliente) || parada.cliente?.nombre || '—'}</p>
                                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{parada.cliente?.direccion || '—'}</p>
                                     <p className="text-xs mt-1 capitalize" style={{ color: 'var(--text-subtle)' }}>{parada.ot.tipo} — {parada.ot.duracion_horas || 2}h</p>
                                   </div>
                                   <div className="text-right">
                                     <p className="text-sm font-mono font-bold" style={{ color: 'var(--text)' }}>{formatHora(parada.horaInicio)}</p>
                                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>hasta {formatHora(parada.horaFin)}</p>
+                                    {!parada.horaFija && (
+                                      <p className="text-xs mt-1" style={{ color: '#a78bfa' }}>
+                                        Opciones: {obtenerOpcionesNegociables(parada).map((op: any) => `${formatHora(op.inicio)}-${formatHora(op.fin)}`).join(' / ')}
+                                      </p>
+                                    )}
                                     {parada.cliente?.direccion && (
                                       <a href={`https://www.google.com/maps/dir/Calle+Leonardo+Da+Vinci+12+Elche/${encodeURIComponent(parada.cliente.direccion)}`}
                                         target="_blank" rel="noreferrer" className="text-xs block mt-1" style={{ color: '#06b6d4' }}>
@@ -1349,7 +1401,7 @@ export default function Planificacion() {
                           style={{ background: 'rgba(234,179,8,0.08)' }}>
                           <div>
                             <span className="font-mono text-xs mr-2" style={{ color: '#fbbf24' }}>{o.codigo}</span>
-                            <span className="text-sm" style={{ color: 'var(--text)' }}>{clientes.find((c: any) => c.id === o.cliente_id)?.nombre || '—'}</span>
+                            <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreClienteOt(o)}</span>
                           </div>
                           <span className="text-xs" style={{ color: '#fbbf24' }}>{o.duracion_horas || 2}h</span>
                         </div>
@@ -1366,7 +1418,7 @@ export default function Planificacion() {
                         <div key={`sug-${sug.ot.id}-${sug.tecnicoId}`} className="rounded-lg px-3 py-2 flex items-center justify-between gap-3 flex-wrap" style={{ background: 'rgba(6,182,212,0.08)' }}>
                           <div>
                             <p className="text-sm" style={{ color: 'var(--text)' }}>
-                              {sug.ot.codigo} - {clientes.find((c: any) => c.id === sug.ot.cliente_id)?.nombre || 'Sin cliente'}
+                              {sug.ot.codigo} - {getNombreClienteOt(sug.ot)}
                             </p>
                             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                               Asignar a <strong>{sug.tecnicoNombre}</strong> a las {formatHora(sug.horaInicio)}

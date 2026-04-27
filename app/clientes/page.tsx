@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { s } from '@/lib/styles'
+import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
 
 export default function Clientes() {
   const [clientes, setClientes] = useState<any[]>([])
@@ -19,6 +20,7 @@ export default function Clientes() {
   const [totalClientes, setTotalClientes] = useState(0)
   const [seleccionados, setSeleccionados] = useState<string[]>([])
   const [borrandoMasivo, setBorrandoMasivo] = useState(false)
+  const [estandarizando, setEstandarizando] = useState(false)
   const POR_PAGINA = 50
   const fileRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -33,6 +35,24 @@ export default function Clientes() {
   const [email, setEmail] = useState('')
   const [notas, setNotas] = useState('')
   const [empresa, setEmpresa] = useState('teros')
+
+  function normalizarRegistroCliente(input: any) {
+    const nombreComercial = estandarizarNombreComercial(input?.nombre || '')
+    const nombreFiscalRaw = input?.nombre_fiscal || ''
+    const nombreFiscal = estandarizarNombreFiscal(nombreFiscalRaw || nombreComercial)
+    return {
+      nombre: nombreComercial,
+      nombre_fiscal: nombreFiscal,
+      cif: limpiarTextoCliente(input?.cif || '').toUpperCase(),
+      direccion: limpiarTextoCliente(input?.direccion || ''),
+      poblacion: limpiarTextoCliente(input?.poblacion || '').toUpperCase(),
+      telefono: limpiarTextoCliente(input?.telefono || ''),
+      movil: limpiarTextoCliente(input?.movil || ''),
+      email: String(input?.email || '').trim().toLowerCase(),
+      notas: String(input?.notas || '').trim(),
+      empresa: String(input?.empresa || 'teros').toLowerCase() === 'olipro' ? 'olipro' : 'teros',
+    }
+  }
 
   useEffect(() => { verificarSesion() }, [])
   useEffect(() => { cargarClientes() }, [pagina, busqueda, filtroEmpresa])
@@ -76,7 +96,18 @@ export default function Clientes() {
 
   async function guardarCliente(e: React.FormEvent) {
     e.preventDefault()
-    const datos = { nombre, nombre_fiscal: nombreFiscal, cif, direccion, poblacion, telefono, movil, email, notas, empresa }
+    const datos = normalizarRegistroCliente({
+      nombre,
+      nombre_fiscal: nombreFiscal,
+      cif,
+      direccion,
+      poblacion,
+      telefono,
+      movil,
+      email,
+      notas,
+      empresa,
+    })
     if (editandoId) {
       await (supabase.from('clientes') as any).update(datos).eq('id', editandoId)
     } else {
@@ -167,7 +198,7 @@ export default function Clientes() {
           const n = getCol(fila, ['nombre'])
           return n !== '' && n !== 'undefined'
         })
-        .map((fila: any[]) => ({
+        .map((fila: any[]) => normalizarRegistroCliente({
           nombre: getCol(fila, ['nombre comercial', 'nombre', 'name']),
           nombre_fiscal: getCol(fila, ['nombre fiscal', 'fiscal']),
           cif: getCol(fila, ['cif', 'nif', 'id']),
@@ -191,11 +222,83 @@ export default function Clientes() {
       }
       setResultadoImport({ importados, errores, total: registros.length, empresa: empresaImport })
       setPagina(0); cargarClientes()
-    } catch (err) {
+    } catch {
       setResultadoImport({ error: 'Error al leer el archivo Excel.' })
     }
     setImportando(false)
     if (fileRef.current) fileRef.current.value = ''
+  }
+
+  async function estandarizarNombresClientes() {
+    if (!confirm('Estandarizar nombres de clientes (comercial y fiscal) segun el filtro actual?')) return
+    setEstandarizando(true)
+    try {
+      const LOTE_LECTURA = 500
+      const filas: any[] = []
+      let paginaLectura = 0
+
+      while (true) {
+        let q = (supabase.from('clientes') as any)
+          .select('id, nombre, nombre_fiscal, cif, direccion, poblacion, telefono, movil, email, notas, empresa')
+          .order('id')
+          .range(paginaLectura * LOTE_LECTURA, (paginaLectura + 1) * LOTE_LECTURA - 1)
+
+        if (filtroEmpresa !== 'todos') q = q.eq('empresa', filtroEmpresa)
+
+        const { data, error } = await q
+        if (error) throw new Error(error.message)
+        if (!data || data.length === 0) break
+
+        filas.push(...data)
+        if (data.length < LOTE_LECTURA) break
+        paginaLectura++
+      }
+
+      let cambiados = 0
+      let sinCambios = 0
+      let fallidos = 0
+      let primerError = ''
+
+      for (const c of filas) {
+        const normalizado = normalizarRegistroCliente(c)
+        const actual = normalizarRegistroCliente({
+          nombre: c.nombre || '',
+          nombre_fiscal: c.nombre_fiscal || '',
+          cif: c.cif || '',
+          direccion: c.direccion || '',
+          poblacion: c.poblacion || '',
+          telefono: c.telefono || '',
+          movil: c.movil || '',
+          email: c.email || '',
+          notas: c.notas || '',
+          empresa: c.empresa || 'teros',
+        })
+
+        if (JSON.stringify(actual) === JSON.stringify(normalizado)) {
+          sinCambios++
+          continue
+        }
+
+        const { error: errUpdate } = await (supabase.from('clientes') as any).update(normalizado).eq('id', c.id)
+        if (errUpdate) {
+          fallidos++
+          if (!primerError) primerError = errUpdate.message || 'Error desconocido'
+          continue
+        }
+        cambiados++
+      }
+
+      await cargarClientes()
+      if (fallidos > 0) {
+        alert(`Estandarizacion completada con incidencias.\nActualizados: ${cambiados}\nSin cambios: ${sinCambios}\nFallidos: ${fallidos}\nPrimer error: ${primerError}`)
+      } else {
+        alert(`Estandarizacion completada.\nActualizados: ${cambiados}\nSin cambios: ${sinCambios}`)
+      }
+    } catch (error: any) {
+      alert('No se pudo completar la estandarizacion: ' + String(error?.message || 'Error desconocido'))
+    } finally {
+      setEstandarizando(false)
+    }
   }
 
   function exportarExcel() {
@@ -239,6 +342,14 @@ export default function Clientes() {
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={exportarExcel} className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
             Exportar Excel
+          </button>
+          <button
+            onClick={estandarizarNombresClientes}
+            disabled={estandarizando}
+            className="text-sm px-4 py-2 rounded-xl disabled:opacity-50"
+            style={s.btnSecondary}
+          >
+            {estandarizando ? 'Estandarizando...' : 'Estandarizar nombres de clientes'}
           </button>
           <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nuevo cliente

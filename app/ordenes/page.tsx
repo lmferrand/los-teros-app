@@ -4,9 +4,40 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
+import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
+
+function normalizarGradoIntervencion(valor: string | null | undefined) {
+  const v = String(valor || '').trim().toLowerCase()
+  if (v === '1' || v === '2' || v === '3') return v
+  if (v === 'baja') return '1'
+  if (v === 'alta' || v === 'urgente') return '3'
+  return '2'
+}
+
+function textoGradoIntervencion(valor: string | null | undefined) {
+  const g = normalizarGradoIntervencion(valor)
+  if (g === '1') return 'Basico (1)'
+  if (g === '3') return 'Excelente (3)'
+  return 'Medio (2)'
+}
+
+function nombreComercialCliente(c: any) {
+  return String(c?.nombre_comercial || c?.nombre || '').trim()
+}
+
+function nombreFiscalCliente(c: any) {
+  return String(c?.nombre_fiscal || '').trim()
+}
+
+function normalizarEmpresaCliente(valor: unknown) {
+  const v = String(valor || '').trim().toLowerCase()
+  if (v === 'olipro') return 'olipro'
+  return 'teros'
+}
 
 export default function Ordenes() {
   const [ordenes, setOrdenes] = useState<any[]>([])
+  const [vehiculos, setVehiculos] = useState<any[]>([])
   const [tecnicos, setTecnicos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
@@ -20,18 +51,35 @@ export default function Ordenes() {
   const [resultadosCliente, setResultadosCliente] = useState<any[]>([])
   const [buscandoCliente, setBuscandoCliente] = useState(false)
   const [nombreClienteSeleccionado, setNombreClienteSeleccionado] = useState('')
+  const [empresaOt, setEmpresaOt] = useState<'teros' | 'olipro'>('teros')
   const router = useRouter()
 
   const [tipo, setTipo] = useState('limpieza')
   const [clienteId, setClienteId] = useState('')
   const [tecnicosSeleccionados, setTecnicosSeleccionados] = useState<string[]>([])
+  const [vehiculoId, setVehiculoId] = useState('')
+  const [tecnicoVehiculoId, setTecnicoVehiculoId] = useState('')
   const [fecha, setFecha] = useState('')
-  const [prioridad, setPrioridad] = useState('normal')
+  const [prioridad, setPrioridad] = useState('2')
   const [estado, setEstado] = useState('pendiente')
   const [descripcion, setDescripcion] = useState('')
   const [observaciones, setObservaciones] = useState('')
   const [duracionHoras, setDuracionHoras] = useState('2')
   const [horaFija, setHoraFija] = useState(false)
+  const [mostrarEditarClienteOt, setMostrarEditarClienteOt] = useState(false)
+  const [guardandoClienteOt, setGuardandoClienteOt] = useState(false)
+  const [clienteOtForm, setClienteOtForm] = useState<any>({
+    nombre: '',
+    nombre_fiscal: '',
+    cif: '',
+    direccion: '',
+    poblacion: '',
+    telefono: '',
+    movil: '',
+    email: '',
+    notas: '',
+    empresa: 'teros',
+  })
 
   useEffect(() => {
     verificarSesion()
@@ -44,12 +92,14 @@ export default function Ordenes() {
   }
 
   async function cargarDatos() {
-    const [ords, tecs] = await Promise.all([
-      supabase.from('ordenes').select('*, clientes(nombre)').order('created_at', { ascending: false }),
+    const [ords, tecs, vehs] = await Promise.all([
+      supabase.from('ordenes').select('*, clientes(*)').order('created_at', { ascending: false }),
       supabase.from('perfiles').select('*').order('nombre'),
+      supabase.from('vehiculos_flota').select('id, matricula, alias, marca, modelo, activo').eq('activo', true).order('matricula'),
     ])
     if (ords.data) setOrdenes(ords.data)
     if (tecs.data) setTecnicos(tecs.data)
+    if (vehs.data) setVehiculos(vehs.data)
     setLoading(false)
   }
 
@@ -59,13 +109,30 @@ export default function Ordenes() {
     setClienteId('')
     if (texto.length < 2) { setResultadosCliente([]); return }
     setBuscandoCliente(true)
-    const { data } = await (supabase.from('clientes') as any)
-      .select('id, nombre, empresa')
-      .ilike('nombre', `%${texto}%`)
-      .limit(20)
-    setResultadosCliente(data || [])
+    const empresaFiltro = empresaOt
+    const termino = texto.trim()
+    let data: any[] | null = null
+    const intentoAvanzado = await (supabase.from('clientes') as any)
+      .select('id, nombre, nombre_comercial, nombre_fiscal, cif, poblacion, empresa, tipo_cliente')
+      .or(`nombre.ilike.%${termino}%,nombre_comercial.ilike.%${termino}%,nombre_fiscal.ilike.%${termino}%,cif.ilike.%${termino}%`)
+      .limit(40)
+    if (!intentoAvanzado.error) data = intentoAvanzado.data || []
+    if (!data) {
+      const fallback = await (supabase.from('clientes') as any)
+        .select('id, nombre, nombre_comercial, nombre_fiscal, cif, poblacion, empresa, tipo_cliente')
+        .ilike('nombre', `%${termino}%`)
+        .limit(40)
+      data = fallback.data || []
+    }
+    setResultadosCliente((data || []).filter((c: any) => normalizarEmpresaCliente(c?.tipo_cliente || c?.empresa) === empresaFiltro))
     setBuscandoCliente(false)
   }
+
+  useEffect(() => {
+    if (!tecnicoVehiculoId) return
+    if (tecnicosSeleccionados.includes(tecnicoVehiculoId)) return
+    setTecnicoVehiculoId('')
+  }, [tecnicoVehiculoId, tecnicosSeleccionados])
 
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
@@ -100,22 +167,28 @@ export default function Ordenes() {
   function abrirFormNuevo() {
     setEditandoId(null)
     setTipo('limpieza'); setClienteId(''); setTecnicosSeleccionados([])
-    setFecha(''); setPrioridad('normal'); setEstado('pendiente')
+    setVehiculoId(''); setTecnicoVehiculoId('')
+    setFecha(''); setPrioridad('2'); setEstado('pendiente')
     setDescripcion(''); setObservaciones(''); setDuracionHoras('2'); setHoraFija(false)
+    setEmpresaOt('teros')
     setBusquedaCliente(''); setResultadosCliente([]); setNombreClienteSeleccionado('')
     setMostrarForm(true)
   }
 
   function abrirFormEditar(o: any) {
     setEditandoId(o.id)
+    const empresaCliente = normalizarEmpresaCliente(o?.clientes?.tipo_cliente || o?.clientes?.empresa)
     setTipo(o.tipo || 'limpieza'); setClienteId(o.cliente_id || '')
     setTecnicosSeleccionados(o.tecnicos_ids || [])
+    setVehiculoId(o.vehiculo_id || '')
+    setTecnicoVehiculoId(o.tecnico_vehiculo_id || '')
     setFecha(o.fecha_programada ? new Date(o.fecha_programada).toISOString().slice(0, 16) : '')
-    setPrioridad(o.prioridad || 'normal'); setEstado(o.estado || 'pendiente')
+    setPrioridad(normalizarGradoIntervencion(o.prioridad)); setEstado(o.estado || 'pendiente')
     setDescripcion(o.descripcion || ''); setObservaciones(o.observaciones || '')
     setDuracionHoras(String(o.duracion_horas || 2)); setHoraFija(o.hora_fija || false)
-    setNombreClienteSeleccionado(o.clientes?.nombre || '')
-    setBusquedaCliente(o.clientes?.nombre || '')
+    setEmpresaOt(empresaCliente)
+    setNombreClienteSeleccionado(nombreComercialCliente(o.clientes) || o.clientes?.nombre || '')
+    setBusquedaCliente(nombreComercialCliente(o.clientes) || o.clientes?.nombre || '')
     setResultadosCliente([])
     setMostrarForm(true); setOrdenDetalle(null)
   }
@@ -194,7 +267,12 @@ export default function Ordenes() {
     if (!clienteId) { alert('Selecciona un cliente'); return }
     const datos = {
       tipo, cliente_id: clienteId, tecnico_id: tecnicosSeleccionados[0] || null,
-      tecnicos_ids: tecnicosSeleccionados, fecha_programada: fecha, prioridad, estado,
+      tecnicos_ids: tecnicosSeleccionados,
+      vehiculo_id: vehiculoId || null,
+      tecnico_vehiculo_id: tecnicoVehiculoId || null,
+      fecha_programada: fecha,
+      prioridad: normalizarGradoIntervencion(prioridad),
+      estado,
       descripcion, observaciones, duracion_horas: parseFloat(duracionHoras) || 2, hora_fija: horaFija,
     }
     if (editandoId) {
@@ -205,6 +283,7 @@ export default function Ordenes() {
     }
     setMostrarForm(false); setEditandoId(null)
     setDescripcion(''); setObservaciones(''); setClienteId(''); setTecnicosSeleccionados([])
+    setVehiculoId(''); setTecnicoVehiculoId('')
     setBusquedaCliente(''); setNombreClienteSeleccionado(''); setResultadosCliente([])
     cargarDatos()
   }
@@ -267,6 +346,92 @@ export default function Ordenes() {
     return ids.map(id => tecnicos.find(t => t.id === id)?.nombre || '').filter(Boolean).join(', ')
   }
 
+  function getNombreVehiculo(id?: string | null) {
+    if (!id) return 'Sin vehiculo'
+    const v = vehiculos.find((it: any) => it.id === id)
+    if (!v) return 'Sin vehiculo'
+    const etiqueta = [v.marca, v.modelo].filter(Boolean).join(' ').trim()
+    return `${v.matricula}${etiqueta ? ` - ${etiqueta}` : ''}`
+  }
+
+  function getNombreTecnico(id?: string | null) {
+    if (!id) return 'Sin asignar'
+    return tecnicos.find((t: any) => t.id === id)?.nombre || 'Sin asignar'
+  }
+
+  function getTextoClienteSecundario(c: any) {
+    const fiscal = nombreFiscalCliente(c)
+    const cif = String(c?.cif || '').trim()
+    const poblacion = String(c?.poblacion || '').trim()
+    return [fiscal || '', cif || '', poblacion || ''].filter(Boolean).join(' | ')
+  }
+
+  function normalizarClientePayload(input: any) {
+    const nombreComercial = estandarizarNombreComercial(input?.nombre || '')
+    const nombreFiscal = estandarizarNombreFiscal(input?.nombre_fiscal || nombreComercial)
+    return {
+      nombre: nombreComercial,
+      nombre_fiscal: nombreFiscal,
+      cif: limpiarTextoCliente(input?.cif || '').toUpperCase(),
+      direccion: limpiarTextoCliente(input?.direccion || ''),
+      poblacion: limpiarTextoCliente(input?.poblacion || '').toUpperCase(),
+      telefono: limpiarTextoCliente(input?.telefono || ''),
+      movil: limpiarTextoCliente(input?.movil || ''),
+      email: String(input?.email || '').trim().toLowerCase(),
+      notas: String(input?.notas || '').trim(),
+      empresa: String(input?.empresa || 'teros').toLowerCase() === 'olipro' ? 'olipro' : 'teros',
+    }
+  }
+
+  async function abrirEditarClienteDesdeOt() {
+    if (!clienteId) {
+      alert('Selecciona un cliente primero.')
+      return
+    }
+    const { data, error } = await (supabase.from('clientes') as any)
+      .select('*')
+      .eq('id', clienteId)
+      .single()
+    if (error || !data) {
+      alert('No se pudo cargar el cliente para editar.')
+      return
+    }
+    setClienteOtForm({
+      nombre: data.nombre || '',
+      nombre_fiscal: data.nombre_fiscal || '',
+      cif: data.cif || '',
+      direccion: data.direccion || '',
+      poblacion: data.poblacion || '',
+      telefono: data.telefono || '',
+      movil: data.movil || '',
+      email: data.email || '',
+      notas: data.notas || '',
+      empresa: data.empresa || empresaOt || 'teros',
+    })
+    setMostrarEditarClienteOt(true)
+  }
+
+  async function guardarClienteDesdeOt(e: React.FormEvent) {
+    e.preventDefault()
+    if (!clienteId) return
+    const payload = normalizarClientePayload(clienteOtForm)
+    if (!payload.nombre) {
+      alert('El nombre comercial no puede estar vacio.')
+      return
+    }
+    setGuardandoClienteOt(true)
+    const { error } = await (supabase.from('clientes') as any).update(payload).eq('id', clienteId)
+    setGuardandoClienteOt(false)
+    if (error) {
+      alert('No se pudo guardar el cliente: ' + error.message)
+      return
+    }
+    setMostrarEditarClienteOt(false)
+    setNombreClienteSeleccionado(payload.nombre)
+    setBusquedaCliente(payload.nombre)
+    await cargarDatos()
+  }
+
   const TIPOS_FOTO = [
     { key: 'proceso', label: 'Fotos del proceso' },
     { key: 'equipo_salida', label: 'Equipo al salir' },
@@ -283,7 +448,13 @@ export default function Ordenes() {
   }
 
   const PRIORIDAD_COLORS: any = {
-    baja: '#64748b', normal: '#06b6d4', alta: '#f59e0b', urgente: '#ef4444'
+    '1': '#64748b',
+    '2': '#06b6d4',
+    '3': '#34d399',
+    baja: '#64748b',
+    normal: '#06b6d4',
+    alta: '#34d399',
+    urgente: '#34d399',
   }
 
   const ordenesFiltradas = filtroEstado ? ordenes.filter(o => o.estado === filtroEstado) : ordenes
@@ -310,6 +481,60 @@ export default function Ordenes() {
                 Cancelar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {mostrarEditarClienteOt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
+          <div className="w-full max-w-2xl rounded-2xl p-6" style={s.cardStyle}>
+            <h3 className="font-semibold mb-4" style={{ color: 'var(--text)' }}>Editar cliente desde OT</h3>
+            <form onSubmit={guardarClienteDesdeOt} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="md:col-span-2">
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Nombre Comercial</label>
+                <input value={clienteOtForm.nombre} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, nombre: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} required />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Nombre Fiscal</label>
+                <input value={clienteOtForm.nombre_fiscal} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, nombre_fiscal: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>CIF</label>
+                <input value={clienteOtForm.cif} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, cif: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Direccion</label>
+                <input value={clienteOtForm.direccion} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, direccion: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Poblacion</label>
+                <input value={clienteOtForm.poblacion} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, poblacion: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Telefono</label>
+                <input value={clienteOtForm.telefono} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, telefono: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Movil</label>
+                <input value={clienteOtForm.movil} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, movil: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Email</label>
+                <input value={clienteOtForm.email} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, email: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Notas</label>
+                <textarea value={clienteOtForm.notas} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, notas: e.target.value }))} rows={3} className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle} />
+              </div>
+              <div className="md:col-span-2 flex gap-2">
+                <button type="submit" disabled={guardandoClienteOt} className="text-sm px-4 py-2 rounded-xl font-medium disabled:opacity-50" style={s.btnPrimary}>
+                  {guardandoClienteOt ? 'Guardando...' : 'Guardar cliente'}
+                </button>
+                <button type="button" onClick={() => setMostrarEditarClienteOt(false)} className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
+                  Cancelar
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -355,6 +580,24 @@ export default function Ordenes() {
                 </select>
               </div>
               <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Empresa cliente</label>
+                <select
+                  value={empresaOt}
+                  onChange={e => {
+                    setEmpresaOt((e.target.value || 'teros') as 'teros' | 'olipro')
+                    setClienteId('')
+                    setBusquedaCliente('')
+                    setNombreClienteSeleccionado('')
+                    setResultadosCliente([])
+                  }}
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                  style={s.inputStyle}
+                >
+                  <option value="teros">Clientes Teros</option>
+                  <option value="olipro">Clientes Olipro</option>
+                </select>
+              </div>
+              <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Cliente</label>
                 <div className="relative">
                   <input
@@ -373,15 +616,33 @@ export default function Ordenes() {
                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                       {resultadosCliente.map(c => (
                         <button key={c.id} type="button"
-                          onClick={() => { setClienteId(c.id); setNombreClienteSeleccionado(c.nombre); setBusquedaCliente(c.nombre); setResultadosCliente([]) }}
+                          onClick={() => {
+                            const nombreMostrar = nombreComercialCliente(c) || c.nombre || ''
+                            setClienteId(c.id)
+                            setNombreClienteSeleccionado(nombreMostrar)
+                            setBusquedaCliente(nombreMostrar)
+                            setResultadosCliente([])
+                          }}
                           className="w-full text-left px-4 py-2.5 text-sm"
                           style={{ color: 'var(--text)', borderBottom: '1px solid var(--border)' }}
                           onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.1)'}
                           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          <span>{c.nombre}</span>
-                          <span className="ml-2 text-xs" style={{ color: c.empresa === 'teros' ? '#06b6d4' : '#a78bfa' }}>
-                            {c.empresa === 'teros' ? 'Teros' : 'Olipro'}
-                          </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <span>{nombreComercialCliente(c) || c.nombre}</span>
+                            <span
+                              className="text-xs"
+                              style={{
+                                color: normalizarEmpresaCliente(c.tipo_cliente || c.empresa) === 'teros'
+                                  ? '#06b6d4'
+                                  : '#a78bfa',
+                              }}
+                            >
+                              {normalizarEmpresaCliente(c.tipo_cliente || c.empresa) === 'teros' ? 'Teros' : 'Olipro'}
+                            </span>
+                          </div>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-subtle)' }}>
+                            {getTextoClienteSecundario(c) || 'Sin datos fiscales'}
+                          </p>
                         </button>
                       ))}
                     </div>
@@ -390,6 +651,16 @@ export default function Ordenes() {
                     <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Sin resultados</p>
                   )}
                 </div>
+                {clienteId && (
+                  <button
+                    type="button"
+                    onClick={abrirEditarClienteDesdeOt}
+                    className="text-xs px-3 py-1.5 rounded-lg mt-2"
+                    style={{ background: 'rgba(124,58,237,0.1)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.2)' }}
+                  >
+                    Editar datos del cliente
+                  </button>
+                )}
               </div>
               <div className="md:col-span-2">
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Trabajadores</label>
@@ -405,15 +676,36 @@ export default function Ordenes() {
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha programada</label>
-                <input type="datetime-local" value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+                <input type="datetime-local" step={1800} value={fecha} onChange={e => setFecha(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Prioridad</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Grado de intervencion</label>
                 <select value={prioridad} onChange={e => setPrioridad(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
-                  <option value="baja">Baja</option>
-                  <option value="normal">Normal</option>
-                  <option value="alta">Alta</option>
-                  <option value="urgente">Urgente</option>
+                  <option value="1">1 - Basico</option>
+                  <option value="2">2 - Medio</option>
+                  <option value="3">3 - Excelente</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Vehiculo asignado</label>
+                <select value={vehiculoId} onChange={e => setVehiculoId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
+                  <option value="">Sin vehiculo</option>
+                  {vehiculos.map((v: any) => (
+                    <option key={v.id} value={v.id}>
+                      {getNombreVehiculo(v.id)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Conductor del vehiculo</label>
+                <select value={tecnicoVehiculoId} onChange={e => setTecnicoVehiculoId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
+                  <option value="">Sin asignar</option>
+                  {(tecnicosSeleccionados.length > 0 ? tecnicos.filter((t: any) => tecnicosSeleccionados.includes(t.id)) : tecnicos).map((t: any) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -474,8 +766,12 @@ export default function Ordenes() {
             <div className="w-full md:max-w-2xl rounded-t-2xl md:rounded-2xl overflow-y-auto" style={{ ...s.cardStyle, maxHeight: '92vh' }}>
               <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={s.headerStyle}>
                 <div>
-                  <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{ordenDetalle.codigo}</span>
-                  <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>{ordenDetalle.clientes?.nombre || '—'}</h2>
+                  <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>{nombreComercialCliente(ordenDetalle.clientes) || ordenDetalle.clientes?.nombre || '—'}</h2>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Trabajador asignado: {getNombresTecnicos(ordenDetalle.tecnicos_ids || [])}</p>
+                  <p className="font-mono text-xs mt-1" style={{ color: '#06b6d4' }}>OT {ordenDetalle.codigo} - {ordenDetalle.tipo}</p>
+                  {getTextoClienteSecundario(ordenDetalle.clientes) && (
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{getTextoClienteSecundario(ordenDetalle.clientes)}</p>
+                  )}
                 </div>
                 <button onClick={() => setOrdenDetalle(null)} className="w-8 h-8 rounded-lg flex items-center justify-center"
                   style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
@@ -484,11 +780,13 @@ export default function Ordenes() {
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
                     { label: 'Estado', val: <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADO_COLORS[ordenDetalle.estado]?.bg, color: ESTADO_COLORS[ordenDetalle.estado]?.color }}>{ordenDetalle.estado.replace('_', ' ')}</span> },
-                    { label: 'Prioridad', val: <span className="text-sm font-medium" style={{ color: PRIORIDAD_COLORS[ordenDetalle.prioridad] }}>{ordenDetalle.prioridad}</span> },
+                    { label: 'Grado', val: <span className="text-sm font-medium" style={{ color: PRIORIDAD_COLORS[normalizarGradoIntervencion(ordenDetalle.prioridad)] }}>{textoGradoIntervencion(ordenDetalle.prioridad)}</span> },
                     { label: 'Tipo', val: <span className="text-sm capitalize" style={{ color: 'var(--text)' }}>{ordenDetalle.tipo}</span> },
                     { label: 'Fecha', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</span> },
                     { label: 'Duracion', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.duracion_horas || 2}h</span> },
                     { label: 'Hora fija', val: <span className="text-sm font-medium" style={{ color: ordenDetalle.hora_fija ? '#f59e0b' : 'var(--text-muted)' }}>{ordenDetalle.hora_fija ? 'Si' : 'No'}</span> },
+                    { label: 'Vehiculo', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreVehiculo(ordenDetalle.vehiculo_id)}</span> },
+                    { label: 'Conductor', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreTecnico(ordenDetalle.tecnico_vehiculo_id)}</span> },
                   ].map((item, i) => (
                     <div key={i} className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                       <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{item.label}</p>
@@ -500,6 +798,11 @@ export default function Ordenes() {
                 <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                   <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Trabajadores</p>
                   <p className="text-sm" style={{ color: 'var(--text)' }}>{getNombresTecnicos(ordenDetalle.tecnicos_ids || [])}</p>
+                </div>
+                <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                  <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Vehiculo y conductor</p>
+                  <p className="text-sm" style={{ color: 'var(--text)' }}>{getNombreVehiculo(ordenDetalle.vehiculo_id)}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{getNombreTecnico(ordenDetalle.tecnico_vehiculo_id)}</p>
                 </div>
 
                 {ordenDetalle.descripcion && (
@@ -578,6 +881,13 @@ export default function Ordenes() {
                       Completar
                     </button>
                   )}
+                  {ordenDetalle.estado !== 'pendiente' && (
+                    <button onClick={() => cambiarEstado(ordenDetalle.id, 'pendiente')}
+                      className="text-sm px-4 py-2 rounded-xl font-medium"
+                      style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}>
+                      Volver a pendiente
+                    </button>
+                  )}
                   <button onClick={() => abrirFormEditar(ordenDetalle)}
                     className="text-sm px-4 py-2 rounded-xl"
                     style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
@@ -614,25 +924,35 @@ export default function Ordenes() {
                 className="rounded-2xl p-5 cursor-pointer transition-all" style={s.cardStyle}
                 onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
                 onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
-                <div className="flex items-start justify-between flex-wrap gap-3">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{o.codigo}</span>
+	                <div className="flex items-start justify-between flex-wrap gap-3">
+	                  <div className="min-w-0">
+	                    <p className="font-semibold" style={{ color: 'var(--text)' }}>
+	                      {nombreComercialCliente(o.clientes) || o.clientes?.nombre || '-'}
+	                    </p>
+	                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+	                      Trabajador asignado: {getNombresTecnicos(o.tecnicos_ids || [])}
+	                    </p>
+	                    <p className="font-mono text-xs mt-1" style={{ color: '#06b6d4' }}>
+	                      OT {o.codigo} - {o.tipo}
+	                    </p>
+	                    <div className="flex items-center gap-3 mt-2 flex-wrap">
                       <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ESTADO_COLORS[o.estado]?.bg, color: ESTADO_COLORS[o.estado]?.color }}>
                         {o.estado.replace('_', ' ')}
                       </span>
-                      <span className="text-xs font-medium" style={{ color: PRIORIDAD_COLORS[o.prioridad] }}>{o.prioridad}</span>
+                      <span className="text-xs font-medium" style={{ color: PRIORIDAD_COLORS[normalizarGradoIntervencion(o.prioridad)] }}>{textoGradoIntervencion(o.prioridad)}</span>
                       {o.hora_fija && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>Hora fija</span>}
                     </div>
-                    <p className="font-medium" style={{ color: 'var(--text)' }}>{o.clientes?.nombre || '—'}</p>
+                    {getTextoClienteSecundario(o.clientes) && (
+                      <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{getTextoClienteSecundario(o.clientes)}</p>
+                    )}
                     <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
                     <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: 'var(--text-subtle)' }}>
-                      <span>Trabajadores: {getNombresTecnicos(o.tecnicos_ids || [])}</span>
+                      <span>Vehiculo: {getNombreVehiculo(o.vehiculo_id)}</span>
                       <span>Duracion: {o.duracion_horas || 2}h</span>
-                      <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '—'}</span>
+                      <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '-'}</span>
                     </div>
                   </div>
-                  <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>Ver detalle →</span>
+                  <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>Ver detalle {'>'}</span>
                 </div>
               </div>
             ))}

@@ -23,10 +23,15 @@ export default function Trabajadores() {
   const [email, setEmail] = useState('')
 
   const cargarTrabajadores = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('perfiles')
       .select('id, nombre, rol, telefono, activo')
       .order('nombre')
+    if (error) {
+      alert('No se pudo cargar la lista de trabajadores: ' + error.message)
+      setLoading(false)
+      return
+    }
     if (data) setTrabajadores(data)
     setLoading(false)
   }, [])
@@ -60,7 +65,11 @@ export default function Trabajadores() {
   async function guardarTrabajador(e: React.FormEvent) {
     e.preventDefault()
     if (editandoId) {
-      await supabase.from('perfiles').update({ nombre, rol, telefono }).eq('id', editandoId)
+      const { error } = await supabase.from('perfiles').update({ nombre, rol, telefono }).eq('id', editandoId)
+      if (error) {
+        alert('No se pudo guardar este trabajador: ' + error.message)
+        return
+      }
       setMostrarForm(false); setEditandoId(null); cargarTrabajadores(); return
     }
     setEnviando(true)
@@ -81,13 +90,21 @@ export default function Trabajadores() {
   }
 
   async function cambiarRol(id: string, nuevoRol: string) {
-    await supabase.from('perfiles').update({ rol: nuevoRol }).eq('id', id)
+    const { error } = await supabase.from('perfiles').update({ rol: nuevoRol }).eq('id', id)
+    if (error) {
+      alert('No se pudo cambiar el rol: ' + error.message)
+      return
+    }
     cargarTrabajadores()
   }
 
   async function eliminarTrabajador(id: string, nombre: string) {
     if (!confirm(`Eliminar a ${nombre}?`)) return
-    await supabase.from('perfiles').delete().eq('id', id)
+    const { error } = await supabase.from('perfiles').delete().eq('id', id)
+    if (error) {
+      alert('No se pudo eliminar el trabajador: ' + error.message)
+      return
+    }
     cargarTrabajadores()
   }
 

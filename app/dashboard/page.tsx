@@ -5,6 +5,13 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
+function diasRestantes(fecha: string | null | undefined) {
+  if (!fecha) return null
+  const limite = new Date(`${fecha}T12:00:00`)
+  if (Number.isNaN(limite.getTime())) return null
+  return Math.floor((limite.getTime() - Date.now()) / 86400000)
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [perfil, setPerfil] = useState<any>(null)
@@ -12,13 +19,12 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     otActivas: 0, otMes: 0, stockBajo: 0,
     equiposCampo: 0, clientesTeros: 0, clientesOlipro: 0, otPendientes: 0,
+    vehiculosTotal: 0, vehiculosAlDia: 0, vehiculosPorVencer: 0, vehiculosVencidos: 0,
   })
   const [misOrdenes, setMisOrdenes] = useState<any[]>([])
   const [alertas, setAlertas] = useState<{ tipo: string; texto: string }[]>([])
   const router = useRouter()
   const { tema, toggleTema } = useTheme()
-
-  useEffect(() => { cargarDatos() }, [])
 
   async function cargarDatos() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -36,10 +42,11 @@ export default function Dashboard() {
     }
     setPerfil(perfilData)
 
-    const [ordenes, materiales, equipos] = await Promise.all([
+    const [ordenes, materiales, equipos, vehiculosFlota] = await Promise.all([
       supabase.from('ordenes').select('*'),
       supabase.from('materiales').select('*'),
       supabase.from('equipos').select('*'),
+      supabase.from('vehiculos_flota').select('id, matricula, proxima_itv, vencimiento_itc, vencimiento_seguro, vencimiento_impuesto, activo').eq('activo', true),
     ])
 
     const { count: countTeros } = await (supabase.from('clientes') as any).select('*', { count: 'exact', head: true }).eq('empresa', 'teros')
@@ -51,6 +58,7 @@ export default function Dashboard() {
     const todasOrdenes = ordenes.data || []
     const todosMateriales = materiales.data || []
     const todosEquipos = equipos.data || []
+    const todosVehiculos = vehiculosFlota.data || []
     const otActivas = todasOrdenes.filter(o => o.estado === 'pendiente' || o.estado === 'en_curso')
     const otMes = todasOrdenes.filter(o => {
       if (!o.created_at || o.estado !== 'completada') return false
@@ -59,6 +67,27 @@ export default function Dashboard() {
     })
     const stockBajo = todosMateriales.filter(m => (m.stock || 0) < (m.minimo || 0))
     const equiposCampo = todosEquipos.filter(e => e.estado === 'en_cliente')
+    let vehiculosAlDia = 0
+    let vehiculosPorVencer = 0
+    let vehiculosVencidos = 0
+    for (const v of todosVehiculos) {
+      const revisiones = [
+        { campo: 'ITV', fecha: v.proxima_itv },
+        { campo: 'ITC', fecha: v.vencimiento_itc },
+        { campo: 'Seguro', fecha: v.vencimiento_seguro },
+        { campo: 'Impuesto', fecha: v.vencimiento_impuesto },
+      ]
+      const diasValidos = revisiones
+        .map((r) => ({ ...r, dias: diasRestantes(r.fecha) }))
+        .filter((r) => r.dias !== null) as Array<{ campo: string; fecha: string; dias: number }>
+      if (diasValidos.length === 0) {
+        continue
+      }
+      const peor = diasValidos.reduce((acc, item) => (item.dias < acc.dias ? item : acc), diasValidos[0])
+      if (peor.dias < 0) vehiculosVencidos += 1
+      else if (peor.dias <= 60) vehiculosPorVencer += 1
+      else vehiculosAlDia += 1
+    }
     const misMisOrdenes = todasOrdenes.filter(o =>
       (o.tecnicos_ids?.includes(session.user.id) || o.tecnico_id === session.user.id) &&
       (o.estado === 'pendiente' || o.estado === 'en_curso')
@@ -70,6 +99,10 @@ export default function Dashboard() {
       clientesTeros: countTeros || 0,
       clientesOlipro: countOlipro || 0,
       otPendientes: todasOrdenes.filter(o => o.estado === 'pendiente').length,
+      vehiculosTotal: todosVehiculos.length,
+      vehiculosAlDia,
+      vehiculosPorVencer,
+      vehiculosVencidos,
     })
     setMisOrdenes(misMisOrdenes)
 
@@ -85,6 +118,8 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  useEffect(() => { void cargarDatos() }, [])
+
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
@@ -97,13 +132,14 @@ export default function Dashboard() {
 
   const esTecnico = perfil?.rol === 'tecnico' || perfil?.rol === 'almacen'
 
-  const MODULOS = [
+  const MODULOS: Array<{ href: string; icono?: string; iconoImg?: string; titulo: string; desc: string; siempre?: boolean; soloAdmin?: boolean }> = [
     { href: '/ordenes', icono: '📋', titulo: 'Ordenes', desc: 'Crear y gestionar', siempre: true },
     { href: '/planificacion', icono: '📅', titulo: 'Planificacion', desc: 'Calendario y rutas', siempre: true },
     { href: '/inventario', icono: '📦', titulo: 'Inventario', desc: 'Stock y materiales', siempre: true },
     { href: '/equipos', icono: '⚙️', titulo: 'Equipos', desc: 'Turbinas y motores', siempre: true },
+    { href: '/flota', icono: '🚚', titulo: 'Flota de vehiculos', desc: 'ITV, seguros y documentos', siempre: true },
     { href: '/albaranes', icono: '🧾', titulo: 'Albaranes', desc: 'Con fotos y firma', siempre: true },
-    { href: '/asistente', icono: '🤖', titulo: 'Asistente IA', desc: 'Pregunta a la IA', siempre: true },
+    { href: '/asistente', iconoImg: '/assistant-ia-teros.png', titulo: 'Asistente IA', desc: 'Pregunta a la IA', siempre: true },
     { href: '/movimientos', icono: '📊', titulo: 'Movimientos', desc: 'Historial consumos', siempre: true },
     { href: '/clientes', icono: '🏢', titulo: 'Clientes', desc: 'Fichas y contacto', soloAdmin: true },
     { href: '/trabajadores', icono: '👷', titulo: 'Trabajadores', desc: 'Gestion personal', soloAdmin: true },
@@ -208,6 +244,12 @@ export default function Dashboard() {
             { label: 'Clientes Olipro', valor: stats.clientesOlipro, sub: 'Olipro', color: '#8b5cf6' },
             { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', color: stats.stockBajo > 0 ? '#f59e0b' : '#10b981' },
             { label: 'Equipos en campo', valor: stats.equiposCampo, sub: 'en cliente', color: '#fb923c' },
+            {
+              label: 'Flota al dia',
+              valor: stats.vehiculosAlDia,
+              sub: `${stats.vehiculosTotal} total - ${stats.vehiculosPorVencer} por vencer - ${stats.vehiculosVencidos} vencidos`,
+              color: stats.vehiculosVencidos > 0 ? '#f87171' : stats.vehiculosPorVencer > 0 ? '#fbbf24' : '#34d399',
+            },
           ].map((s, i) => (
             <div key={i} className="rounded-xl p-4" style={{ background: bgCard, border: `1px solid ${border}` }}>
               <p className="text-xs uppercase tracking-wider mb-2" style={{ color: textMuted }}>{s.label}</p>
@@ -223,7 +265,11 @@ export default function Dashboard() {
               style={{ background: bgCard, border: `1px solid ${border}` }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
               onMouseLeave={e => e.currentTarget.style.borderColor = border}>
-              <div className="text-2xl mb-3">{m.icono}</div>
+              {m.iconoImg ? (
+                <img src={m.iconoImg} alt={m.titulo} className="w-10 h-10 mb-3 object-contain" />
+              ) : (
+                <div className="text-2xl mb-3">{m.icono}</div>
+              )}
               <h2 className="font-semibold text-sm" style={{ color: textColor }}>{m.titulo}</h2>
               <p className="text-xs mt-1" style={{ color: textMuted }}>{m.desc}</p>
             </a>
