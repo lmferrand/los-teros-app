@@ -307,7 +307,13 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {MODULOS.filter(m => m.siempre || (!esTecnico && m.soloAdmin)).map(m => (
+          {[
+            ...MODULOS,
+            { href: '/flota', icono: '🚐', titulo: 'Flota de Vehiculos', desc: 'ITV, seguros y docs', siempre: true },
+            { href: '/respaldo', icono: '💾', titulo: 'Respaldo', desc: 'Base completa y nube', soloAdmin: true },
+          ]
+            .filter(m => m.siempre || (!esTecnico && (m as any).soloAdmin))
+            .map(m => (
             <Link key={m.href} href={m.href} className="rounded-xl p-5 block transition-all"
               style={{ background: bgCard, border: `1px solid ${border}` }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}

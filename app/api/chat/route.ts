@@ -3,11 +3,21 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { mensaje, contexto, imagen } = body
+    const { mensaje, contexto, imagen, prompt } = body
 
     let messages: any[]
 
     if (imagen) {
+      const promptImagen = String(prompt || '').trim() || `Analiza este presupuesto y extrae los siguientes datos en formato JSON exacto, sin texto adicional:
+{
+  "numero": "numero del presupuesto",
+  "cliente": "nombre del cliente",
+  "importe": 0.00,
+  "fecha": "DD/MM/YYYY",
+  "descripcion": "descripcion resumida de los trabajos"
+}
+Si no encuentras algun dato deja el campo vacio o en 0.`
+
       messages = [
         {
           role: 'user',
@@ -18,15 +28,7 @@ export async function POST(req: NextRequest) {
             },
             {
               type: 'text',
-              text: `Analiza este presupuesto y extrae los siguientes datos en formato JSON exacto, sin texto adicional:
-{
-  "numero": "numero del presupuesto",
-  "cliente": "nombre del cliente",
-  "importe": 0.00,
-  "fecha": "DD/MM/YYYY",
-  "descripcion": "descripcion resumida de los trabajos"
-}
-Si no encuentras algun dato deja el campo vacio o en 0.`
+              text: promptImagen
             }
           ]
         }

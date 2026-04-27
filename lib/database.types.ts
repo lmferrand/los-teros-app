@@ -314,6 +314,8 @@ export type Database = {
           tecnicos_ids: string[] | null
           duracion_horas: number | null
           hora_fija: boolean | null
+          vehiculo_id: string | null
+          tecnico_vehiculo_id: string | null
         }
         Insert: {
           id?: string
@@ -332,6 +334,8 @@ export type Database = {
           tecnicos_ids?: string[] | null
           duracion_horas?: number | null
           hora_fija?: boolean | null
+          vehiculo_id?: string | null
+          tecnico_vehiculo_id?: string | null
         }
         Update: {
           id?: string
@@ -350,6 +354,8 @@ export type Database = {
           tecnicos_ids?: string[] | null
           duracion_horas?: number | null
           hora_fija?: boolean | null
+          vehiculo_id?: string | null
+          tecnico_vehiculo_id?: string | null
         }
         Relationships: [
           {
@@ -364,6 +370,20 @@ export type Database = {
             columns: ['tecnico_id']
             isOneToOne: false
             referencedRelation: 'perfiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'ordenes_tecnico_vehiculo_id_fkey'
+            columns: ['tecnico_vehiculo_id']
+            isOneToOne: false
+            referencedRelation: 'perfiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'ordenes_vehiculo_id_fkey'
+            columns: ['vehiculo_id']
+            isOneToOne: false
+            referencedRelation: 'vehiculos_flota'
             referencedColumns: ['id']
           },
         ]
@@ -504,6 +524,138 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      vehiculos_documentos: {
+        Row: {
+          id: string
+          vehiculo_id: string
+          tipo: string
+          nombre_archivo: string
+          mime_type: string | null
+          url: string
+          fecha_emision: string | null
+          fecha_caducidad: string | null
+          proveedor: string | null
+          numero_documento: string | null
+          metadata: Json | null
+          analisis_ia: Json | null
+          created_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          vehiculo_id: string
+          tipo?: string
+          nombre_archivo: string
+          mime_type?: string | null
+          url: string
+          fecha_emision?: string | null
+          fecha_caducidad?: string | null
+          proveedor?: string | null
+          numero_documento?: string | null
+          metadata?: Json | null
+          analisis_ia?: Json | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          vehiculo_id?: string
+          tipo?: string
+          nombre_archivo?: string
+          mime_type?: string | null
+          url?: string
+          fecha_emision?: string | null
+          fecha_caducidad?: string | null
+          proveedor?: string | null
+          numero_documento?: string | null
+          metadata?: Json | null
+          analisis_ia?: Json | null
+          created_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'vehiculos_documentos_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'perfiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'vehiculos_documentos_vehiculo_id_fkey'
+            columns: ['vehiculo_id']
+            isOneToOne: false
+            referencedRelation: 'vehiculos_flota'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      vehiculos_flota: {
+        Row: {
+          id: string
+          matricula: string
+          alias: string | null
+          marca: string | null
+          modelo: string | null
+          tipo: string | null
+          combustible: string | null
+          anio: number | null
+          km_actual: number | null
+          proxima_itv: string | null
+          vencimiento_itc: string | null
+          vencimiento_seguro: string | null
+          vencimiento_impuesto: string | null
+          compania_seguro: string | null
+          numero_poliza: string | null
+          notas: string | null
+          activo: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          matricula: string
+          alias?: string | null
+          marca?: string | null
+          modelo?: string | null
+          tipo?: string | null
+          combustible?: string | null
+          anio?: number | null
+          km_actual?: number | null
+          proxima_itv?: string | null
+          vencimiento_itc?: string | null
+          vencimiento_seguro?: string | null
+          vencimiento_impuesto?: string | null
+          compania_seguro?: string | null
+          numero_poliza?: string | null
+          notas?: string | null
+          activo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          matricula?: string
+          alias?: string | null
+          marca?: string | null
+          modelo?: string | null
+          tipo?: string | null
+          combustible?: string | null
+          anio?: number | null
+          km_actual?: number | null
+          proxima_itv?: string | null
+          vencimiento_itc?: string | null
+          vencimiento_seguro?: string | null
+          vencimiento_impuesto?: string | null
+          compania_seguro?: string | null
+          numero_poliza?: string | null
+          notas?: string | null
+          activo?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {

@@ -52,6 +52,7 @@ export default function Ordenes() {
   const [clientes, setClientes] = useState<any[]>([])
   const [tecnicos, setTecnicos] = useState<any[]>([])
   const [materiales, setMateriales] = useState<any[]>([])
+  const [vehiculos, setVehiculos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
@@ -75,6 +76,8 @@ export default function Ordenes() {
   const [tipo, setTipo] = useState('limpieza')
   const [clienteId, setClienteId] = useState('')
   const [tecnicosSeleccionados, setTecnicosSeleccionados] = useState<string[]>([])
+  const [vehiculoId, setVehiculoId] = useState('')
+  const [tecnicoVehiculoId, setTecnicoVehiculoId] = useState('')
   const [fecha, setFecha] = useState('')
   const [prioridad, setPrioridad] = useState('normal')
   const [estado, setEstado] = useState('pendiente')
@@ -112,16 +115,18 @@ export default function Ordenes() {
   }
 
   async function cargarDatos() {
-    const [ords, clis, tecs, mats] = await Promise.all([
+    const [ords, clis, tecs, mats, vehs] = await Promise.all([
       supabase.from('ordenes').select('*, clientes(nombre)').order('created_at', { ascending: false }),
       supabase.from('clientes').select('*').order('nombre'),
       supabase.from('perfiles').select('*').order('nombre'),
       supabase.from('materiales').select('id, nombre, stock, unidad').order('nombre'),
+      supabase.from('vehiculos_flota').select('id, matricula, alias, marca, modelo, activo').eq('activo', true).order('matricula'),
     ])
     if (ords.data) setOrdenes(ords.data)
     if (clis.data) setClientes(clis.data)
     if (tecs.data) setTecnicos(tecs.data)
     if (mats.data) setMateriales(mats.data)
+    if (vehs.data) setVehiculos(vehs.data)
     setLoading(false)
   }
 
@@ -165,6 +170,12 @@ export default function Ordenes() {
     const primero = materiales.find((m: any) => Number(m.stock || 0) > 0)
     if (primero?.id) setMaterialManualId(primero.id)
   }, [ordenDetalle, materiales, materialManualId])
+
+  useEffect(() => {
+    if (!tecnicoVehiculoId) return
+    if (tecnicosSeleccionados.includes(tecnicoVehiculoId)) return
+    setTecnicoVehiculoId('')
+  }, [tecnicosSeleccionados, tecnicoVehiculoId])
 
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
@@ -256,6 +267,7 @@ export default function Ordenes() {
     }
     setEditandoId(null)
     setTipo('limpieza'); setClienteId(''); setTecnicosSeleccionados([])
+    setVehiculoId(''); setTecnicoVehiculoId('')
     setFecha(''); setPrioridad('normal'); setEstado('pendiente')
     setDescripcion(''); setObservaciones(''); setDuracionHoras('2'); setHoraFija(false)
     setMostrarForm(true)
@@ -269,6 +281,8 @@ export default function Ordenes() {
     setEditandoId(o.id)
     setTipo(o.tipo || 'limpieza'); setClienteId(o.cliente_id || '')
     setTecnicosSeleccionados(o.tecnicos_ids || [])
+    setVehiculoId(o.vehiculo_id || '')
+    setTecnicoVehiculoId(o.tecnico_vehiculo_id || '')
     setFecha(redondearMediaHora(aDatetimeLocal(o.fecha_programada)))
     setPrioridad(o.prioridad || 'normal'); setEstado(o.estado || 'pendiente')
     setDescripcion(o.descripcion || ''); setObservaciones(o.observaciones || '')
@@ -357,6 +371,8 @@ export default function Ordenes() {
     const datos = {
       tipo, cliente_id: clienteId, tecnico_id: tecnicosSeleccionados[0] || null,
       tecnicos_ids: tecnicosSeleccionados, fecha_programada: fecha, prioridad, estado,
+      vehiculo_id: vehiculoId || null,
+      tecnico_vehiculo_id: tecnicoVehiculoId || null,
       descripcion, observaciones, duracion_horas: parseFloat(duracionHoras) || 2, hora_fija: horaFija,
     }
     if (editandoId) {
@@ -367,6 +383,7 @@ export default function Ordenes() {
     }
     setMostrarForm(false); setEditandoId(null)
     setDescripcion(''); setObservaciones(''); setClienteId(''); setTecnicosSeleccionados([])
+    setVehiculoId(''); setTecnicoVehiculoId('')
     cargarDatos()
   }
 
@@ -517,6 +534,19 @@ export default function Ordenes() {
     return ids.map(id => tecnicos.find(t => t.id === id)?.nombre || '').filter(Boolean).join(', ')
   }
 
+  function getNombreVehiculo(id?: string | null) {
+    if (!id) return 'Sin vehiculo'
+    const v = vehiculos.find((item: any) => item.id === id)
+    if (!v) return 'Sin vehiculo'
+    const etiqueta = [v.marca, v.modelo].filter(Boolean).join(' ').trim()
+    return `${v.matricula}${etiqueta ? ` - ${etiqueta}` : ''}`
+  }
+
+  function getNombreTecnico(id?: string | null) {
+    if (!id) return 'Sin asignar'
+    return tecnicos.find((t: any) => t.id === id)?.nombre || 'Sin asignar'
+  }
+
   const TIPOS_FOTO = [
     { key: 'proceso', label: 'Fotos del proceso' },
     { key: 'equipo_salida', label: 'Equipo al salir' },
@@ -631,6 +661,33 @@ export default function Ordenes() {
                 </div>
               </div>
               <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Vehiculo asignado</label>
+                <select value={vehiculoId} onChange={e => setVehiculoId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
+                  <option value="">Sin vehiculo</option>
+                  {vehiculos.map((v: any) => (
+                    <option key={v.id} value={v.id}>
+                      {v.matricula} {v.alias ? `- ${v.alias}` : ''} {v.marca ? `(${v.marca})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Trabajador que usa vehiculo</label>
+                <select
+                  value={tecnicoVehiculoId}
+                  onChange={e => setTecnicoVehiculoId(e.target.value)}
+                  className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                  style={s.inputStyle}
+                >
+                  <option value="">Sin asignar</option>
+                  {tecnicos
+                    .filter((t: any) => tecnicosSeleccionados.includes(t.id))
+                    .map((t: any) => (
+                      <option key={t.id} value={t.id}>{t.nombre}</option>
+                    ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha programada</label>
                 <input
                   type="datetime-local"
@@ -722,6 +779,8 @@ export default function Ordenes() {
                     { label: 'Prioridad', val: <span className="text-sm font-medium" style={{ color: PRIORIDAD_COLORS[ordenDetalle.prioridad] }}>{ordenDetalle.prioridad}</span> },
                     { label: 'Tipo', val: <span className="text-sm capitalize" style={{ color: 'var(--text)' }}>{ordenDetalle.tipo}</span> },
                     { label: 'Fecha', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</span> },
+                    { label: 'Vehiculo', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreVehiculo(ordenDetalle.vehiculo_id)}</span> },
+                    { label: 'Conductor', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreTecnico(ordenDetalle.tecnico_vehiculo_id)}</span> },
                     { label: 'Duracion', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.duracion_horas || 2}h</span> },
                     { label: 'Hora fija', val: <span className="text-sm font-medium" style={{ color: ordenDetalle.hora_fija ? '#f59e0b' : 'var(--text-muted)' }}>{ordenDetalle.hora_fija ? 'Si' : 'No'}</span> },
                   ].map((item, i) => (
@@ -982,6 +1041,7 @@ export default function Ordenes() {
                     <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
                     <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: 'var(--text-subtle)' }}>
                       <span>Trabajadores: {getNombresTecnicos(o.tecnicos_ids || [])}</span>
+                      <span>Vehiculo: {getNombreVehiculo(o.vehiculo_id)}</span>
                       <span>Duracion: {o.duracion_horas || 2}h</span>
                       <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '—'}</span>
                     </div>
