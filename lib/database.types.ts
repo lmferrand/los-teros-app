@@ -70,9 +70,14 @@ export type Database = {
         Row: {
           id: string
           nombre: string
+          nombre_comercial: string | null
+          nombre_fiscal: string | null
+          poblacion: string | null
+          tipo_cliente: string
           cif: string | null
           direccion: string | null
           telefono: string | null
+          movil: string | null
           email: string | null
           notas: string | null
           es_recurrente: boolean | null
@@ -82,9 +87,14 @@ export type Database = {
         Insert: {
           id?: string
           nombre: string
+          nombre_comercial?: string | null
+          nombre_fiscal?: string | null
+          poblacion?: string | null
+          tipo_cliente?: string
           cif?: string | null
           direccion?: string | null
           telefono?: string | null
+          movil?: string | null
           email?: string | null
           notas?: string | null
           es_recurrente?: boolean | null
@@ -94,9 +104,14 @@ export type Database = {
         Update: {
           id?: string
           nombre?: string
+          nombre_comercial?: string | null
+          nombre_fiscal?: string | null
+          poblacion?: string | null
+          tipo_cliente?: string
           cif?: string | null
           direccion?: string | null
           telefono?: string | null
+          movil?: string | null
           email?: string | null
           notas?: string | null
           es_recurrente?: boolean | null

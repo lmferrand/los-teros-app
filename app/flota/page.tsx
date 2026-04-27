@@ -61,6 +61,27 @@ function textoDias(dias: number | null) {
   return `${dias} dias restantes`
 }
 
+function aTsFecha(valor: string | null | undefined) {
+  if (!valor) return 0
+  const d = new Date(`${valor}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return 0
+  return d.getTime()
+}
+
+function anioVigenciaDocumento(doc: any) {
+  const candidato = doc?.fecha_caducidad || doc?.fecha_emision || doc?.created_at || null
+  if (!candidato) return new Date().getFullYear()
+
+  if (String(candidato).includes('T')) {
+    const d = new Date(String(candidato))
+    if (!Number.isNaN(d.getTime())) return d.getFullYear()
+  }
+
+  const y = Number(String(candidato).slice(0, 4))
+  if (Number.isFinite(y) && y >= 2000 && y <= 2100) return y
+  return new Date().getFullYear()
+}
+
 function extraerPathStorageVehiculo(url: string) {
   const marcador = '/storage/v1/object/public/vehiculos-documentos/'
   const idx = url.indexOf(marcador)
@@ -209,6 +230,66 @@ export default function FlotaPage() {
     }
     return items.sort((a, b) => a.dias - b.dias).slice(0, 12)
   }, [vehiculos])
+
+  const resumenDocumentos = useMemo(() => {
+    let vencidos = 0
+    let porVencer = 0
+    let enVigor = 0
+    let sinFecha = 0
+    let proximoDias: number | null = null
+
+    for (const doc of documentos) {
+      const dias = diasRestantes(doc?.fecha_caducidad)
+      if (dias === null) {
+        sinFecha += 1
+        continue
+      }
+      if (dias < 0) vencidos += 1
+      else if (dias <= 30) porVencer += 1
+      else enVigor += 1
+      if (proximoDias === null || dias < proximoDias) proximoDias = dias
+    }
+
+    return {
+      total: documentos.length,
+      vencidos,
+      porVencer,
+      enVigor,
+      sinFecha,
+      proximoDias,
+    }
+  }, [documentos])
+
+  const documentosPorAnio = useMemo(() => {
+    const mapa = new Map<number, any[]>()
+    for (const doc of documentos) {
+      const anio = anioVigenciaDocumento(doc)
+      const lista = mapa.get(anio) || []
+      lista.push(doc)
+      mapa.set(anio, lista)
+    }
+
+    const grupos = Array.from(mapa.entries())
+      .map(([anio, docs]) => ({
+        anio,
+        docs: docs.sort((a: any, b: any) => {
+          const tsA = Math.max(
+            aTsFecha(a?.fecha_caducidad),
+            aTsFecha(a?.fecha_emision),
+            new Date(a?.created_at || 0).getTime() || 0
+          )
+          const tsB = Math.max(
+            aTsFecha(b?.fecha_caducidad),
+            aTsFecha(b?.fecha_emision),
+            new Date(b?.created_at || 0).getTime() || 0
+          )
+          return tsB - tsA
+        }),
+      }))
+      .sort((a, b) => b.anio - a.anio)
+
+    return grupos
+  }, [documentos])
 
   function abrirNuevoVehiculo() {
     if (!puedeEditar) {
@@ -708,59 +789,100 @@ Si no identificas un campo dejalo vacio.
 
                 <div>
                   <p className="font-semibold text-sm mb-2" style={{ color: 'var(--text)' }}>Documentos del vehiculo</p>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Total</p>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{resumenDocumentos.total}</p>
+                    </div>
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.28)' }}>
+                      <p className="text-[11px]" style={{ color: '#34d399' }}>En vigor</p>
+                      <p className="text-sm font-semibold" style={{ color: '#34d399' }}>{resumenDocumentos.enVigor}</p>
+                    </div>
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
+                      <p className="text-[11px]" style={{ color: '#fbbf24' }}>Vence pronto</p>
+                      <p className="text-sm font-semibold" style={{ color: '#fbbf24' }}>{resumenDocumentos.porVencer}</p>
+                    </div>
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                      <p className="text-[11px]" style={{ color: '#f87171' }}>Vencidos</p>
+                      <p className="text-sm font-semibold" style={{ color: '#f87171' }}>{resumenDocumentos.vencidos}</p>
+                    </div>
+                    <div className="rounded-lg px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Proximo</p>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{textoDias(resumenDocumentos.proximoDias)}</p>
+                    </div>
+                  </div>
+
                   {documentos.length === 0 ? (
                     <div className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                       <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin documentos.</p>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-2">
-                      {documentos.map((doc) => {
-                        const diasDoc = diasRestantes(doc.fecha_caducidad)
-                        const st = estiloVencimiento(diasDoc)
-                        return (
-                          <div key={doc.id} className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                            <div className="flex items-start justify-between gap-2 flex-wrap">
-                              <div>
-                                <a href={doc.url} target="_blank" rel="noreferrer" className="text-sm font-medium underline" style={{ color: '#06b6d4' }}>
-                                  {doc.nombre_archivo}
-                                </a>
-                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                                  Tipo: {doc.tipo || 'otro'} {doc.numero_documento ? `- ${doc.numero_documento}` : ''} {doc.proveedor ? `- ${doc.proveedor}` : ''}
-                                </p>
-                                <div className="flex flex-wrap gap-2 mt-2">
-                                  <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
-                                    Caducidad: {doc.fecha_caducidad || 'N/D'} - {textoDias(diasDoc)}
-                                  </span>
-                                  {doc.fecha_emision && (
-                                    <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: 'rgba(100,116,139,0.12)', color: 'var(--text-muted)', border: '1px solid rgba(100,116,139,0.25)' }}>
-                                      Emision: {doc.fecha_emision}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => void analizarDocumentoIA(doc, vehiculoDetalle.id)}
-                                  disabled={analizandoDocId === doc.id}
-                                  className="text-xs px-3 py-1 rounded-lg disabled:opacity-60"
-                                  style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
-                                >
-                                  {analizandoDocId === doc.id ? 'Analizando...' : 'IA escanear'}
-                                </button>
-                                {puedeEditar && (
-                                  <button
-                                    onClick={() => void eliminarDocumento(doc)}
-                                    className="text-xs px-3 py-1 rounded-lg"
-                                    style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
-                                  >
-                                    Eliminar
-                                  </button>
-                                )}
-                              </div>
-                            </div>
+                      {documentosPorAnio.map((grupo) => (
+                        <div key={grupo.anio} className="rounded-xl p-3" style={{ background: 'rgba(124,58,237,0.06)', border: '1px solid rgba(124,58,237,0.2)' }}>
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-semibold" style={{ color: '#a78bfa' }}>
+                              Historial {grupo.anio}
+                            </p>
+                            <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: 'rgba(124,58,237,0.16)', color: '#c4b5fd', border: '1px solid rgba(124,58,237,0.3)' }}>
+                              {grupo.docs.length} docs
+                            </span>
                           </div>
-                        )
-                      })}
+
+                          <div className="flex flex-col gap-2">
+                            {grupo.docs.map((doc: any) => {
+                              const diasDoc = diasRestantes(doc.fecha_caducidad)
+                              const st = estiloVencimiento(diasDoc)
+                              return (
+                                <div key={doc.id} className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                                    <div>
+                                      <a href={doc.url} target="_blank" rel="noreferrer" className="text-sm font-medium underline" style={{ color: '#06b6d4' }}>
+                                        {doc.nombre_archivo}
+                                      </a>
+                                      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                                        Tipo: {doc.tipo || 'otro'} {doc.numero_documento ? `- ${doc.numero_documento}` : ''} {doc.proveedor ? `- ${doc.proveedor}` : ''}
+                                      </p>
+                                      <div className="flex flex-wrap gap-2 mt-2">
+                                        <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
+                                          Caducidad: {doc.fecha_caducidad || 'N/D'} - {textoDias(diasDoc)}
+                                        </span>
+                                        {doc.fecha_emision && (
+                                          <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: 'rgba(100,116,139,0.12)', color: 'var(--text-muted)', border: '1px solid rgba(100,116,139,0.25)' }}>
+                                            Emision: {doc.fecha_emision}
+                                          </span>
+                                        )}
+                                        <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}>
+                                          Vigencia: {anioVigenciaDocumento(doc)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => void analizarDocumentoIA(doc, vehiculoDetalle.id)}
+                                        disabled={analizandoDocId === doc.id}
+                                        className="text-xs px-3 py-1 rounded-lg disabled:opacity-60"
+                                        style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+                                      >
+                                        {analizandoDocId === doc.id ? 'Analizando...' : 'IA escanear'}
+                                      </button>
+                                      {puedeEditar && (
+                                        <button
+                                          onClick={() => void eliminarDocumento(doc)}
+                                          className="text-xs px-3 py-1 rounded-lg"
+                                          style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                                        >
+                                          Eliminar
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

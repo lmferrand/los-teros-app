@@ -8,6 +8,14 @@ import { s } from '@/lib/styles'
 import { eliminarArchivosFotosOrden, eliminarOrdenConIntegridad } from '@/lib/ordenes-integridad'
 import AppHeader from '@/app/components/AppHeader'
 
+function nombreComercialCliente(c: any) {
+  return String(c?.nombre_comercial || c?.nombre || '').trim()
+}
+
+function nombreFiscalCliente(c: any) {
+  return String(c?.nombre_fiscal || '').trim()
+}
+
 export default function ClienteDetalle() {
   const [cliente, setCliente] = useState<any>(null)
   const [ordenes, setOrdenes] = useState<any[]>([])
@@ -60,7 +68,7 @@ export default function ClienteDetalle() {
       if (cif) {
         const { data: relacionados } = await supabase
           .from('clientes')
-          .select('id, nombre, direccion')
+          .select('id, nombre, nombre_comercial, nombre_fiscal, direccion')
           .eq('cif', cif)
           .neq('id', id)
           .order('nombre')
@@ -198,7 +206,7 @@ export default function ClienteDetalle() {
       )}
 
       <AppHeader
-        title={cliente.nombre}
+        title={nombreComercialCliente(cliente) || cliente.nombre}
         leftSlot={
           <>
             <Link
@@ -220,12 +228,22 @@ export default function ClienteDetalle() {
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div>
               <h2 className="text-xl font-bold mb-3" style={{ color: 'var(--text)' }}>
-                {cliente.nombre}
+                {nombreComercialCliente(cliente) || cliente.nombre}
               </h2>
               <div className="flex flex-col gap-2">
+                {!!nombreFiscalCliente(cliente) && (
+                  <p className="text-sm" style={{ color: 'var(--text-subtle)' }}>
+                    Fiscal: {nombreFiscalCliente(cliente)}
+                  </p>
+                )}
                 {cliente.cif && (
                   <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
                     CIF: {cliente.cif}
+                  </p>
+                )}
+                {cliente.poblacion && (
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                    Poblacion: {cliente.poblacion}
                   </p>
                 )}
                 {cliente.direccion && (
@@ -236,6 +254,11 @@ export default function ClienteDetalle() {
                 {cliente.telefono && (
                   <a href={`tel:${cliente.telefono}`} className="text-sm font-medium" style={{ color: '#34d399' }}>
                     {cliente.telefono}
+                  </a>
+                )}
+                {cliente.movil && (
+                  <a href={`tel:${cliente.movil}`} className="text-sm font-medium" style={{ color: '#22c55e' }}>
+                    {cliente.movil}
                   </a>
                 )}
                 {cliente.email && (
@@ -269,7 +292,9 @@ export default function ClienteDetalle() {
             <div className="flex flex-col gap-2">
               {localesMismoCif.map((l: any) => (
                 <Link key={l.id} href={`/clientes/${l.id}`} className="text-sm hover:underline" style={{ color: '#06b6d4' }}>
-                  {l.nombre}{l.direccion ? ` - ${l.direccion}` : ''}
+                  {nombreComercialCliente(l) || l.nombre}
+                  {nombreFiscalCliente(l) ? ` (${nombreFiscalCliente(l)})` : ''}
+                  {l.direccion ? ` - ${l.direccion}` : ''}
                 </Link>
               ))}
             </div>

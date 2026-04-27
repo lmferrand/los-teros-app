@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({
     otActivas: 0, otMes: 0, stockBajo: 0,
     equiposCampo: 0, clientes: 0, otPendientes: 0, clientesReactivar: 0,
+    vehiculosActivos: 0, vehiculosAlDia: 0, flotaAvisos60: 0, flotaOk: true,
   })
   const [misOrdenes, setMisOrdenes] = useState<any[]>([])
   const [alertas, setAlertas] = useState<{ tipo: string; texto: string }[]>([])
@@ -46,12 +47,13 @@ export default function Dashboard() {
       }
       setPerfil(perfilData)
 
-      const [ordenes, materiales, equipos, clientes, servicios] = await Promise.all([
+      const [ordenes, materiales, equipos, clientes, servicios, vehiculosResp] = await Promise.all([
         supabase.from('ordenes').select('id, codigo, descripcion, estado, cliente_id, tecnico_id, tecnicos_ids, created_at, fecha_programada, fecha_cierre'),
         supabase.from('materiales').select('id, nombre, stock, minimo, unidad'),
         supabase.from('equipos').select('id, codigo, estado, fecha_salida'),
         supabase.from('clientes').select('id'),
         supabase.from('servicios_clientes').select('cliente_id, fecha_servicio'),
+        supabase.from('vehiculos_flota').select('id, matricula, proxima_itv, vencimiento_itc, vencimiento_seguro, vencimiento_impuesto, activo'),
       ])
 
       const hoy = new Date()
@@ -61,6 +63,8 @@ export default function Dashboard() {
       const todosMateriales = materiales.data || []
       const todosEquipos = equipos.data || []
       const serviciosClientes = servicios.error ? [] : (servicios.data || [])
+      const todosVehiculos = vehiculosResp.data || []
+      const vehiculosActivos = todosVehiculos.filter((v: any) => v.activo !== false)
 
       const otActivas = todasOrdenes.filter((o) => o.estado === 'pendiente' || o.estado === 'en_curso')
       const otMes = todasOrdenes.filter((o) => {
@@ -90,6 +94,47 @@ export default function Dashboard() {
         const dias = Math.floor((Date.now() - new Date(e.fecha_salida).getTime()) / 86400000)
         if (dias > 14) nuevasAlertas.push({ tipo: 'danger', texto: `${e.codigo} lleva ${dias} dias en cliente` })
       })
+
+      const eventosFlota: { matricula: string; campo: string; fecha: string; dias: number }[] = []
+      const vehiculosConAviso = new Set<string>()
+      for (const v of vehiculosActivos) {
+        const checks = [
+          { campo: 'ITV', fecha: v.proxima_itv },
+          { campo: 'ITC', fecha: v.vencimiento_itc },
+          { campo: 'Seguro', fecha: v.vencimiento_seguro },
+          { campo: 'Impuesto', fecha: v.vencimiento_impuesto },
+        ]
+        for (const ch of checks) {
+          if (!ch.fecha) continue
+          const ref = new Date(`${ch.fecha}T12:00:00`)
+          if (Number.isNaN(ref.getTime())) continue
+          const dias = Math.floor((ref.getTime() - Date.now()) / 86400000)
+          if (dias <= 60) {
+            eventosFlota.push({
+              matricula: v.matricula || 'Vehiculo',
+              campo: ch.campo,
+              fecha: ch.fecha,
+              dias,
+            })
+            vehiculosConAviso.add(v.id)
+          }
+        }
+      }
+
+      eventosFlota
+        .sort((a, b) => a.dias - b.dias)
+        .slice(0, 8)
+        .forEach((ev) => {
+          const textoDias = ev.dias < 0
+            ? `vencido hace ${Math.abs(ev.dias)} dias`
+            : ev.dias === 0
+              ? 'vence hoy'
+              : `vence en ${ev.dias} dias`
+          nuevasAlertas.push({
+            tipo: ev.dias < 0 ? 'danger' : 'warning',
+            texto: `Flota ${ev.matricula}: ${ev.campo} ${textoDias} (${ev.fecha})`,
+          })
+        })
       setAlertas(nuevasAlertas)
 
       const ultimaOtPorCliente = new Map<string, Date>()
@@ -133,6 +178,10 @@ export default function Dashboard() {
         clientes: idsClientes.size,
         otPendientes: todasOrdenes.filter((o) => o.estado === 'pendiente').length,
         clientesReactivar: rankingClientes.length,
+        vehiculosActivos: vehiculosActivos.length,
+        vehiculosAlDia: Math.max(vehiculosActivos.length - vehiculosConAviso.size, 0),
+        flotaAvisos60: eventosFlota.length,
+        flotaOk: vehiculosConAviso.size === 0 && vehiculosActivos.length > 0,
       })
     } catch (error) {
       console.error('Error cargando dashboard', error)
@@ -149,8 +198,9 @@ export default function Dashboard() {
     router.push('/login')
   }
 
-  function abrirKpi(kpi: 'ot_activas' | 'completadas_mes' | 'clientes' | 'stock_bajo' | 'sin_servicio') {
+  function abrirKpi(kpi: 'ot_activas' | 'completadas_mes' | 'clientes' | 'stock_bajo' | 'sin_servicio' | 'flota') {
     if (kpi === 'sin_servicio') { router.push('/clientes?filtro=sin_servicio'); return }
+    if (kpi === 'flota') { router.push('/flota'); return }
     if (kpi === 'ot_activas') {
       router.push('/ordenes')
       return
@@ -277,7 +327,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2 mb-8">
           {[
             { key: 'ot_activas', label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, color: '#06b6d4' },
             { key: 'completadas_mes', label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', color: '#10b981' },
@@ -289,6 +339,17 @@ export default function Dashboard() {
               valor: stats.clientesReactivar,
               sub: 'top 10 clientes',
               color: '#06b6d4',
+            },
+            {
+              key: 'flota',
+              label: 'Flota al dia',
+              valor: stats.flotaOk ? 'SI' : 'NO',
+              sub: stats.vehiculosActivos === 0
+                ? 'sin vehiculos activos'
+                : stats.flotaOk
+                  ? `${stats.vehiculosAlDia}/${stats.vehiculosActivos} en regla`
+                  : `${stats.flotaAvisos60} avisos <= 60 dias`,
+              color: stats.flotaOk ? '#10b981' : '#f59e0b',
             },
           ].map((s: any, i) => (
             <button

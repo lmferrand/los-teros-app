@@ -249,10 +249,10 @@ export default function Planificacion() {
   }
 
   function prioridadPeso(prioridad: string) {
-    if (prioridad === 'urgente') return 30
-    if (prioridad === 'alta') return 18
-    if (prioridad === 'baja') return -4
-    return 8
+    const p = String(prioridad || '').trim().toLowerCase()
+    if (p === '3' || p === 'alta' || p === 'urgente') return 24
+    if (p === '1' || p === 'baja') return 6
+    return 12
   }
 
   function obtenerTecnicosOt(ot: any) {
@@ -305,7 +305,7 @@ export default function Planificacion() {
 
     const pendientesFlexibles = otsTecnico
       .filter((o) => !o.hora_fija)
-      .sort((a, b) => prioridadPeso(b.prioridad || 'normal') - prioridadPeso(a.prioridad || 'normal'))
+      .sort((a, b) => prioridadPeso(b.prioridad || '2') - prioridadPeso(a.prioridad || '2'))
 
     const ruta: any[] = []
     const advertencias: string[] = []
@@ -330,7 +330,7 @@ export default function Planificacion() {
         if (hastaMin !== null && finTentativo > hastaMin) continue
 
         const penalizaJornada = finTentativo > FIN ? (finTentativo - FIN) * 1.8 : 0
-        const bonusPrioridad = prioridadPeso(ot.prioridad || 'normal')
+        const bonusPrioridad = prioridadPeso(ot.prioridad || '2')
         const puntaje = traslado * 1.5 + penalizaJornada - bonusPrioridad
 
         if (puntaje < mejorPuntaje) {
@@ -450,7 +450,7 @@ export default function Planificacion() {
     const sugerencias: any[] = []
 
     const pendientes = [...otsSinAsignar].sort((a, b) => {
-      const p = prioridadPeso(b.prioridad || 'normal') - prioridadPeso(a.prioridad || 'normal')
+      const p = prioridadPeso(b.prioridad || '2') - prioridadPeso(a.prioridad || '2')
       if (p !== 0) return p
       return duracionOtMin(b) - duracionOtMin(a)
     })
@@ -670,7 +670,7 @@ export default function Planificacion() {
       if (pres) {
         const { error } = await supabase.from('ordenes').insert({
           codigo: `OT-${pres.numero || id.slice(0, 6).toUpperCase()}`,
-          tipo: 'otro', cliente_id: pres.cliente_id || null, estado: 'pendiente', prioridad: 'normal',
+          tipo: 'otro', cliente_id: pres.cliente_id || null, estado: 'pendiente', prioridad: '2',
           descripcion: pres.titulo || 'Trabajo pendiente de agendar',
           observaciones: `Creado desde presupuesto ${pres.numero || ''} aceptado. Importe: ${(pres.importe || 0).toFixed(2)} EUR`,
           duracion_horas: 2, hora_fija: false, tecnicos_ids: [],
@@ -1187,7 +1187,7 @@ export default function Planificacion() {
             <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
               <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Optimizador de rutas</h2>
               <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                Optimiza por hora, trabajador asignado, duracion, prioridad y proximidad geografica para reducir traslados.
+                Optimiza por hora, trabajador asignado, duracion, grado de intervencion y proximidad geografica para reducir traslados.
               </p>
               <div className="flex gap-3 items-end flex-wrap">
                 <div>
