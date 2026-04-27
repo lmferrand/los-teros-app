@@ -139,24 +139,48 @@ export default function Clientes() {
       const buffer = await file.arrayBuffer()
       const workbook = XLSX.read(buffer, { type: 'array' })
       const hoja = workbook.Sheets[workbook.SheetNames[0]]
-      const datos = XLSX.utils.sheet_to_json(hoja, { defval: '' }) as any[]
+      const todasFilas = XLSX.utils.sheet_to_json(hoja, { defval: '', header: 1 }) as any[][]
+
+      // Detectar fila de cabeceras
+      let filaHeader = 0
+      for (let i = 0; i < Math.min(10, todasFilas.length); i++) {
+        const fila = todasFilas[i].map((c: any) => String(c || '').toLowerCase())
+        if (fila.some(c => c.includes('nombre') || c.includes('name'))) {
+          filaHeader = i
+          break
+        }
+      }
+
+      const headers = todasFilas[filaHeader].map((h: any) => String(h || '').toLowerCase().trim())
+      const datos = todasFilas.slice(filaHeader + 1)
+
+      function getCol(fila: any[], buscar: string[]): string {
+        for (const b of buscar) {
+          const idx = headers.findIndex((h: string) => h.includes(b))
+          if (idx !== -1 && fila[idx] !== undefined) return String(fila[idx] || '').trim()
+        }
+        return ''
+      }
+
       const registros = datos
-        .filter((fila: any) => {
-          const n = fila['Nombre Comercial'] || fila['nombre_comercial'] || fila['nombre'] || fila['Nombre'] || ''
-          return String(n).trim() !== ''
+        .filter((fila: any[]) => {
+          const n = getCol(fila, ['nombre'])
+          return n !== '' && n !== 'undefined'
         })
-        .map((fila: any) => ({
-          nombre: String(fila['Nombre Comercial'] || fila['nombre_comercial'] || fila['nombre'] || fila['Nombre'] || '').trim(),
-          nombre_fiscal: String(fila['Nombre Fiscal'] || fila['nombre_fiscal'] || '').trim(),
-          cif: String(fila['CIF'] || fila['cif'] || '').trim(),
-          direccion: String(fila['Direccion'] || fila['direccion'] || fila['Dirección'] || '').trim(),
-          poblacion: String(fila['Poblacion'] || fila['poblacion'] || fila['Población'] || '').trim(),
-          telefono: String(fila['Telefono'] || fila['telefono'] || fila['Teléfono'] || '').trim(),
-          movil: String(fila['Movil'] || fila['movil'] || fila['Móvil'] || '').trim(),
-          email: String(fila['Email'] || fila['email'] || fila['Mail'] || '').trim(),
-          notas: String(fila['Notas'] || fila['notas'] || '').trim(),
+        .map((fila: any[]) => ({
+          nombre: getCol(fila, ['nombre comercial', 'nombre', 'name']),
+          nombre_fiscal: getCol(fila, ['nombre fiscal', 'fiscal']),
+          cif: getCol(fila, ['cif', 'nif', 'id']),
+          direccion: getCol(fila, ['direcci', 'address']),
+          poblacion: getCol(fila, ['poblaci', 'ciudad', 'city', 'localidad']),
+          telefono: getCol(fila, ['tel', 'phone']),
+          movil: getCol(fila, ['movil', 'móvil', 'mobile', 'celular']),
+          email: getCol(fila, ['mail', 'email', 'correo']),
+          notas: getCol(fila, ['nota', 'note', 'observ']),
           empresa: empresaImport,
         }))
+        .filter(r => r.nombre !== '')
+
       const LOTE = 100
       let importados = 0; let errores = 0
       for (let i = 0; i < registros.length; i += LOTE) {
@@ -167,7 +191,9 @@ export default function Clientes() {
       }
       setResultadoImport({ importados, errores, total: registros.length, empresa: empresaImport })
       setPagina(0); cargarClientes()
-    } catch { setResultadoImport({ error: 'Error al leer el archivo Excel.' }) }
+    } catch (err) {
+      setResultadoImport({ error: 'Error al leer el archivo Excel.' })
+    }
     setImportando(false)
     if (fileRef.current) fileRef.current.value = ''
   }
