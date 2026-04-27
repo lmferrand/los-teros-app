@@ -67,9 +67,9 @@ export default function Clientes() {
     e.preventDefault()
     const datos = { nombre, direccion, telefono, email, notas, empresa }
     if (editandoId) {
-      await supabase.from('clientes').update(datos).eq('id', editandoId)
+      await (supabase.from('clientes') as any).update(datos).eq('id', editandoId)
     } else {
-      await supabase.from('clientes').insert(datos)
+      await (supabase.from('clientes') as any).insert(datos)
     }
     setMostrarForm(false); setEditandoId(null); cargarClientes()
   }
@@ -107,7 +107,7 @@ export default function Clientes() {
       let importados = 0; let errores = 0
       for (let i = 0; i < registros.length; i += LOTE) {
         const lote = registros.slice(i, i + LOTE)
-        const { error } = await supabase.from('clientes').insert(lote)
+        const { error } = await (supabase.from('clientes') as any).insert(lote)
         if (error) errores += lote.length
         else importados += lote.length
       }
@@ -154,7 +154,6 @@ export default function Clientes() {
 
       <div className="p-6 max-w-6xl mx-auto">
 
-        {/* Selector empresa */}
         <div className="flex gap-2 mb-6">
           {EMPRESAS.map(emp => (
             <button key={emp.key} onClick={() => { setFiltroEmpresa(emp.key); setPagina(0); setBusqueda('') }}
@@ -167,7 +166,6 @@ export default function Clientes() {
           ))}
         </div>
 
-        {/* Importar por empresa */}
         <div className="rounded-2xl p-4 mb-6 flex flex-wrap gap-3 items-center" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.15)' }}>
           <p className="text-sm font-medium" style={{ color: '#06b6d4' }}>Importar Excel:</p>
           {EMPRESAS.map(emp => (
