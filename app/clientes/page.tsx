@@ -42,7 +42,7 @@ export default function Clientes() {
 
   async function cargarClientes() {
     setLoading(true)
-    let query = supabase.from('clientes').select('*', { count: 'exact' }).eq('empresa', filtroEmpresa)
+    let query = (supabase.from('clientes') as any).select('*', { count: 'exact' }).eq('empresa', filtroEmpresa)
     if (busqueda.trim()) query = query.ilike('nombre', `%${busqueda.trim()}%`)
     const { data, count } = await query.order('nombre').range(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA - 1)
     if (data) setClientes(data)
