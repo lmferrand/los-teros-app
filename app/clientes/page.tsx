@@ -14,7 +14,7 @@ export default function Clientes() {
   const [importando, setImportando] = useState(false)
   const [resultadoImport, setResultadoImport] = useState<any>(null)
   const [busqueda, setBusqueda] = useState('')
-  const [filtroEmpresa, setFiltroEmpresa] = useState('teros')
+  const [filtroEmpresa, setFiltroEmpresa] = useState('todos')
   const [pagina, setPagina] = useState(0)
   const [totalClientes, setTotalClientes] = useState(0)
   const [seleccionados, setSeleccionados] = useState<string[]>([])
@@ -48,7 +48,8 @@ export default function Clientes() {
 
   async function cargarClientes() {
     setLoading(true)
-    let query = (supabase.from('clientes') as any).select('*', { count: 'exact' }).eq('empresa', filtroEmpresa)
+    let query = (supabase.from('clientes') as any).select('*', { count: 'exact' })
+    if (filtroEmpresa !== 'todos') query = query.eq('empresa', filtroEmpresa)
     if (busqueda.trim()) query = query.ilike('nombre', `%${busqueda.trim()}%`)
     const { data, count } = await query.order('nombre').range(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA - 1)
     if (data) setClientes(data)
@@ -59,7 +60,8 @@ export default function Clientes() {
   function abrirFormNuevo() {
     setEditandoId(null)
     setNombre(''); setNombreFiscal(''); setCif(''); setDireccion(''); setPoblacion('')
-    setTelefono(''); setMovil(''); setEmail(''); setNotas(''); setEmpresa(filtroEmpresa)
+    setTelefono(''); setMovil(''); setEmail(''); setNotas('')
+    setEmpresa(filtroEmpresa === 'todos' ? 'teros' : filtroEmpresa)
     setMostrarForm(true)
   }
 
@@ -100,9 +102,14 @@ export default function Clientes() {
   }
 
   async function eliminarTodosEmpresa() {
-    if (!confirm(`Eliminar TODOS los clientes de ${filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}? Esta accion no se puede deshacer.`)) return
+    const label = filtroEmpresa === 'todos' ? 'TODOS los clientes' : `todos los clientes de ${filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}`
+    if (!confirm(`Eliminar ${label}? Esta accion no se puede deshacer.`)) return
     setBorrandoMasivo(true)
-    await (supabase.from('clientes') as any).delete().eq('empresa', filtroEmpresa)
+    if (filtroEmpresa === 'todos') {
+      await supabase.from('clientes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    } else {
+      await (supabase.from('clientes') as any).delete().eq('empresa', filtroEmpresa)
+    }
     setSeleccionados([])
     setBorrandoMasivo(false)
     cargarClientes()
@@ -176,6 +183,7 @@ export default function Clientes() {
       'Movil': c.movil || '',
       'Email': c.email || '',
       'Notas': c.notas || '',
+      'Empresa': c.empresa || '',
     }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
@@ -186,9 +194,12 @@ export default function Clientes() {
   const totalPaginas = Math.ceil(totalClientes / POR_PAGINA)
 
   const EMPRESAS = [
+    { key: 'todos', label: 'Todos', color: '#34d399', bg: 'rgba(16,185,129,0.15)' },
     { key: 'teros', label: 'Los Teros', color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
     { key: 'olipro', label: 'Olipro', color: '#a78bfa', bg: 'rgba(124,58,237,0.15)' },
   ]
+
+  const labelEmpresa = filtroEmpresa === 'todos' ? 'todos' : filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -225,7 +236,7 @@ export default function Clientes() {
 
         <div className="rounded-2xl p-4 mb-6 flex flex-wrap gap-3 items-center" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.15)' }}>
           <p className="text-sm font-medium" style={{ color: '#06b6d4' }}>Importar Excel:</p>
-          {EMPRESAS.map(emp => (
+          {EMPRESAS.filter(e => e.key !== 'todos').map(emp => (
             <label key={emp.key} className="text-sm px-4 py-2 rounded-xl cursor-pointer font-medium"
               style={{ background: emp.bg, color: emp.color, border: `1px solid ${emp.color}`, opacity: importando ? 0.5 : 1 }}>
               {importando ? 'Importando...' : `Importar ${emp.label}`}
@@ -257,7 +268,7 @@ export default function Clientes() {
           <input
             value={busqueda}
             onChange={e => { setBusqueda(e.target.value); setPagina(0) }}
-            placeholder={`Buscar en ${filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}...`}
+            placeholder={`Buscar cliente...`}
             className="flex-1 rounded-xl px-4 py-2 text-sm outline-none"
             style={s.inputStyle}
           />
@@ -266,32 +277,25 @@ export default function Clientes() {
 
         {seleccionados.length > 0 && (
           <div className="rounded-2xl p-3 mb-4 flex items-center gap-3 flex-wrap" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-            <p className="text-sm font-medium" style={{ color: '#f87171' }}>{seleccionados.length} clientes seleccionados</p>
+            <p className="text-sm font-medium" style={{ color: '#f87171' }}>{seleccionados.length} seleccionados</p>
             <button onClick={eliminarSeleccionados} disabled={borrandoMasivo}
               className="text-sm px-4 py-1.5 rounded-xl font-medium disabled:opacity-50"
               style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
               {borrandoMasivo ? 'Eliminando...' : 'Eliminar seleccionados'}
             </button>
             <button onClick={() => setSeleccionados([])} className="text-sm px-4 py-1.5 rounded-xl" style={s.btnSecondary}>
-              Cancelar
-            </button>
-            <button onClick={eliminarTodosEmpresa} disabled={borrandoMasivo}
-              className="text-sm px-4 py-1.5 rounded-xl font-medium disabled:opacity-50 ml-auto"
-              style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
-              Borrar todos los de {filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}
+              Cancelar seleccion
             </button>
           </div>
         )}
 
-        {!seleccionados.length && (
-          <div className="mb-4 flex justify-end">
-            <button onClick={eliminarTodosEmpresa} disabled={borrandoMasivo}
-              className="text-xs px-3 py-1.5 rounded-xl disabled:opacity-50"
-              style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
-              Borrar todos los de {filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}
-            </button>
-          </div>
-        )}
+        <div className="mb-4 flex justify-end">
+          <button onClick={eliminarTodosEmpresa} disabled={borrandoMasivo}
+            className="text-xs px-3 py-1.5 rounded-xl disabled:opacity-50"
+            style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
+            Borrar {labelEmpresa}
+          </button>
+        </div>
 
         {mostrarForm && (
           <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
@@ -359,7 +363,7 @@ export default function Clientes() {
         ) : clientes.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">🏢</p>
-            <p style={{ color: 'var(--text-muted)' }}>{busqueda ? 'No se encontraron clientes.' : `No hay clientes de ${filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}.`}</p>
+            <p style={{ color: 'var(--text-muted)' }}>{busqueda ? 'No se encontraron clientes.' : `No hay clientes de ${labelEmpresa}.`}</p>
           </div>
         ) : (
           <>
@@ -372,14 +376,15 @@ export default function Clientes() {
                         <input type="checkbox" checked={seleccionados.length === clientes.length && clientes.length > 0}
                           onChange={toggleTodos} className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
                       </th>
-                      {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Poblacion', 'Telefono', ''].map(h => (
+                      {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Poblacion', 'Telefono', 'Empresa', ''].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {clientes.map(c => (
-                      <tr key={c.id} style={{ borderBottom: '1px solid var(--border)', background: seleccionados.includes(c.id) ? 'rgba(239,68,68,0.05)' : 'transparent' }}
+                      <tr key={c.id}
+                        style={{ borderBottom: '1px solid var(--border)', background: seleccionados.includes(c.id) ? 'rgba(239,68,68,0.05)' : 'transparent' }}
                         onMouseEnter={e => { if (!seleccionados.includes(c.id)) e.currentTarget.style.background = 'rgba(124,58,237,0.05)' }}
                         onMouseLeave={e => { e.currentTarget.style.background = seleccionados.includes(c.id) ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
                         <td className="px-4 py-3">
@@ -398,6 +403,14 @@ export default function Clientes() {
                             : c.movil
                             ? <a href={`tel:${c.movil}`} className="text-sm font-medium" style={{ color: '#34d399' }}>📱 {c.movil}</a>
                             : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs px-2 py-0.5 rounded-full"
+                            style={c.empresa === 'teros'
+                              ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }
+                              : { background: 'rgba(124,58,237,0.15)', color: '#a78bfa' }}>
+                            {c.empresa === 'teros' ? 'Teros' : 'Olipro'}
+                          </span>
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2 justify-end">
