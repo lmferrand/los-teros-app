@@ -17,13 +17,19 @@ export default function Clientes() {
   const [filtroEmpresa, setFiltroEmpresa] = useState('teros')
   const [pagina, setPagina] = useState(0)
   const [totalClientes, setTotalClientes] = useState(0)
+  const [seleccionados, setSeleccionados] = useState<string[]>([])
+  const [borrandoMasivo, setBorrandoMasivo] = useState(false)
   const POR_PAGINA = 50
   const fileRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   const [nombre, setNombre] = useState('')
+  const [nombreFiscal, setNombreFiscal] = useState('')
+  const [cif, setCif] = useState('')
   const [direccion, setDireccion] = useState('')
+  const [poblacion, setPoblacion] = useState('')
   const [telefono, setTelefono] = useState('')
+  const [movil, setMovil] = useState('')
   const [email, setEmail] = useState('')
   const [notas, setNotas] = useState('')
   const [empresa, setEmpresa] = useState('teros')
@@ -52,20 +58,23 @@ export default function Clientes() {
 
   function abrirFormNuevo() {
     setEditandoId(null)
-    setNombre(''); setDireccion(''); setTelefono(''); setEmail(''); setNotas(''); setEmpresa(filtroEmpresa)
+    setNombre(''); setNombreFiscal(''); setCif(''); setDireccion(''); setPoblacion('')
+    setTelefono(''); setMovil(''); setEmail(''); setNotas(''); setEmpresa(filtroEmpresa)
     setMostrarForm(true)
   }
 
   function abrirFormEditar(c: any) {
     setEditandoId(c.id)
-    setNombre(c.nombre || ''); setDireccion(c.direccion || '')
-    setTelefono(c.telefono || ''); setEmail(c.email || ''); setNotas(c.notas || ''); setEmpresa(c.empresa || 'teros')
+    setNombre(c.nombre || ''); setNombreFiscal(c.nombre_fiscal || ''); setCif(c.cif || '')
+    setDireccion(c.direccion || ''); setPoblacion(c.poblacion || '')
+    setTelefono(c.telefono || ''); setMovil(c.movil || ''); setEmail(c.email || '')
+    setNotas(c.notas || ''); setEmpresa(c.empresa || 'teros')
     setMostrarForm(true)
   }
 
   async function guardarCliente(e: React.FormEvent) {
     e.preventDefault()
-    const datos = { nombre, direccion, telefono, email, notas, empresa }
+    const datos = { nombre, nombre_fiscal: nombreFiscal, cif, direccion, poblacion, telefono, movil, email, notas, empresa }
     if (editandoId) {
       await (supabase.from('clientes') as any).update(datos).eq('id', editandoId)
     } else {
@@ -78,6 +87,37 @@ export default function Clientes() {
     if (!confirm('Eliminar este cliente?')) return
     await supabase.from('clientes').delete().eq('id', id)
     cargarClientes()
+  }
+
+  async function eliminarSeleccionados() {
+    if (seleccionados.length === 0) return
+    if (!confirm(`Eliminar ${seleccionados.length} clientes seleccionados?`)) return
+    setBorrandoMasivo(true)
+    await supabase.from('clientes').delete().in('id', seleccionados)
+    setSeleccionados([])
+    setBorrandoMasivo(false)
+    cargarClientes()
+  }
+
+  async function eliminarTodosEmpresa() {
+    if (!confirm(`Eliminar TODOS los clientes de ${filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}? Esta accion no se puede deshacer.`)) return
+    setBorrandoMasivo(true)
+    await (supabase.from('clientes') as any).delete().eq('empresa', filtroEmpresa)
+    setSeleccionados([])
+    setBorrandoMasivo(false)
+    cargarClientes()
+  }
+
+  function toggleSeleccion(id: string) {
+    setSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  function toggleTodos() {
+    if (seleccionados.length === clientes.length) {
+      setSeleccionados([])
+    } else {
+      setSeleccionados(clientes.map(c => c.id))
+    }
   }
 
   function abrirMaps(dir: string) {
@@ -94,13 +134,20 @@ export default function Clientes() {
       const hoja = workbook.Sheets[workbook.SheetNames[0]]
       const datos = XLSX.utils.sheet_to_json(hoja, { defval: '' }) as any[]
       const registros = datos
-        .filter((fila: any) => fila['nombre'] || fila['Nombre'] || fila['NOMBRE'])
+        .filter((fila: any) => {
+          const n = fila['Nombre Comercial'] || fila['nombre_comercial'] || fila['nombre'] || fila['Nombre'] || ''
+          return String(n).trim() !== ''
+        })
         .map((fila: any) => ({
-          nombre: String(fila['nombre'] || fila['Nombre'] || fila['NOMBRE']).trim(),
-          direccion: String(fila['direccion'] || fila['Direccion'] || '').trim(),
-          telefono: String(fila['telefono'] || fila['Telefono'] || '').trim(),
-          email: String(fila['email'] || fila['Email'] || '').trim(),
-          notas: String(fila['notas'] || fila['Notas'] || '').trim(),
+          nombre: String(fila['Nombre Comercial'] || fila['nombre_comercial'] || fila['nombre'] || fila['Nombre'] || '').trim(),
+          nombre_fiscal: String(fila['Nombre Fiscal'] || fila['nombre_fiscal'] || '').trim(),
+          cif: String(fila['CIF'] || fila['cif'] || '').trim(),
+          direccion: String(fila['Direccion'] || fila['direccion'] || fila['Dirección'] || '').trim(),
+          poblacion: String(fila['Poblacion'] || fila['poblacion'] || fila['Población'] || '').trim(),
+          telefono: String(fila['Telefono'] || fila['telefono'] || fila['Teléfono'] || '').trim(),
+          movil: String(fila['Movil'] || fila['movil'] || fila['Móvil'] || '').trim(),
+          email: String(fila['Email'] || fila['email'] || fila['Mail'] || '').trim(),
+          notas: String(fila['Notas'] || fila['notas'] || '').trim(),
           empresa: empresaImport,
         }))
       const LOTE = 100
@@ -119,7 +166,17 @@ export default function Clientes() {
   }
 
   function exportarExcel() {
-    const datos = clientes.map(c => ({ nombre: c.nombre, direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '', notas: c.notas || '', empresa: c.empresa || '' }))
+    const datos = clientes.map(c => ({
+      'Nombre Comercial': c.nombre || '',
+      'Nombre Fiscal': c.nombre_fiscal || '',
+      'CIF': c.cif || '',
+      'Direccion': c.direccion || '',
+      'Poblacion': c.poblacion || '',
+      'Telefono': c.telefono || '',
+      'Movil': c.movil || '',
+      'Email': c.email || '',
+      'Notas': c.notas || '',
+    }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
@@ -156,7 +213,7 @@ export default function Clientes() {
 
         <div className="flex gap-2 mb-6">
           {EMPRESAS.map(emp => (
-            <button key={emp.key} onClick={() => { setFiltroEmpresa(emp.key); setPagina(0); setBusqueda('') }}
+            <button key={emp.key} onClick={() => { setFiltroEmpresa(emp.key); setPagina(0); setBusqueda(''); setSeleccionados([]) }}
               className="px-5 py-2 rounded-xl text-sm font-semibold transition-all"
               style={filtroEmpresa === emp.key
                 ? { background: emp.bg, color: emp.color, border: `1px solid ${emp.color}` }
@@ -176,11 +233,9 @@ export default function Clientes() {
                 onChange={e => importarExcel(e, emp.key)} disabled={importando} />
             </label>
           ))}
-          <div className="flex flex-wrap gap-2">
-            {['nombre', 'direccion', 'telefono', 'email', 'notas'].map(col => (
-              <span key={col} className="text-xs px-2 py-1 rounded-lg font-mono" style={{ background: 'rgba(6,182,212,0.1)', color: '#06b6d4' }}>{col}</span>
-            ))}
-          </div>
+          <p className="text-xs w-full mt-1" style={{ color: 'var(--text-muted)' }}>
+            Columnas: Nombre Comercial, Nombre Fiscal, CIF, Direccion, Poblacion, Telefono, Movil, Email, Notas
+          </p>
         </div>
 
         {resultadoImport && (
@@ -209,6 +264,35 @@ export default function Clientes() {
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{totalClientes} clientes</p>
         </div>
 
+        {seleccionados.length > 0 && (
+          <div className="rounded-2xl p-3 mb-4 flex items-center gap-3 flex-wrap" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <p className="text-sm font-medium" style={{ color: '#f87171' }}>{seleccionados.length} clientes seleccionados</p>
+            <button onClick={eliminarSeleccionados} disabled={borrandoMasivo}
+              className="text-sm px-4 py-1.5 rounded-xl font-medium disabled:opacity-50"
+              style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}>
+              {borrandoMasivo ? 'Eliminando...' : 'Eliminar seleccionados'}
+            </button>
+            <button onClick={() => setSeleccionados([])} className="text-sm px-4 py-1.5 rounded-xl" style={s.btnSecondary}>
+              Cancelar
+            </button>
+            <button onClick={eliminarTodosEmpresa} disabled={borrandoMasivo}
+              className="text-sm px-4 py-1.5 rounded-xl font-medium disabled:opacity-50 ml-auto"
+              style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+              Borrar todos los de {filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}
+            </button>
+          </div>
+        )}
+
+        {!seleccionados.length && (
+          <div className="mb-4 flex justify-end">
+            <button onClick={eliminarTodosEmpresa} disabled={borrandoMasivo}
+              className="text-xs px-3 py-1.5 rounded-xl disabled:opacity-50"
+              style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>
+              Borrar todos los de {filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}
+            </button>
+          </div>
+        )}
+
         {mostrarForm && (
           <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
             <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoId ? 'Editar cliente' : 'Nuevo cliente'}</h2>
@@ -221,16 +305,32 @@ export default function Clientes() {
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Nombre</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Nombre Comercial</label>
                 <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Restaurante La Brasa" />
               </div>
-              <div className="md:col-span-2">
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Nombre Fiscal</label>
+                <input value={nombreFiscal} onChange={e => setNombreFiscal(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="La Brasa SL" />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>CIF</label>
+                <input value={cif} onChange={e => setCif(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="B12345678" />
+              </div>
+              <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Direccion</label>
-                <input value={direccion} onChange={e => setDireccion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Calle, numero, ciudad..." />
+                <input value={direccion} onChange={e => setDireccion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Calle Mayor 1" />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Poblacion</label>
+                <input value={poblacion} onChange={e => setPoblacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Elche" />
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Telefono</label>
                 <input value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Movil</label>
+                <input value={movil} onChange={e => setMovil(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Email</label>
@@ -268,37 +368,41 @@ export default function Clientes() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      {['Nombre', 'Telefono', 'Email', 'Direccion', ''].map(h => (
+                      <th className="px-4 py-3">
+                        <input type="checkbox" checked={seleccionados.length === clientes.length && clientes.length > 0}
+                          onChange={toggleTodos} className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
+                      </th>
+                      {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Poblacion', 'Telefono', ''].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {clientes.map(c => (
-                      <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.05)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <tr key={c.id} style={{ borderBottom: '1px solid var(--border)', background: seleccionados.includes(c.id) ? 'rgba(239,68,68,0.05)' : 'transparent' }}
+                        onMouseEnter={e => { if (!seleccionados.includes(c.id)) e.currentTarget.style.background = 'rgba(124,58,237,0.05)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = seleccionados.includes(c.id) ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
+                        <td className="px-4 py-3">
+                          <input type="checkbox" checked={seleccionados.includes(c.id)}
+                            onChange={() => toggleSeleccion(c.id)} className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
+                        </td>
                         <td className="px-4 py-3">
                           <a href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</a>
-                          {c.notas && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{c.notas.substring(0, 50)}</p>}
                         </td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{c.nombre_fiscal || '—'}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{c.cif || '—'}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{c.poblacion || '—'}</td>
                         <td className="px-4 py-3">
                           {c.telefono
                             ? <a href={`tel:${c.telefono}`} className="text-sm font-medium" style={{ color: '#34d399' }}>📞 {c.telefono}</a>
+                            : c.movil
+                            ? <a href={`tel:${c.movil}`} className="text-sm font-medium" style={{ color: '#34d399' }}>📱 {c.movil}</a>
                             : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.email
-                            ? <a href={`mailto:${c.email}`} className="text-sm" style={{ color: '#06b6d4' }}>✉️ {c.email}</a>
-                            : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-xs max-w-xs truncate" style={{ color: 'var(--text-muted)' }}>
-                          {c.direccion || '—'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2 justify-end">
-                            {c.direccion && (
-                              <button onClick={() => abrirMaps(c.direccion)} className="text-xs px-2 py-1 rounded-lg"
+                            {(c.direccion || c.poblacion) && (
+                              <button onClick={() => abrirMaps(`${c.direccion} ${c.poblacion}`)} className="text-xs px-2 py-1 rounded-lg"
                                 style={{ color: '#06b6d4', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)' }}>
                                 Maps
                               </button>
