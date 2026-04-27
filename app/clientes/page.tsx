@@ -14,6 +14,7 @@ export default function Clientes() {
   const [importando, setImportando] = useState(false)
   const [resultadoImport, setResultadoImport] = useState<any>(null)
   const [busqueda, setBusqueda] = useState('')
+  const [filtroEmpresa, setFiltroEmpresa] = useState('teros')
   const [pagina, setPagina] = useState(0)
   const [totalClientes, setTotalClientes] = useState(0)
   const POR_PAGINA = 50
@@ -25,14 +26,10 @@ export default function Clientes() {
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
   const [notas, setNotas] = useState('')
+  const [empresa, setEmpresa] = useState('teros')
 
-  useEffect(() => {
-    verificarSesion()
-  }, [])
-
-  useEffect(() => {
-    cargarClientes()
-  }, [pagina, busqueda])
+  useEffect(() => { verificarSesion() }, [])
+  useEffect(() => { cargarClientes() }, [pagina, busqueda, filtroEmpresa])
 
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -45,13 +42,9 @@ export default function Clientes() {
 
   async function cargarClientes() {
     setLoading(true)
-    let query = supabase.from('clientes').select('*', { count: 'exact' })
-    if (busqueda.trim()) {
-      query = query.ilike('nombre', `%${busqueda.trim()}%`)
-    }
-    const { data, count } = await query
-      .order('nombre')
-      .range(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA - 1)
+    let query = supabase.from('clientes').select('*', { count: 'exact' }).eq('empresa', filtroEmpresa)
+    if (busqueda.trim()) query = query.ilike('nombre', `%${busqueda.trim()}%`)
+    const { data, count } = await query.order('nombre').range(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA - 1)
     if (data) setClientes(data)
     if (count !== null) setTotalClientes(count)
     setLoading(false)
@@ -59,20 +52,20 @@ export default function Clientes() {
 
   function abrirFormNuevo() {
     setEditandoId(null)
-    setNombre(''); setDireccion(''); setTelefono(''); setEmail(''); setNotas('')
+    setNombre(''); setDireccion(''); setTelefono(''); setEmail(''); setNotas(''); setEmpresa(filtroEmpresa)
     setMostrarForm(true)
   }
 
   function abrirFormEditar(c: any) {
     setEditandoId(c.id)
     setNombre(c.nombre || ''); setDireccion(c.direccion || '')
-    setTelefono(c.telefono || ''); setEmail(c.email || ''); setNotas(c.notas || '')
+    setTelefono(c.telefono || ''); setEmail(c.email || ''); setNotas(c.notas || ''); setEmpresa(c.empresa || 'teros')
     setMostrarForm(true)
   }
 
   async function guardarCliente(e: React.FormEvent) {
     e.preventDefault()
-    const datos = { nombre, direccion, telefono, email, notas }
+    const datos = { nombre, direccion, telefono, email, notas, empresa }
     if (editandoId) {
       await supabase.from('clientes').update(datos).eq('id', editandoId)
     } else {
@@ -91,7 +84,7 @@ export default function Clientes() {
     window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(dir), '_blank')
   }
 
-  async function importarExcel(e: React.ChangeEvent<HTMLInputElement>) {
+  async function importarExcel(e: React.ChangeEvent<HTMLInputElement>, empresaImport: string) {
     const file = e.target.files?.[0]
     if (!file) return
     setImportando(true); setResultadoImport(null)
@@ -108,6 +101,7 @@ export default function Clientes() {
           telefono: String(fila['telefono'] || fila['Telefono'] || '').trim(),
           email: String(fila['email'] || fila['Email'] || '').trim(),
           notas: String(fila['notas'] || fila['Notas'] || '').trim(),
+          empresa: empresaImport,
         }))
       const LOTE = 100
       let importados = 0; let errores = 0
@@ -117,7 +111,7 @@ export default function Clientes() {
         if (error) errores += lote.length
         else importados += lote.length
       }
-      setResultadoImport({ importados, errores, total: registros.length })
+      setResultadoImport({ importados, errores, total: registros.length, empresa: empresaImport })
       setPagina(0); cargarClientes()
     } catch { setResultadoImport({ error: 'Error al leer el archivo Excel.' }) }
     setImportando(false)
@@ -125,14 +119,19 @@ export default function Clientes() {
   }
 
   function exportarExcel() {
-    const datos = clientes.map(c => ({ nombre: c.nombre, direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '', notas: c.notas || '' }))
+    const datos = clientes.map(c => ({ nombre: c.nombre, direccion: c.direccion || '', telefono: c.telefono || '', email: c.email || '', notas: c.notas || '', empresa: c.empresa || '' }))
     const ws = XLSX.utils.json_to_sheet(datos)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Clientes')
-    XLSX.writeFile(wb, `clientes_los_teros_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    XLSX.writeFile(wb, `clientes_${filtroEmpresa}_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
   const totalPaginas = Math.ceil(totalClientes / POR_PAGINA)
+
+  const EMPRESAS = [
+    { key: 'teros', label: 'Los Teros', color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
+    { key: 'olipro', label: 'Olipro', color: '#a78bfa', bg: 'rgba(124,58,237,0.15)' },
+  ]
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -147,10 +146,6 @@ export default function Clientes() {
           <button onClick={exportarExcel} className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
             Exportar Excel
           </button>
-          <label className="text-sm px-4 py-2 rounded-xl cursor-pointer" style={s.btnSecondary}>
-            {importando ? 'Importando...' : 'Importar Excel'}
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={importarExcel} disabled={importando} />
-          </label>
           <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nuevo cliente
           </button>
@@ -158,6 +153,38 @@ export default function Clientes() {
       </div>
 
       <div className="p-6 max-w-6xl mx-auto">
+
+        {/* Selector empresa */}
+        <div className="flex gap-2 mb-6">
+          {EMPRESAS.map(emp => (
+            <button key={emp.key} onClick={() => { setFiltroEmpresa(emp.key); setPagina(0); setBusqueda('') }}
+              className="px-5 py-2 rounded-xl text-sm font-semibold transition-all"
+              style={filtroEmpresa === emp.key
+                ? { background: emp.bg, color: emp.color, border: `1px solid ${emp.color}` }
+                : s.btnSecondary}>
+              {emp.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Importar por empresa */}
+        <div className="rounded-2xl p-4 mb-6 flex flex-wrap gap-3 items-center" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.15)' }}>
+          <p className="text-sm font-medium" style={{ color: '#06b6d4' }}>Importar Excel:</p>
+          {EMPRESAS.map(emp => (
+            <label key={emp.key} className="text-sm px-4 py-2 rounded-xl cursor-pointer font-medium"
+              style={{ background: emp.bg, color: emp.color, border: `1px solid ${emp.color}`, opacity: importando ? 0.5 : 1 }}>
+              {importando ? 'Importando...' : `Importar ${emp.label}`}
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden"
+                onChange={e => importarExcel(e, emp.key)} disabled={importando} />
+            </label>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            {['nombre', 'direccion', 'telefono', 'email', 'notas'].map(col => (
+              <span key={col} className="text-xs px-2 py-1 rounded-lg font-mono" style={{ background: 'rgba(6,182,212,0.1)', color: '#06b6d4' }}>{col}</span>
+            ))}
+          </div>
+        </div>
+
         {resultadoImport && (
           <div className="rounded-2xl p-4 mb-6" style={resultadoImport.error
             ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }
@@ -165,7 +192,7 @@ export default function Clientes() {
             {resultadoImport.error
               ? <p className="text-sm" style={{ color: '#f87171' }}>{resultadoImport.error}</p>
               : <div>
-                  <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Importacion completada</p>
+                  <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Importacion completada — {resultadoImport.empresa === 'teros' ? 'Los Teros' : 'Olipro'}</p>
                   <p className="text-sm" style={{ color: '#34d399' }}>{resultadoImport.importados} clientes importados</p>
                   {resultadoImport.errores > 0 && <p className="text-sm" style={{ color: '#f87171' }}>{resultadoImport.errores} errores</p>}
                 </div>}
@@ -177,20 +204,25 @@ export default function Clientes() {
           <input
             value={busqueda}
             onChange={e => { setBusqueda(e.target.value); setPagina(0) }}
-            placeholder="Buscar cliente por nombre..."
+            placeholder={`Buscar en ${filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}...`}
             className="flex-1 rounded-xl px-4 py-2 text-sm outline-none"
             style={s.inputStyle}
           />
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            {totalClientes} clientes
-          </p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{totalClientes} clientes</p>
         </div>
 
         {mostrarForm && (
           <div className="rounded-2xl p-6 mb-6" style={s.cardStyle}>
             <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoId ? 'Editar cliente' : 'Nuevo cliente'}</h2>
             <form onSubmit={guardarCliente} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
+              <div>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Empresa</label>
+                <select value={empresa} onChange={e => setEmpresa(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
+                  <option value="teros">Los Teros</option>
+                  <option value="olipro">Olipro</option>
+                </select>
+              </div>
+              <div>
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Nombre</label>
                 <input value={nombre} onChange={e => setNombre(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Restaurante La Brasa" />
               </div>
@@ -229,7 +261,7 @@ export default function Clientes() {
         ) : clientes.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">🏢</p>
-            <p style={{ color: 'var(--text-muted)' }}>{busqueda ? 'No se encontraron clientes con ese nombre.' : 'No hay clientes.'}</p>
+            <p style={{ color: 'var(--text-muted)' }}>{busqueda ? 'No se encontraron clientes.' : `No hay clientes de ${filtroEmpresa === 'teros' ? 'Los Teros' : 'Olipro'}.`}</p>
           </div>
         ) : (
           <>
@@ -292,7 +324,7 @@ export default function Clientes() {
 
             <div className="flex items-center justify-between flex-wrap gap-3">
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Pagina {pagina + 1} de {totalPaginas} — mostrando {clientes.length} de {totalClientes}
+                Pagina {pagina + 1} de {totalPaginas} — {clientes.length} de {totalClientes}
               </p>
               <div className="flex gap-2">
                 <button onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={pagina === 0}
