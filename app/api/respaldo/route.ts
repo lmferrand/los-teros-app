@@ -14,6 +14,7 @@ const TABLAS_RESPALDO = [
   'ordenes',
   'movimientos',
   'fotos_ordenes',
+  'incidencias_ordenes',
   'albaranes',
   'presupuestos',
   'servicios_clientes',

@@ -61,6 +61,27 @@ function textoDias(dias: number | null) {
   return `${dias} dias restantes`
 }
 
+function kmRestantesRevision(vehiculo: any) {
+  const actual = Number(vehiculo?.km_actual ?? Number.NaN)
+  const proxima = Number(vehiculo?.proxima_revision_km ?? Number.NaN)
+  if (!Number.isFinite(actual) || !Number.isFinite(proxima) || proxima <= 0) return null
+  return Math.round(proxima - actual)
+}
+
+function estiloRevisionKm(restanteKm: number | null) {
+  if (restanteKm === null) return { color: 'var(--text-muted)', bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.25)' }
+  if (restanteKm < 0) return { color: '#f87171', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.3)' }
+  if (restanteKm <= 1000) return { color: '#fbbf24', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' }
+  return { color: '#34d399', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.3)' }
+}
+
+function textoRevisionKm(restanteKm: number | null) {
+  if (restanteKm === null) return 'Sin objetivo KM'
+  if (restanteKm < 0) return `Vencida por ${Math.abs(restanteKm).toLocaleString('es-ES')} km`
+  if (restanteKm === 0) return 'Toca revision ahora'
+  return `Faltan ${restanteKm.toLocaleString('es-ES')} km`
+}
+
 function aTsFecha(valor: string | null | undefined) {
   if (!valor) return 0
   const d = new Date(`${valor}T12:00:00`)
@@ -124,6 +145,9 @@ export default function FlotaPage() {
   const [combustible, setCombustible] = useState('diesel')
   const [anio, setAnio] = useState('')
   const [kmActual, setKmActual] = useState('0')
+  const [ultimaRevisionFecha, setUltimaRevisionFecha] = useState('')
+  const [kmUltimaRevision, setKmUltimaRevision] = useState('')
+  const [proximaRevisionKm, setProximaRevisionKm] = useState('')
   const [proximaItv, setProximaItv] = useState('')
   const [vencimientoItc, setVencimientoItc] = useState('')
   const [vencimientoSeguro, setVencimientoSeguro] = useState('')
@@ -152,6 +176,9 @@ export default function FlotaPage() {
     setCombustible('diesel')
     setAnio('')
     setKmActual('0')
+    setUltimaRevisionFecha('')
+    setKmUltimaRevision('')
+    setProximaRevisionKm('')
     setProximaItv('')
     setVencimientoItc('')
     setVencimientoSeguro('')
@@ -229,6 +256,18 @@ export default function FlotaPage() {
       }
     }
     return items.sort((a, b) => a.dias - b.dias).slice(0, 12)
+  }, [vehiculos])
+
+  const alertasRevisionKm = useMemo(() => {
+    const items: { vehiculo: any; restanteKm: number; proximaKm: number; actualKm: number }[] = []
+    for (const v of vehiculos) {
+      const restante = kmRestantesRevision(v)
+      const proximaKm = Number(v?.proxima_revision_km ?? Number.NaN)
+      const actualKm = Number(v?.km_actual ?? Number.NaN)
+      if (restante === null || !Number.isFinite(proximaKm) || !Number.isFinite(actualKm)) continue
+      if (restante <= 1000) items.push({ vehiculo: v, restanteKm: restante, proximaKm, actualKm })
+    }
+    return items.sort((a, b) => a.restanteKm - b.restanteKm).slice(0, 12)
   }, [vehiculos])
 
   const resumenDocumentos = useMemo(() => {
@@ -315,6 +354,9 @@ export default function FlotaPage() {
     setCombustible(v.combustible || 'diesel')
     setAnio(v.anio ? String(v.anio) : '')
     setKmActual(v.km_actual ? String(v.km_actual) : '0')
+    setUltimaRevisionFecha(v.ultima_revision_fecha || '')
+    setKmUltimaRevision(v.km_ultima_revision ? String(v.km_ultima_revision) : '')
+    setProximaRevisionKm(v.proxima_revision_km ? String(v.proxima_revision_km) : '')
     setProximaItv(v.proxima_itv || '')
     setVencimientoItc(v.vencimiento_itc || '')
     setVencimientoSeguro(v.vencimiento_seguro || '')
@@ -342,6 +384,9 @@ export default function FlotaPage() {
         combustible: combustible || null,
         anio: anio ? Number(anio) : null,
         km_actual: kmActual ? Number(kmActual) : 0,
+        ultima_revision_fecha: ultimaRevisionFecha || null,
+        km_ultima_revision: kmUltimaRevision ? Number(kmUltimaRevision) : null,
+        proxima_revision_km: proximaRevisionKm ? Number(proximaRevisionKm) : null,
         proxima_itv: proximaItv || null,
         vencimiento_itc: vencimientoItc || null,
         vencimiento_seguro: vencimientoSeguro || null,
@@ -475,6 +520,9 @@ Analiza este documento de vehiculo y devuelve SOLO JSON valido:
   "vencimiento_itc": "YYYY-MM-DD",
   "vencimiento_seguro": "YYYY-MM-DD",
   "vencimiento_impuesto": "YYYY-MM-DD",
+  "ultima_revision_fecha": "YYYY-MM-DD",
+  "km_ultima_revision": 0,
+  "proxima_revision_km": 0,
   "km_actual": 0,
   "notas": ""
 }
@@ -518,6 +566,8 @@ Si no identificas un campo dejalo vacio.
       const companiaIA = String(json.compania_seguro || '').trim()
       const polizaIA = String(json.numero_documento || '').trim()
       const kmIA = Number(json.km_actual)
+      const kmUltRevIA = Number(json.km_ultima_revision)
+      const proximaRevKmIA = Number(json.proxima_revision_km)
 
       if (matriculaIA) vehiculoUpdate.matricula = matriculaIA
       if (marcaIA) vehiculoUpdate.marca = marcaIA
@@ -526,16 +576,20 @@ Si no identificas un campo dejalo vacio.
       if (polizaIA && tipoDocIA === 'seguro') vehiculoUpdate.numero_poliza = polizaIA
       if (notasIA) vehiculoUpdate.notas = notasIA
       if (Number.isFinite(kmIA) && kmIA > 0) vehiculoUpdate.km_actual = kmIA
+      if (Number.isFinite(kmUltRevIA) && kmUltRevIA >= 0) vehiculoUpdate.km_ultima_revision = kmUltRevIA
+      if (Number.isFinite(proximaRevKmIA) && proximaRevKmIA > 0) vehiculoUpdate.proxima_revision_km = proximaRevKmIA
 
       const proximaItvIA = normalizarFecha(json.proxima_itv)
       const vencItcIA = normalizarFecha(json.vencimiento_itc)
       const vencSeguroIA = normalizarFecha(json.vencimiento_seguro)
       const vencImpuestoIA = normalizarFecha(json.vencimiento_impuesto)
+      const ultimaRevFechaIA = normalizarFecha(json.ultima_revision_fecha)
 
       if (proximaItvIA) vehiculoUpdate.proxima_itv = proximaItvIA
       if (vencItcIA) vehiculoUpdate.vencimiento_itc = vencItcIA
       if (vencSeguroIA) vehiculoUpdate.vencimiento_seguro = vencSeguroIA
       if (vencImpuestoIA) vehiculoUpdate.vencimiento_impuesto = vencImpuestoIA
+      if (ultimaRevFechaIA) vehiculoUpdate.ultima_revision_fecha = ultimaRevFechaIA
 
       if (Object.keys(vehiculoUpdate).length > 0) {
         await supabase.from('vehiculos_flota').update(vehiculoUpdate).eq('id', vehiculoId)
@@ -577,7 +631,7 @@ Si no identificas un campo dejalo vacio.
       />
 
       <div className="p-6 max-w-7xl mx-auto">
-        {alertasVencimientos.length > 0 && (
+        {(alertasVencimientos.length > 0 || alertasRevisionKm.length > 0) && (
           <div className="rounded-2xl p-4 mb-4" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
             <p className="text-sm font-semibold" style={{ color: '#fbbf24' }}>Vencimientos proximos de flota</p>
             <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -587,6 +641,18 @@ Si no identificas un campo dejalo vacio.
                 </p>
               ))}
             </div>
+            {alertasRevisionKm.length > 0 && (
+              <>
+                <p className="text-sm font-semibold mt-3" style={{ color: '#fbbf24' }}>Revisiones por kilometraje proximas</p>
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {alertasRevisionKm.slice(0, 6).map((a, idx) => (
+                    <p key={`km-${idx}`} className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {a.vehiculo.matricula} - Objetivo {a.proximaKm.toLocaleString('es-ES')} km ({textoRevisionKm(a.restanteKm)})
+                    </p>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -616,8 +682,14 @@ Si no identificas un campo dejalo vacio.
               </select>
               <input value={anio} onChange={(e) => setAnio(e.target.value)} type="number" placeholder="Anio" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               <input value={kmActual} onChange={(e) => setKmActual(e.target.value)} type="number" placeholder="KM actuales" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              <input value={kmUltimaRevision} onChange={(e) => setKmUltimaRevision(e.target.value)} type="number" placeholder="KM ultima revision" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              <input value={proximaRevisionKm} onChange={(e) => setProximaRevisionKm(e.target.value)} type="number" placeholder="Proxima revision (KM)" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               <input value={companiaSeguro} onChange={(e) => setCompaniaSeguro(e.target.value)} placeholder="Compania seguro" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               <input value={numeroPoliza} onChange={(e) => setNumeroPoliza(e.target.value)} placeholder="Numero poliza" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              <div>
+                <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Ultima revision</label>
+                <input value={ultimaRevisionFecha} onChange={(e) => setUltimaRevisionFecha(e.target.value)} type="date" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              </div>
               <div>
                 <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Proxima ITV</label>
                 <input value={proximaItv} onChange={(e) => setProximaItv(e.target.value)} type="date" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
@@ -664,6 +736,8 @@ Si no identificas un campo dejalo vacio.
                 const diasSeguro = diasRestantes(v.vencimiento_seguro)
                 const badgeItv = estiloVencimiento(diasItv)
                 const badgeSeguro = estiloVencimiento(diasSeguro)
+                const restanteRevisionKm = kmRestantesRevision(v)
+                const badgeRevisionKm = estiloRevisionKm(restanteRevisionKm)
                 const seleccionado = vehiculoDetalle?.id === v.id
                 return (
                   <button
@@ -686,6 +760,9 @@ Si no identificas un campo dejalo vacio.
                       </span>
                       <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: badgeSeguro.bg, color: badgeSeguro.color, border: `1px solid ${badgeSeguro.border}` }}>
                         Seguro: {textoDias(diasSeguro)}
+                      </span>
+                      <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: badgeRevisionKm.bg, color: badgeRevisionKm.color, border: `1px solid ${badgeRevisionKm.border}` }}>
+                        Revision: {textoRevisionKm(restanteRevisionKm)}
                       </span>
                     </div>
                   </button>
@@ -711,6 +788,13 @@ Si no identificas un campo dejalo vacio.
                     </h2>
                     <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                       KM: {Number(vehiculoDetalle.km_actual || 0).toLocaleString('es-ES')} - {vehiculoDetalle.combustible || 'N/D'}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                      Ultima revision: {vehiculoDetalle.ultima_revision_fecha || 'N/D'}
+                      {' - '}
+                      KM ultima: {vehiculoDetalle.km_ultima_revision ? Number(vehiculoDetalle.km_ultima_revision).toLocaleString('es-ES') : 'N/D'}
+                      {' - '}
+                      Proxima: {vehiculoDetalle.proxima_revision_km ? Number(vehiculoDetalle.proxima_revision_km).toLocaleString('es-ES') : 'N/D'} km
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -747,6 +831,24 @@ Si no identificas un campo dejalo vacio.
                       </div>
                     )
                   })}
+                  {(() => {
+                    const restanteKm = kmRestantesRevision(vehiculoDetalle)
+                    const st = estiloRevisionKm(restanteKm)
+                    return (
+                      <div className="rounded-xl px-3 py-2" style={{ background: st.bg, border: `1px solid ${st.border}` }}>
+                        <p className="text-xs uppercase tracking-wider" style={{ color: st.color }}>Revision KM</p>
+                        <p className="text-sm" style={{ color: st.color }}>
+                          Objetivo: {vehiculoDetalle.proxima_revision_km ? Number(vehiculoDetalle.proxima_revision_km).toLocaleString('es-ES') : 'Sin dato'} km
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: st.color }}>
+                          {textoRevisionKm(restanteKm)}
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: st.color }}>
+                          Ultima: {vehiculoDetalle.ultima_revision_fecha || 'N/D'} - KM {vehiculoDetalle.km_ultima_revision ? Number(vehiculoDetalle.km_ultima_revision).toLocaleString('es-ES') : 'N/D'}
+                        </p>
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>

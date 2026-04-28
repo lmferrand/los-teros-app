@@ -80,6 +80,8 @@ export type Database = {
           movil: string | null
           email: string | null
           notas: string | null
+          seguimiento_llamada_ok: boolean
+          seguimiento_llamada_at: string | null
           es_recurrente: boolean | null
           frecuencia_recurrencia: string | null
           created_at: string | null
@@ -97,6 +99,8 @@ export type Database = {
           movil?: string | null
           email?: string | null
           notas?: string | null
+          seguimiento_llamada_ok?: boolean
+          seguimiento_llamada_at?: string | null
           es_recurrente?: boolean | null
           frecuencia_recurrencia?: string | null
           created_at?: string | null
@@ -114,6 +118,8 @@ export type Database = {
           movil?: string | null
           email?: string | null
           notas?: string | null
+          seguimiento_llamada_ok?: boolean
+          seguimiento_llamada_at?: string | null
           es_recurrente?: boolean | null
           frecuencia_recurrencia?: string | null
           created_at?: string | null
@@ -195,6 +201,54 @@ export type Database = {
           {
             foreignKeyName: 'fotos_ordenes_subida_por_fkey'
             columns: ['subida_por']
+            isOneToOne: false
+            referencedRelation: 'perfiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      incidencias_ordenes: {
+        Row: {
+          id: string
+          orden_id: string
+          tecnico_id: string | null
+          estado_orden: string | null
+          descripcion: string | null
+          audio_url: string
+          foto_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          orden_id: string
+          tecnico_id?: string | null
+          estado_orden?: string | null
+          descripcion?: string | null
+          audio_url: string
+          foto_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          orden_id?: string
+          tecnico_id?: string | null
+          estado_orden?: string | null
+          descripcion?: string | null
+          audio_url?: string
+          foto_url?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'incidencias_ordenes_orden_id_fkey'
+            columns: ['orden_id']
+            isOneToOne: false
+            referencedRelation: 'ordenes'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'incidencias_ordenes_tecnico_id_fkey'
+            columns: ['tecnico_id']
             isOneToOne: false
             referencedRelation: 'perfiles'
             referencedColumns: ['id']
@@ -617,6 +671,9 @@ export type Database = {
           combustible: string | null
           anio: number | null
           km_actual: number | null
+          ultima_revision_fecha: string | null
+          km_ultima_revision: number | null
+          proxima_revision_km: number | null
           proxima_itv: string | null
           vencimiento_itc: string | null
           vencimiento_seguro: string | null
@@ -638,6 +695,9 @@ export type Database = {
           combustible?: string | null
           anio?: number | null
           km_actual?: number | null
+          ultima_revision_fecha?: string | null
+          km_ultima_revision?: number | null
+          proxima_revision_km?: number | null
           proxima_itv?: string | null
           vencimiento_itc?: string | null
           vencimiento_seguro?: string | null
@@ -659,6 +719,9 @@ export type Database = {
           combustible?: string | null
           anio?: number | null
           km_actual?: number | null
+          ultima_revision_fecha?: string | null
+          km_ultima_revision?: number | null
+          proxima_revision_km?: number | null
           proxima_itv?: string | null
           vencimiento_itc?: string | null
           vencimiento_seguro?: string | null

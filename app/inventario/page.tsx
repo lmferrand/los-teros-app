@@ -213,6 +213,7 @@ export default function Inventario() {
                 <input type="file" accept="image/*" onChange={subirFoto} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
                 {subiendo && <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
                 {fotoUrl && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={fotoUrl}
                     alt="foto"
@@ -264,6 +265,7 @@ export default function Inventario() {
                     >
                       <td className="px-4 py-3">
                         {m.foto_url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img
                             src={m.foto_url}
                             alt={m.nombre}

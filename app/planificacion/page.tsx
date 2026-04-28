@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { s } from '@/lib/styles'
 
 export default function Planificacion() {
@@ -401,6 +402,8 @@ export default function Planificacion() {
 
     return rutas
   }
+
+  void construirRutasMapa
 
   function construirRutasMapaExtendido(ordenesBase: any[]) {
     if (!ordenesBase.length) return []
@@ -1394,9 +1397,9 @@ export default function Planificacion() {
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
+          <Link href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</Link>
           <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Planificacion</h1>
         </div>
         {vistaActiva === 'calendario' && (

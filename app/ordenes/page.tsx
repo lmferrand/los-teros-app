@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { s } from '@/lib/styles'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
 
@@ -35,6 +36,11 @@ function normalizarEmpresaCliente(valor: unknown) {
   return 'teros'
 }
 
+function esTablaServiciosNoDisponible(error: any) {
+  const txt = String(error?.message || '').toLowerCase()
+  return txt.includes('servicios_clientes') && (txt.includes('does not exist') || txt.includes('relation'))
+}
+
 export default function Ordenes() {
   const [ordenes, setOrdenes] = useState<any[]>([])
   const [vehiculos, setVehiculos] = useState<any[]>([])
@@ -53,6 +59,19 @@ export default function Ordenes() {
   const [buscandoCliente, setBuscandoCliente] = useState(false)
   const [nombreClienteSeleccionado, setNombreClienteSeleccionado] = useState('')
   const [empresaOt, setEmpresaOt] = useState<'teros' | 'olipro'>('teros')
+  const [incidenciasOrden, setIncidenciasOrden] = useState<any[]>([])
+  const [mostrarRegistroIncidencia, setMostrarRegistroIncidencia] = useState(false)
+  const [grabandoIncidencia, setGrabandoIncidencia] = useState(false)
+  const [audioIncidenciaBlob, setAudioIncidenciaBlob] = useState<Blob | null>(null)
+  const [audioIncidenciaPreviewUrl, setAudioIncidenciaPreviewUrl] = useState('')
+  const [fotoIncidenciaFile, setFotoIncidenciaFile] = useState<File | null>(null)
+  const [fotoIncidenciaPreviewUrl, setFotoIncidenciaPreviewUrl] = useState('')
+  const [textoIncidencia, setTextoIncidencia] = useState('')
+  const [guardandoIncidencia, setGuardandoIncidencia] = useState(false)
+  const [eliminandoIncidenciaId, setEliminandoIncidenciaId] = useState<string | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const streamIncidenciaRef = useRef<MediaStream | null>(null)
+  const chunksAudioIncidenciaRef = useRef<Blob[]>([])
   const router = useRouter()
 
   const [tipo, setTipo] = useState('limpieza')
@@ -82,10 +101,27 @@ export default function Ordenes() {
     empresa: 'teros',
   })
 
-  useEffect(() => {
-    verificarSesion()
-    cargarDatos()
+  const verificarSesion = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) router.push('/login')
+  }, [router])
+
+  const cargarDatos = useCallback(async () => {
+    const [ords, tecs, vehs] = await Promise.all([
+      supabase.from('ordenes').select('*, clientes(*)').order('created_at', { ascending: false }),
+      supabase.from('perfiles').select('*').order('nombre'),
+      supabase.from('vehiculos_flota').select('id, matricula, alias, marca, modelo, activo').eq('activo', true).order('matricula'),
+    ])
+    if (ords.data) setOrdenes(ords.data)
+    if (tecs.data) setTecnicos(tecs.data)
+    if (vehs.data) setVehiculos(vehs.data)
+    setLoading(false)
   }, [])
+
+  useEffect(() => {
+    void verificarSesion()
+    void cargarDatos()
+  }, [verificarSesion, cargarDatos])
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
@@ -96,21 +132,56 @@ export default function Ordenes() {
     if (faltaUrl === 'tecnico' || faltaUrl === 'fecha' || faltaUrl === 'vehiculo') setFiltroFalta(faltaUrl)
   }, [])
 
-  async function verificarSesion() {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) router.push('/login')
+  function extraerPathStorageDesdePublicUrl(url: string, bucket: string) {
+    const marcador = `/storage/v1/object/public/${bucket}/`
+    const idx = String(url || '').indexOf(marcador)
+    if (idx < 0) return null
+    const encodedPath = String(url || '').slice(idx + marcador.length)
+    if (!encodedPath) return null
+    return decodeURIComponent(encodedPath)
   }
 
-  async function cargarDatos() {
-    const [ords, tecs, vehs] = await Promise.all([
-      supabase.from('ordenes').select('*, clientes(*)').order('created_at', { ascending: false }),
-      supabase.from('perfiles').select('*').order('nombre'),
-      supabase.from('vehiculos_flota').select('id, matricula, alias, marca, modelo, activo').eq('activo', true).order('matricula'),
-    ])
-    if (ords.data) setOrdenes(ords.data)
-    if (tecs.data) setTecnicos(tecs.data)
-    if (vehs.data) setVehiculos(vehs.data)
-    setLoading(false)
+  function limpiarPreviewAudioIncidencia() {
+    if (audioIncidenciaPreviewUrl) {
+      URL.revokeObjectURL(audioIncidenciaPreviewUrl)
+    }
+    setAudioIncidenciaPreviewUrl('')
+  }
+
+  function limpiarPreviewFotoIncidencia() {
+    if (fotoIncidenciaPreviewUrl) {
+      URL.revokeObjectURL(fotoIncidenciaPreviewUrl)
+    }
+    setFotoIncidenciaPreviewUrl('')
+  }
+
+  function resetRegistroIncidencia() {
+    setTextoIncidencia('')
+    setAudioIncidenciaBlob(null)
+    setFotoIncidenciaFile(null)
+    limpiarPreviewAudioIncidencia()
+    limpiarPreviewFotoIncidencia()
+  }
+
+  function cerrarDetalleOrden() {
+    detenerGrabacionActiva()
+    setMostrarRegistroIncidencia(false)
+    setIncidenciasOrden([])
+    resetRegistroIncidencia()
+    setOrdenDetalle(null)
+  }
+
+  function detenerGrabacionActiva() {
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop()
+      }
+    } catch {}
+    if (streamIncidenciaRef.current) {
+      for (const track of streamIncidenciaRef.current.getTracks()) track.stop()
+      streamIncidenciaRef.current = null
+    }
+    setGrabandoIncidencia(false)
   }
 
   async function buscarClientes(texto: string) {
@@ -144,8 +215,26 @@ export default function Ordenes() {
     setTecnicoVehiculoId('')
   }, [tecnicoVehiculoId, tecnicosSeleccionados])
 
+  useEffect(() => {
+    return () => {
+      detenerGrabacionActiva()
+      limpiarPreviewAudioIncidencia()
+      limpiarPreviewFotoIncidencia()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
+    return data || []
+  }
+
+  async function cargarIncidenciasOrden(ordenId: string) {
+    const { data } = await supabase
+      .from('incidencias_ordenes')
+      .select('*, perfiles(nombre)')
+      .eq('orden_id', ordenId)
+      .order('created_at', { ascending: false })
     return data || []
   }
 
@@ -170,8 +259,19 @@ export default function Ordenes() {
   }
 
   async function abrirDetalle(o: any) {
-    const fotos = await cargarFotosOrden(o.id)
+    const [fotos, incidencias] = await Promise.all([
+      cargarFotosOrden(o.id),
+      cargarIncidenciasOrden(o.id),
+    ])
+    resetRegistroIncidencia()
+    setMostrarRegistroIncidencia(false)
+    setIncidenciasOrden(incidencias)
     setOrdenDetalle({ ...o, fotos })
+  }
+
+  async function abrirDetalleConRegistroIncidencia(o: any) {
+    await abrirDetalle(o)
+    setMostrarRegistroIncidencia(true)
   }
 
   function abrirFormNuevo() {
@@ -200,7 +300,12 @@ export default function Ordenes() {
     setNombreClienteSeleccionado(nombreComercialCliente(o.clientes) || o.clientes?.nombre || '')
     setBusquedaCliente(nombreComercialCliente(o.clientes) || o.clientes?.nombre || '')
     setResultadosCliente([])
-    setMostrarForm(true); setOrdenDetalle(null)
+    detenerGrabacionActiva()
+    setIncidenciasOrden([])
+    setMostrarRegistroIncidencia(false)
+    resetRegistroIncidencia()
+    setMostrarForm(true)
+    setOrdenDetalle(null)
   }
 
   async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipoFoto: string) {
@@ -241,6 +346,149 @@ export default function Ordenes() {
       }
     } catch { alert('Error inesperado al subir la foto.') }
     setSubiendo(false)
+  }
+
+  async function iniciarGrabacionIncidencia() {
+    if (grabandoIncidencia) return
+    try {
+      const mediaDevices = navigator?.mediaDevices
+      if (!mediaDevices?.getUserMedia) {
+        alert('Tu navegador no permite grabar audio desde este dispositivo.')
+        return
+      }
+
+      detenerGrabacionActiva()
+      const stream = await mediaDevices.getUserMedia({ audio: true })
+      streamIncidenciaRef.current = stream
+      chunksAudioIncidenciaRef.current = []
+
+      const mimePreferidos = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+      const mimeType = mimePreferidos.find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m))
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
+      mediaRecorderRef.current = recorder
+
+      recorder.ondataavailable = (ev: BlobEvent) => {
+        if (ev.data && ev.data.size > 0) chunksAudioIncidenciaRef.current.push(ev.data)
+      }
+
+      recorder.onstop = () => {
+        const tipoFinal = mimeType || recorder.mimeType || 'audio/webm'
+        const blob = new Blob(chunksAudioIncidenciaRef.current, { type: tipoFinal })
+        chunksAudioIncidenciaRef.current = []
+        setAudioIncidenciaBlob(blob)
+        limpiarPreviewAudioIncidencia()
+        setAudioIncidenciaPreviewUrl(URL.createObjectURL(blob))
+        if (streamIncidenciaRef.current) {
+          for (const track of streamIncidenciaRef.current.getTracks()) track.stop()
+          streamIncidenciaRef.current = null
+        }
+        setGrabandoIncidencia(false)
+      }
+
+      recorder.start()
+      setGrabandoIncidencia(true)
+    } catch (error: any) {
+      alert(`No se pudo iniciar la grabacion: ${String(error?.message || 'Error desconocido')}`)
+      detenerGrabacionActiva()
+    }
+  }
+
+  function pararGrabacionIncidencia() {
+    if (!mediaRecorderRef.current) return
+    if (mediaRecorderRef.current.state !== 'recording') return
+    mediaRecorderRef.current.stop()
+  }
+
+  function seleccionarFotoIncidencia(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] || null
+    setFotoIncidenciaFile(file)
+    limpiarPreviewFotoIncidencia()
+    if (file) {
+      setFotoIncidenciaPreviewUrl(URL.createObjectURL(file))
+    }
+  }
+
+  async function guardarIncidenciaOrden() {
+    if (!ordenDetalle?.id) return
+    if (!audioIncidenciaBlob) {
+      alert('Primero debes grabar el audio de la incidencia.')
+      return
+    }
+
+    setGuardandoIncidencia(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const tecnicoId = session?.user?.id || null
+
+      const tipoAudio = String(audioIncidenciaBlob.type || 'audio/webm')
+      const extAudio =
+        tipoAudio.includes('mp4') ? 'm4a' :
+          tipoAudio.includes('ogg') ? 'ogg' :
+            tipoAudio.includes('mpeg') ? 'mp3' : 'webm'
+      const pathAudio = `orden_${ordenDetalle.id}/incidencias/audio_${Date.now()}.${extAudio}`
+      const upAudio = await supabase.storage.from('fotos-ordenes').upload(pathAudio, audioIncidenciaBlob, {
+        contentType: tipoAudio,
+        upsert: false,
+      })
+      if (upAudio.error) throw upAudio.error
+      const audioUrl = supabase.storage.from('fotos-ordenes').getPublicUrl(pathAudio).data.publicUrl
+
+      let fotoUrl: string | null = null
+      if (fotoIncidenciaFile) {
+        const extFoto = (fotoIncidenciaFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+        const pathFoto = `orden_${ordenDetalle.id}/incidencias/foto_${Date.now()}.${extFoto}`
+        const upFoto = await supabase.storage.from('fotos-ordenes').upload(pathFoto, fotoIncidenciaFile, {
+          contentType: fotoIncidenciaFile.type || 'image/jpeg',
+          upsert: false,
+        })
+        if (upFoto.error) throw upFoto.error
+        fotoUrl = supabase.storage.from('fotos-ordenes').getPublicUrl(pathFoto).data.publicUrl
+      }
+
+      const { error: errInsert } = await supabase.from('incidencias_ordenes').insert({
+        orden_id: ordenDetalle.id,
+        tecnico_id: tecnicoId,
+        estado_orden: ordenDetalle.estado || null,
+        descripcion: textoIncidencia.trim() || null,
+        audio_url: audioUrl,
+        foto_url: fotoUrl,
+      })
+      if (errInsert) throw errInsert
+
+      const incidencias = await cargarIncidenciasOrden(ordenDetalle.id)
+      setIncidenciasOrden(incidencias)
+      resetRegistroIncidencia()
+      setMostrarRegistroIncidencia(false)
+      alert('Incidencia registrada correctamente.')
+    } catch (error: any) {
+      alert(`No se pudo guardar la incidencia: ${String(error?.message || 'Error desconocido')}`)
+    } finally {
+      setGuardandoIncidencia(false)
+    }
+  }
+
+  async function eliminarIncidencia(inc: any) {
+    if (!inc?.id) return
+    if (!confirm('Eliminar esta incidencia?')) return
+    setEliminandoIncidenciaId(inc.id)
+    try {
+      const paths: string[] = []
+      const pathAudio = extraerPathStorageDesdePublicUrl(String(inc.audio_url || ''), 'fotos-ordenes')
+      const pathFoto = extraerPathStorageDesdePublicUrl(String(inc.foto_url || ''), 'fotos-ordenes')
+      if (pathAudio) paths.push(pathAudio)
+      if (pathFoto) paths.push(pathFoto)
+      if (paths.length > 0) await supabase.storage.from('fotos-ordenes').remove(paths)
+
+      await supabase.from('incidencias_ordenes').delete().eq('id', inc.id)
+      if (ordenDetalle?.id) {
+        const incidencias = await cargarIncidenciasOrden(ordenDetalle.id)
+        setIncidenciasOrden(incidencias)
+      }
+    } catch (error: any) {
+      alert(`No se pudo eliminar la incidencia: ${String(error?.message || 'Error desconocido')}`)
+    } finally {
+      setEliminandoIncidenciaId(null)
+    }
   }
 
   async function comprimirImagen(file: File, maxWidth = 1200, calidad = 0.75): Promise<Blob> {
@@ -285,11 +533,33 @@ export default function Ordenes() {
       estado,
       descripcion, observaciones, duracion_horas: parseFloat(duracionHoras) || 2, hora_fija: horaFija,
     }
+    let ordenIdGuardada: string | null = editandoId
     if (editandoId) {
-      await supabase.from('ordenes').update(datos).eq('id', editandoId)
+      const payload: any = { ...datos }
+      if (estado !== 'completada') payload.fecha_cierre = null
+      if (estado === 'completada') payload.fecha_cierre = new Date().toISOString()
+      const { error } = await supabase.from('ordenes').update(payload).eq('id', editandoId)
+      if (error) {
+        alert('No se pudo guardar la orden: ' + error.message)
+        return
+      }
     } else {
       const nuevoCodigo = await generarCodigo(tipo)
-      await supabase.from('ordenes').insert({ ...datos, codigo: nuevoCodigo })
+      const payload: any = { ...datos, codigo: nuevoCodigo }
+      if (estado === 'completada') payload.fecha_cierre = new Date().toISOString()
+      const { data: nuevaOrden, error } = await supabase
+        .from('ordenes')
+        .insert(payload)
+        .select('id')
+        .single()
+      if (error) {
+        alert('No se pudo crear la orden: ' + error.message)
+        return
+      }
+      ordenIdGuardada = nuevaOrden?.id || null
+    }
+    if (ordenIdGuardada) {
+      await sincronizarServicioHistorialDesdeOt(ordenIdGuardada, estado)
     }
     setMostrarForm(false); setEditandoId(null)
     setDescripcion(''); setObservaciones(''); setClienteId(''); setTecnicosSeleccionados([])
@@ -312,9 +582,91 @@ export default function Ordenes() {
         return
       }
     }
-    await supabase.from('ordenes').update({ estado: nuevoEstado }).eq('id', id)
+    const payload: any = {
+      estado: nuevoEstado,
+      fecha_cierre: nuevoEstado === 'completada' ? new Date().toISOString() : null,
+    }
+    const { error } = await supabase.from('ordenes').update(payload).eq('id', id)
+    if (error) {
+      alert('No se pudo actualizar el estado: ' + error.message)
+      return
+    }
+    await sincronizarServicioHistorialDesdeOt(id, nuevoEstado)
     cargarDatos()
-    if (ordenDetalle?.id === id) setOrdenDetalle((prev: any) => ({ ...prev, estado: nuevoEstado }))
+    if (ordenDetalle?.id === id) {
+      setOrdenDetalle((prev: any) => ({
+        ...prev,
+        estado: nuevoEstado,
+        fecha_cierre: payload.fecha_cierre,
+      }))
+    }
+  }
+
+  async function sincronizarServicioHistorialDesdeOt(ordenId: string, estadoObjetivo: string) {
+    const numeroDocumento = `OT:${ordenId}`
+
+    if (estadoObjetivo !== 'completada') {
+      const { error } = await supabase
+        .from('servicios_clientes')
+        .delete()
+        .eq('origen', 'ot_completada')
+        .eq('numero_documento', numeroDocumento)
+      if (error && !esTablaServiciosNoDisponible(error)) {
+        console.warn('No se pudo limpiar historial de OT revertida:', error.message)
+      }
+      return
+    }
+
+    const { data: orden, error: errorOrden } = await supabase
+      .from('ordenes')
+      .select('id, codigo, cliente_id, descripcion, fecha_cierre, fecha_programada, created_at')
+      .eq('id', ordenId)
+      .single()
+
+    if (errorOrden || !orden?.cliente_id) return
+
+    const { data: existentes, error: errorExiste } = await supabase
+      .from('servicios_clientes')
+      .select('id')
+      .eq('origen', 'ot_completada')
+      .eq('numero_documento', numeroDocumento)
+      .limit(1)
+
+    if (errorExiste) {
+      if (!esTablaServiciosNoDisponible(errorExiste)) {
+        console.warn('No se pudo verificar historial de servicios:', errorExiste.message)
+      }
+      return
+    }
+    if ((existentes || []).length > 0) return
+
+    const fechaBase = orden.fecha_cierre || orden.fecha_programada || orden.created_at || new Date().toISOString()
+    const fechaObj = new Date(fechaBase)
+    const fechaServicio = Number.isNaN(fechaObj.getTime())
+      ? new Date().toISOString().slice(0, 10)
+      : fechaObj.toISOString().slice(0, 10)
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    const { error: errorInsert } = await supabase.from('servicios_clientes').insert({
+      cliente_id: orden.cliente_id,
+      fecha_servicio: fechaServicio,
+      origen: 'ot_completada',
+      numero_documento: numeroDocumento,
+      descripcion: orden.descripcion || `Servicio OT ${orden.codigo || ordenId}`,
+      importe: null,
+      created_by: session?.user?.id || null,
+      metadata: {
+        orden_id: orden.id,
+        codigo_ot: orden.codigo || null,
+      },
+    })
+
+    if (errorInsert && !esTablaServiciosNoDisponible(errorInsert)) {
+      console.warn('No se pudo registrar servicio desde OT completada:', errorInsert.message)
+    }
   }
 
   function pedirEliminarOrden(o: any) {
@@ -343,11 +695,34 @@ export default function Ordenes() {
       }
       await supabase.from('fotos_ordenes').delete().eq('orden_id', id)
     }
+    const { data: incidencias } = await supabase.from('incidencias_ordenes').select('*').eq('orden_id', id)
+    if (incidencias && incidencias.length > 0) {
+      const paths: string[] = []
+      for (const inc of incidencias) {
+        const pathAudio = extraerPathStorageDesdePublicUrl(String(inc.audio_url || ''), 'fotos-ordenes')
+        const pathFoto = extraerPathStorageDesdePublicUrl(String(inc.foto_url || ''), 'fotos-ordenes')
+        if (pathAudio) paths.push(pathAudio)
+        if (pathFoto) paths.push(pathFoto)
+      }
+      if (paths.length > 0) await supabase.storage.from('fotos-ordenes').remove(paths)
+      await supabase.from('incidencias_ordenes').delete().eq('orden_id', id)
+    }
     await supabase.from('albaranes').delete().eq('orden_id', id)
+    const { error: errorHistorialOt } = await supabase
+      .from('servicios_clientes')
+      .delete()
+      .eq('origen', 'ot_completada')
+      .eq('numero_documento', `OT:${id}`)
+    if (errorHistorialOt && !esTablaServiciosNoDisponible(errorHistorialOt)) {
+      console.warn('No se pudo limpiar historial de servicio al borrar OT:', errorHistorialOt.message)
+    }
     await supabase.from('ordenes').delete().eq('id', id)
     setMostrarModalEliminar(false)
     setOrdenAEliminar(null)
     setOrdenDetalle(null)
+    setIncidenciasOrden([])
+    setMostrarRegistroIncidencia(false)
+    resetRegistroIncidencia()
     cargarDatos()
   }
 
@@ -557,11 +932,11 @@ export default function Ordenes() {
 
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
+          <Link href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
             onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
             Dashboard
-          </a>
+          </Link>
           <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Ordenes de trabajo</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -789,7 +1164,7 @@ export default function Ordenes() {
                     <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{getTextoClienteSecundario(ordenDetalle.clientes)}</p>
                   )}
                 </div>
-                <button onClick={() => setOrdenDetalle(null)} className="w-8 h-8 rounded-lg flex items-center justify-center"
+                <button onClick={cerrarDetalleOrden} className="w-8 h-8 rounded-lg flex items-center justify-center"
                   style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
               </div>
               <div className="p-6 pb-16">
@@ -864,6 +1239,7 @@ export default function Ordenes() {
                             {fotosDelTipo.map((f: any) => (
                               <div key={f.id} className="relative">
                                 <a href={f.url} target="_blank" rel="noreferrer">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={f.url} alt="foto" className="w-full h-24 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
                                 </a>
                                 <button onClick={() => eliminarFoto(f)}
@@ -880,6 +1256,131 @@ export default function Ordenes() {
                       </div>
                     )
                   })}
+                </div>
+
+                <div className="mb-4 rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Incidencias</h3>
+                    <button
+                      onClick={() => setMostrarRegistroIncidencia((prev) => !prev)}
+                      className="text-xs px-3 py-1.5 rounded-lg"
+                      style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+                    >
+                      Registrar incidencia
+                    </button>
+                  </div>
+
+                  {mostrarRegistroIncidencia && (
+                    <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
+                        Graba audio de la incidencia y, si quieres, adjunta una foto.
+                      </p>
+                      <div className="flex gap-2 flex-wrap mb-2">
+                        {!grabandoIncidencia ? (
+                          <button
+                            onClick={() => void iniciarGrabacionIncidencia()}
+                            className="text-xs px-3 py-1.5 rounded-lg"
+                            style={{ background: 'rgba(234,179,8,0.15)', color: '#fbbf24', border: '1px solid rgba(234,179,8,0.3)' }}
+                          >
+                            Iniciar grabacion
+                          </button>
+                        ) : (
+                          <button
+                            onClick={pararGrabacionIncidencia}
+                            className="text-xs px-3 py-1.5 rounded-lg"
+                            style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                          >
+                            Detener grabacion
+                          </button>
+                        )}
+                        <label className="text-xs px-3 py-1.5 rounded-lg cursor-pointer" style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
+                          Subir foto
+                          <input type="file" accept="image/*" className="hidden" onChange={seleccionarFotoIncidencia} />
+                        </label>
+                        <button
+                          onClick={resetRegistroIncidencia}
+                          className="text-xs px-3 py-1.5 rounded-lg"
+                          style={s.btnSecondary}
+                        >
+                          Limpiar
+                        </button>
+                      </div>
+
+                      {audioIncidenciaPreviewUrl && (
+                        <div className="mb-2">
+                          <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Audio grabado</p>
+                          <audio controls src={audioIncidenciaPreviewUrl} className="w-full" />
+                        </div>
+                      )}
+
+                      {fotoIncidenciaPreviewUrl && (
+                        <div className="mb-2">
+                          <p className="text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Foto adjunta</p>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={fotoIncidenciaPreviewUrl} alt="preview incidencia" className="w-32 h-24 object-cover rounded-lg" style={{ border: '1px solid var(--border)' }} />
+                        </div>
+                      )}
+
+                      <textarea
+                        value={textoIncidencia}
+                        onChange={(e) => setTextoIncidencia(e.target.value)}
+                        rows={2}
+                        className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none mb-2"
+                        style={s.inputStyle}
+                        placeholder="Detalle breve de la incidencia (opcional)..."
+                      />
+
+                      <button
+                        onClick={() => void guardarIncidenciaOrden()}
+                        disabled={guardandoIncidencia}
+                        className="text-sm px-4 py-2 rounded-xl font-medium disabled:opacity-50"
+                        style={s.btnPrimary}
+                      >
+                        {guardandoIncidencia ? 'Guardando incidencia...' : 'Guardar incidencia'}
+                      </button>
+                    </div>
+                  )}
+
+                  {incidenciasOrden.length === 0 ? (
+                    <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Sin incidencias registradas.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {incidenciasOrden.map((inc: any) => (
+                        <div key={inc.id} className="rounded-xl p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                          <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                              {new Date(inc.created_at).toLocaleString('es-ES')} - {inc.perfiles?.nombre || 'Tecnico'}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              {inc.estado_orden && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: ESTADO_COLORS[inc.estado_orden]?.bg || 'rgba(100,116,139,0.2)', color: ESTADO_COLORS[inc.estado_orden]?.color || 'var(--text-muted)' }}>
+                                  {String(inc.estado_orden).replace('_', ' ')}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => void eliminarIncidencia(inc)}
+                                disabled={eliminandoIncidenciaId === inc.id}
+                                className="text-[11px] px-2 py-1 rounded-lg disabled:opacity-60"
+                                style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                              >
+                                {eliminandoIncidenciaId === inc.id ? 'Eliminando...' : 'Eliminar'}
+                              </button>
+                            </div>
+                          </div>
+                          <audio controls src={inc.audio_url} className="w-full mb-2" />
+                          {inc.foto_url && (
+                            <a href={inc.foto_url} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={inc.foto_url} alt="foto incidencia" className="w-32 h-24 object-cover rounded-lg mb-2" style={{ border: '1px solid var(--border)' }} />
+                            </a>
+                          )}
+                          {inc.descripcion && (
+                            <p className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>{inc.descripcion}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3 flex-wrap pt-4" style={{ borderTop: '1px solid var(--border)' }}>
@@ -904,17 +1405,24 @@ export default function Ordenes() {
                       Volver a pendiente
                     </button>
                   )}
+                  <button
+                    onClick={() => setMostrarRegistroIncidencia((prev) => !prev)}
+                    className="text-sm px-4 py-2 rounded-xl"
+                    style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+                  >
+                    Registrar incidencia
+                  </button>
                   <button onClick={() => abrirFormEditar(ordenDetalle)}
                     className="text-sm px-4 py-2 rounded-xl"
                     style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
                     Editar OT
                   </button>
-                  <button onClick={() => { setOrdenDetalle(null); setTimeout(() => pedirEliminarOrden(ordenAEliminar || ordenDetalle), 100) }}
+                  <button onClick={() => { cerrarDetalleOrden(); setTimeout(() => pedirEliminarOrden(ordenAEliminar || ordenDetalle), 100) }}
                     className="text-sm px-4 py-2 rounded-xl"
                     style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
                     Eliminar
                   </button>
-                  <button onClick={() => setOrdenDetalle(null)}
+                  <button onClick={cerrarDetalleOrden}
                     className="text-sm px-4 py-2 rounded-xl ml-auto" style={s.btnSecondary}>
                     Cerrar
                   </button>
@@ -966,6 +1474,15 @@ export default function Ordenes() {
                       <span>Vehiculo: {getNombreVehiculo(o.vehiculo_id)}</span>
                       <span>Duracion: {o.duracion_horas || 2}h</span>
                       <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '-'}</span>
+                    </div>
+                    <div className="mt-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); void abrirDetalleConRegistroIncidencia(o) }}
+                        className="text-xs px-3 py-1.5 rounded-lg"
+                        style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+                      >
+                        Registrar incidencia
+                      </button>
                     </div>
                   </div>
                   <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>Ver detalle {'>'}</span>

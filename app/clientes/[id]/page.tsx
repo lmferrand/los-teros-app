@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { s } from '@/lib/styles'
-import { eliminarArchivosFotosOrden, eliminarOrdenConIntegridad } from '@/lib/ordenes-integridad'
 import AppHeader from '@/app/components/AppHeader'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
 
@@ -17,17 +16,20 @@ function nombreFiscalCliente(c: any) {
   return String(c?.nombre_fiscal || '').trim()
 }
 
+function etiquetaOrigenServicio(origen: string | null | undefined) {
+  const v = String(origen || '').trim().toLowerCase()
+  if (v === 'ot_completada') return 'OT completada'
+  if (v === 'factura_importada') return 'Factura importada'
+  if (!v) return 'Historial'
+  return v.replaceAll('_', ' ')
+}
+
 export default function ClienteDetalle() {
   const [cliente, setCliente] = useState<any>(null)
-  const [ordenes, setOrdenes] = useState<any[]>([])
-  const [fotosPorOrden, setFotosPorOrden] = useState<Record<string, any[]>>({})
+  const [serviciosImportados, setServiciosImportados] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [ordenAbierta, setOrdenAbierta] = useState<string | null>(null)
   const [localesMismoCif, setLocalesMismoCif] = useState<any[]>([])
   const [perfil, setPerfil] = useState<any>(null)
-  const [mostrarModalBorrar, setMostrarModalBorrar] = useState(false)
-  const [ordenABorrar, setOrdenABorrar] = useState<any>(null)
-  const [eliminando, setEliminando] = useState(false)
   const [editandoCliente, setEditandoCliente] = useState(false)
   const [guardandoCliente, setGuardandoCliente] = useState(false)
   const [clienteForm, setClienteForm] = useState<any>({
@@ -72,9 +74,13 @@ export default function ClienteDetalle() {
   }
 
   async function cargarDatos() {
-    const [cli, ords] = await Promise.all([
+    const [cli, serviciosRes] = await Promise.all([
       supabase.from('clientes').select('*').eq('id', id).single(),
-      supabase.from('ordenes').select('*').eq('cliente_id', id).order('fecha_programada', { ascending: false }),
+      supabase
+        .from('servicios_clientes')
+        .select('*')
+        .eq('cliente_id', id)
+        .order('fecha_servicio', { ascending: false }),
     ])
 
     if (cli.data) {
@@ -105,36 +111,21 @@ export default function ClienteDetalle() {
         setLocalesMismoCif([])
       }
     }
-    if (ords.data) {
-      setOrdenes(ords.data)
-      const ordenIds = ords.data.map((o: any) => o.id)
-      if (ordenIds.length > 0) {
-        const { data: fotos } = await supabase.from('fotos_ordenes').select('*').in('orden_id', ordenIds)
-        const mapa: Record<string, any[]> = {}
-        for (const ot of ords.data) mapa[ot.id] = (fotos || []).filter((f: any) => f.orden_id === ot.id)
-        setFotosPorOrden(mapa)
-      } else {
-        setFotosPorOrden({})
+
+    if (serviciosRes.error) {
+      const txt = String(serviciosRes.error.message || '').toLowerCase()
+      if (txt.includes('servicios_clientes') && (txt.includes('does not exist') || txt.includes('relation'))) {
+        setServiciosImportados([])
       }
+    } else {
+      setServiciosImportados(serviciosRes.data || [])
     }
 
     setLoading(false)
   }
 
-  function toggleOrden(ordenId: string) {
-    setOrdenAbierta((prev) => (prev === ordenId ? null : ordenId))
-  }
-
   function puedeEliminarServicios() {
     return perfil?.rol === 'gerente' || perfil?.rol === 'oficina' || perfil?.rol === 'supervisor'
-  }
-
-  function getMensajeError(error: unknown) {
-    if (error && typeof error === 'object' && 'message' in error) {
-      const msg = String((error as { message?: string }).message || '').trim()
-      if (msg) return msg
-    }
-    return 'Error desconocido'
   }
 
   function normalizarCliente(input: any) {
@@ -173,48 +164,19 @@ export default function ClienteDetalle() {
     await cargarDatos()
   }
 
-  async function eliminarServicio(orden: any) {
+  async function eliminarServicioImportado(idServicio: string) {
     if (!puedeEliminarServicios()) {
-      alert('No tienes permiso para eliminar servicios.')
+      alert('No tienes permiso para eliminar servicios importados.')
       return
     }
+    if (!confirm('¿Eliminar este servicio importado?')) return
 
-    setEliminando(true)
-    try {
-      await eliminarArchivosFotosOrden(orden.id)
-      await eliminarOrdenConIntegridad(orden.id)
-      setMostrarModalBorrar(false)
-      setOrdenABorrar(null)
-      await cargarDatos()
-    } catch (error) {
-      alert(`No se pudo eliminar el servicio: ${getMensajeError(error)}`)
-    } finally {
-      setEliminando(false)
+    const { error } = await supabase.from('servicios_clientes').delete().eq('id', idServicio)
+    if (error) {
+      alert('No se pudo eliminar el servicio importado: ' + error.message)
+      return
     }
-  }
-
-  const TIPOS_FOTO: any = {
-    proceso: { label: 'Fotos del proceso', icono: 'P', color: '#06b6d4' },
-    cierre: { label: 'Fotos de cierre', icono: 'C', color: '#34d399' },
-    albaran: { label: 'Albaran', icono: 'A', color: '#a78bfa' },
-    equipo_salida: { label: 'Equipo al salir', icono: 'S', color: '#fbbf24' },
-    equipo_retorno: { label: 'Equipo al retornar', icono: 'R', color: '#fb923c' },
-  }
-
-  const TIPO_OT: any = {
-    limpieza: { color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
-    sustitucion: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)' },
-    mantenimiento: { color: '#34d399', bg: 'rgba(16,185,129,0.15)' },
-    instalacion: { color: '#a78bfa', bg: 'rgba(124,58,237,0.15)' },
-    revision: { color: '#fb923c', bg: 'rgba(249,115,22,0.15)' },
-    otro: { color: '#64748b', bg: 'rgba(71,85,105,0.15)' },
-  }
-
-  const ESTADO_OT: any = {
-    pendiente: { color: '#a78bfa', bg: 'rgba(124,58,237,0.15)', label: 'Pendiente' },
-    en_curso: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)', label: 'En curso' },
-    completada: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Completada' },
-    cancelada: { color: '#64748b', bg: 'rgba(71,85,105,0.15)', label: 'Cancelada' },
+    setServiciosImportados((prev) => prev.filter((s) => s.id !== idServicio))
   }
 
   if (loading) {
@@ -235,40 +197,6 @@ export default function ClienteDetalle() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      {mostrarModalBorrar && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.85)' }}>
-          <div className="w-full max-w-sm rounded-2xl p-6" style={s.cardStyle}>
-            <p className="text-xl mb-2">X</p>
-            <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>
-              Eliminar servicio {ordenABorrar?.codigo}
-            </p>
-            <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
-              Se eliminaran fotos, albaranes y movimientos vinculados. El stock de inventario se restaurara. Esta accion no se puede deshacer.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => eliminarServicio(ordenABorrar)}
-                disabled={eliminando}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold"
-                style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
-              >
-                {eliminando ? 'Eliminando...' : 'Eliminar'}
-              </button>
-              <button
-                onClick={() => {
-                  setMostrarModalBorrar(false)
-                  setOrdenABorrar(null)
-                }}
-                className="flex-1 py-3 rounded-xl text-sm font-semibold"
-                style={s.btnSecondary}
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <AppHeader
         title={nombreComercialCliente(cliente) || cliente.nombre}
         leftSlot={
@@ -409,10 +337,10 @@ export default function ClienteDetalle() {
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold" style={{ color: '#7c3aed' }}>
-                {ordenes.filter((o) => o.estado === 'completada').length}
+                {serviciosImportados.length}
               </p>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                servicios completados
+                servicios en historial
               </p>
               {!editandoCliente && (
                 <button
@@ -462,114 +390,48 @@ export default function ClienteDetalle() {
           Historial de servicios
         </h2>
 
-        {ordenes.length === 0 ? (
-          <div className="text-center py-16 rounded-2xl" style={s.cardStyle}>
-            <p style={{ color: 'var(--text-muted)' }}>No hay servicios para este cliente.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {ordenes.map((o) => {
-              const fotos = fotosPorOrden[o.id] || []
-              const abierta = ordenAbierta === o.id
-              return (
-                <div key={o.id} className="rounded-2xl overflow-hidden transition-all" style={s.cardStyle}>
-                  <div className="w-full px-5 py-4 flex items-center justify-between">
-                    <button className="flex items-center gap-3 flex-wrap flex-1 text-left" onClick={() => toggleOrden(o.id)}>
-                      <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>
-                        {o.codigo}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full capitalize" style={{ background: TIPO_OT[o.tipo]?.bg, color: TIPO_OT[o.tipo]?.color }}>
-                        {o.tipo}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ESTADO_OT[o.estado]?.bg, color: ESTADO_OT[o.estado]?.color }}>
-                        {ESTADO_OT[o.estado]?.label}
-                      </span>
-                      <span className="text-sm" style={{ color: 'var(--text)' }}>
-                        {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}
-                      </span>
-                      {fotos.length > 0 && (
-                        <span className="text-xs" style={{ color: 'var(--text-subtle)' }}>
-                          {fotos.length} fotos
-                        </span>
-                      )}
-                    </button>
-                    <div className="flex items-center gap-2 ml-2">
-                      {puedeEliminarServicios() && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setOrdenABorrar(o)
-                            setMostrarModalBorrar(true)
-                          }}
-                          className="text-xs px-2 py-1 rounded-lg"
-                          style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
-                        >
-                          Eliminar
-                        </button>
-                      )}
-                      <span className="text-lg" style={{ color: 'var(--text-muted)', display: 'inline-block', transition: 'transform 0.2s', transform: abierta ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                        v
-                      </span>
-                    </div>
+        <div className="rounded-2xl p-4 mb-6" style={s.cardStyle}>
+          <p className="text-xs uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
+            Servicios registrados (historial)
+          </p>
+          {serviciosImportados.length === 0 ? (
+            <p className="text-sm" style={{ color: 'var(--text-subtle)' }}>
+              No hay servicios registrados para este cliente.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {serviciosImportados.map((srv: any) => (
+                <div
+                  key={srv.id}
+                  className="rounded-xl px-3 py-2 flex items-center justify-between gap-3 flex-wrap"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
+                >
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                      {srv.descripcion || 'Servicio registrado'}
+                    </p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {etiquetaOrigenServicio(srv.origen)}
+                      {' - '}
+                      {srv.fecha_servicio ? new Date(`${srv.fecha_servicio}T12:00:00`).toLocaleDateString('es-ES') : '-'}
+                      {srv.numero_documento ? ` - Doc: ${srv.numero_documento}` : ''}
+                      {typeof srv.importe === 'number' ? ` - Importe: ${srv.importe.toFixed(2)} EUR` : ''}
+                    </p>
                   </div>
-
-                  {abierta && (
-                    <div className="px-5 pb-5" style={{ borderTop: '1px solid var(--border)' }}>
-                      {o.descripcion && (
-                        <div className="rounded-xl p-3 mt-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                          <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
-                            Trabajo realizado
-                          </p>
-                          <p className="text-sm" style={{ color: 'var(--text)' }}>
-                            {o.descripcion}
-                          </p>
-                        </div>
-                      )}
-
-                      {o.observaciones && (
-                        <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                          <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
-                            Observaciones
-                          </p>
-                          <p className="text-sm" style={{ color: 'var(--text)' }}>
-                            {o.observaciones}
-                          </p>
-                        </div>
-                      )}
-
-                      {fotos.length === 0 ? (
-                        <p className="text-sm mt-4" style={{ color: 'var(--text-subtle)' }}>
-                          Sin fotos registradas.
-                        </p>
-                      ) : (
-                        <div className="mt-4 flex flex-col gap-5">
-                          {Object.entries(TIPOS_FOTO).map(([key, info]: any) => {
-                            const fotosTipo = fotos.filter((f: any) => f.tipo === key)
-                            if (fotosTipo.length === 0) return null
-                            return (
-                              <div key={key}>
-                                <p className="text-xs uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: info.color }}>
-                                  <span>{info.icono}</span> {info.label}
-                                </p>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                  {fotosTipo.map((f: any) => (
-                                    <a key={f.id} href={f.url} target="_blank" rel="noreferrer">
-                                      <img src={f.url} alt={key} className="w-full h-28 object-cover rounded-xl hover:opacity-80" style={{ border: '1px solid var(--border)' }} />
-                                    </a>
-                                  ))}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+                  {puedeEliminarServicios() && (
+                    <button
+                      onClick={() => void eliminarServicioImportado(srv.id)}
+                      className="text-xs px-2 py-1 rounded-lg"
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
+                    >
+                      Eliminar
+                    </button>
                   )}
                 </div>
-              )
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

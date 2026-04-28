@@ -234,6 +234,7 @@ facturado: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Facturado' }
                     <div className="grid grid-cols-3 gap-2">
                       {(albDetalle.fotos_urls || []).map((url: string, i: number) => (
                         <a key={i} href={url} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={url} alt={`foto ${i + 1}`} className="w-full h-28 object-cover rounded-xl" style={{ border: '1px solid var(--border)' }} />
                         </a>
                       ))}

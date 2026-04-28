@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import * as XLSX from 'xlsx'
 import { s } from '@/lib/styles'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
@@ -93,7 +94,6 @@ function puntuarClienteBusqueda(cliente: any, busqueda: string) {
 export default function Clientes() {
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [sesionOK, setSesionOK] = useState(false)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [importando, setImportando] = useState(false)
@@ -104,14 +104,12 @@ export default function Clientes() {
   const [totalClientes, setTotalClientes] = useState(0)
   const [seleccionados, setSeleccionados] = useState<string[]>([])
   const [borrandoMasivo, setBorrandoMasivo] = useState(false)
-  const [estandarizando, setEstandarizando] = useState(false)
   const [agruparPorCif, setAgruparPorCif] = useState(false)
   const [busquedaInteligente, setBusquedaInteligente] = useState(true)
   const [mostrarBarraLateralFija, setMostrarBarraLateralFija] = useState(false)
   const [anchoScrollTabla, setAnchoScrollTabla] = useState(0)
   const POR_PAGINA = 50
   const fileRef = useRef<HTMLInputElement>(null)
-  const autoEstandarizadoRef = useRef(false)
   const tablaScrollRef = useRef<HTMLDivElement | null>(null)
   const barraFijaScrollRef = useRef<HTMLDivElement | null>(null)
   const syncDesdeTablaRef = useRef(false)
@@ -147,84 +145,16 @@ export default function Clientes() {
     }
   }
 
-  useEffect(() => { verificarSesion() }, [])
-  useEffect(() => { cargarClientes() }, [pagina, busqueda, filtroEmpresa, agruparPorCif])
-  useEffect(() => {
-    if (!sesionOK || autoEstandarizadoRef.current) return
-    autoEstandarizadoRef.current = true
-    void estandarizarNombresClientes({ forzarTodos: true })
-  }, [sesionOK])
-  useEffect(() => {
-    if (agruparPorCif || loading) {
-      setMostrarBarraLateralFija(false)
-      return
-    }
-
-    const contenedor = tablaScrollRef.current
-    if (!contenedor) {
-      setMostrarBarraLateralFija(false)
-      return
-    }
-
-    const actualizar = () => {
-      const necesita = contenedor.scrollWidth > contenedor.clientWidth + 1
-      setMostrarBarraLateralFija(necesita)
-      setAnchoScrollTabla(contenedor.scrollWidth)
-      if (!syncDesdeBarraRef.current) {
-        const barra = barraFijaScrollRef.current
-        if (barra) barra.scrollLeft = contenedor.scrollLeft
-      }
-    }
-
-    const onScrollTabla = () => {
-      if (syncDesdeBarraRef.current) return
-      syncDesdeTablaRef.current = true
-      const barra = barraFijaScrollRef.current
-      if (barra) barra.scrollLeft = contenedor.scrollLeft
-      requestAnimationFrame(() => { syncDesdeTablaRef.current = false })
-    }
-
-    const onScrollBarra = () => {
-      if (syncDesdeTablaRef.current) return
-      syncDesdeBarraRef.current = true
-      contenedor.scrollLeft = barraFijaScrollRef.current?.scrollLeft || 0
-      requestAnimationFrame(() => { syncDesdeBarraRef.current = false })
-    }
-
-    actualizar()
-    contenedor.addEventListener('scroll', onScrollTabla, { passive: true })
-    barraFijaScrollRef.current?.addEventListener('scroll', onScrollBarra, { passive: true })
-    window.addEventListener('resize', actualizar)
-    const ro = new ResizeObserver(actualizar)
-    ro.observe(contenedor)
-
-    return () => {
-      contenedor.removeEventListener('scroll', onScrollTabla)
-      barraFijaScrollRef.current?.removeEventListener('scroll', onScrollBarra)
-      window.removeEventListener('resize', actualizar)
-      ro.disconnect()
-    }
-  }, [agruparPorCif, loading, clientes.length, mostrarBarraLateralFija])
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const empresaUrl = String(new URLSearchParams(window.location.search).get('empresa') || '').toLowerCase()
-    if (empresaUrl === 'teros' || empresaUrl === 'olipro') {
-      setFiltroEmpresa(empresaUrl)
-      setPagina(0)
-    }
-  }, [])
-
-  async function verificarSesion() {
+  const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
     const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
     if (data?.rol !== 'gerente' && data?.rol !== 'oficina') {
       router.push('/dashboard'); return
     }
-    setSesionOK(true)
-  }
+  }, [router])
 
-  async function cargarClientes() {
+  const cargarClientes = useCallback(async () => {
     setLoading(true)
     const termino = busqueda.trim()
     const construirQueryBase = (aplicarBusquedaBd: boolean) => {
@@ -319,7 +249,71 @@ export default function Clientes() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [agruparPorCif, busqueda, busquedaInteligente, filtroEmpresa, pagina])
+
+  useEffect(() => { void verificarSesion() }, [verificarSesion])
+  useEffect(() => { void cargarClientes() }, [cargarClientes])
+  useEffect(() => {
+    if (agruparPorCif || loading) {
+      setMostrarBarraLateralFija(false)
+      return
+    }
+
+    const contenedor = tablaScrollRef.current
+    if (!contenedor) {
+      setMostrarBarraLateralFija(false)
+      return
+    }
+
+    const actualizar = () => {
+      const necesita = contenedor.scrollWidth > contenedor.clientWidth + 1
+      setMostrarBarraLateralFija(necesita)
+      setAnchoScrollTabla(contenedor.scrollWidth)
+      if (!syncDesdeBarraRef.current) {
+        const barra = barraFijaScrollRef.current
+        if (barra) barra.scrollLeft = contenedor.scrollLeft
+      }
+    }
+
+    const onScrollTabla = () => {
+      if (syncDesdeBarraRef.current) return
+      syncDesdeTablaRef.current = true
+      const barra = barraFijaScrollRef.current
+      if (barra) barra.scrollLeft = contenedor.scrollLeft
+      requestAnimationFrame(() => { syncDesdeTablaRef.current = false })
+    }
+
+    const onScrollBarra = () => {
+      if (syncDesdeTablaRef.current) return
+      syncDesdeBarraRef.current = true
+      contenedor.scrollLeft = barraFijaScrollRef.current?.scrollLeft || 0
+      requestAnimationFrame(() => { syncDesdeBarraRef.current = false })
+    }
+
+    const barra = barraFijaScrollRef.current
+
+    actualizar()
+    contenedor.addEventListener('scroll', onScrollTabla, { passive: true })
+    barra?.addEventListener('scroll', onScrollBarra, { passive: true })
+    window.addEventListener('resize', actualizar)
+    const ro = new ResizeObserver(actualizar)
+    ro.observe(contenedor)
+
+    return () => {
+      contenedor.removeEventListener('scroll', onScrollTabla)
+      barra?.removeEventListener('scroll', onScrollBarra)
+      window.removeEventListener('resize', actualizar)
+      ro.disconnect()
+    }
+  }, [agruparPorCif, loading, clientes.length, mostrarBarraLateralFija])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const empresaUrl = String(new URLSearchParams(window.location.search).get('empresa') || '').toLowerCase()
+    if (empresaUrl === 'teros' || empresaUrl === 'olipro') {
+      setFiltroEmpresa(empresaUrl)
+      setPagina(0)
+    }
+  }, [])
 
   function abrirFormNuevo() {
     setEditandoId(null)
@@ -473,78 +467,6 @@ export default function Clientes() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  async function estandarizarNombresClientes(opts?: { forzarTodos?: boolean; silencioso?: boolean }) {
-    const filtroObjetivo = opts?.forzarTodos ? 'todos' : filtroEmpresa
-    if (!opts?.silencioso && !opts?.forzarTodos) {
-      if (!confirm('Estandarizar nombres de clientes (comercial y fiscal) segun el filtro actual?')) return
-    }
-    setEstandarizando(true)
-    try {
-      const LOTE_LECTURA = 500
-      const filas: any[] = []
-      let paginaLectura = 0
-
-      while (true) {
-        let q = (supabase.from('clientes') as any)
-          .select('id, nombre, nombre_fiscal, cif, direccion, poblacion, telefono, movil, email, notas, empresa')
-          .order('id')
-          .range(paginaLectura * LOTE_LECTURA, (paginaLectura + 1) * LOTE_LECTURA - 1)
-
-        if (filtroObjetivo !== 'todos') q = q.eq('empresa', filtroObjetivo)
-
-        const { data, error } = await q
-        if (error) throw new Error(error.message)
-        if (!data || data.length === 0) break
-
-        filas.push(...data)
-        if (data.length < LOTE_LECTURA) break
-        paginaLectura++
-      }
-
-      let cambiados = 0
-      let sinCambios = 0
-      let fallidos = 0
-      let primerError = ''
-
-      for (const c of filas) {
-        const nombreNormalizado = estandarizarNombreComercial(c.nombre || '')
-        const fiscalOriginal = String(c.nombre_fiscal || '').trim()
-        const fiscalBase = fiscalOriginal || c.nombre || ''
-        const fiscalNormalizado = estandarizarNombreFiscal(fiscalBase)
-        const cambios: any = {}
-
-        if ((c.nombre || '') !== nombreNormalizado) cambios.nombre = nombreNormalizado
-        if (fiscalOriginal && fiscalOriginal !== fiscalNormalizado) cambios.nombre_fiscal = fiscalNormalizado
-
-        if (Object.keys(cambios).length === 0) {
-          sinCambios++
-          continue
-        }
-
-        const { error: errUpdate } = await (supabase.from('clientes') as any).update(cambios).eq('id', c.id)
-        if (errUpdate) {
-          fallidos++
-          if (!primerError) primerError = errUpdate.message || 'Error desconocido'
-          continue
-        }
-        cambiados++
-      }
-
-      await cargarClientes()
-      if (fallidos > 0) {
-        alert(`Estandarizacion completada con incidencias.\nActualizados: ${cambiados}\nSin cambios: ${sinCambios}\nFallidos: ${fallidos}\nPrimer error: ${primerError}`)
-      } else {
-        if (!opts?.silencioso || cambiados > 0) {
-          alert(`Estandarizacion completada.\nActualizados: ${cambiados}\nSin cambios: ${sinCambios}`)
-        }
-      }
-    } catch (error: any) {
-      alert('No se pudo completar la estandarizacion: ' + String(error?.message || 'Error desconocido'))
-    } finally {
-      setEstandarizando(false)
-    }
-  }
-
   function exportarExcel() {
     const datos = clientes.map(c => ({
       'Nombre Comercial': c.nombre || '',
@@ -603,9 +525,9 @@ export default function Clientes() {
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
         <div className="flex items-center gap-4">
-          <a href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
+          <Link href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
             onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</a>
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</Link>
           <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Clientes</h1>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -615,9 +537,6 @@ export default function Clientes() {
           <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nuevo cliente
           </button>
-          {estandarizando && (
-            <span className="text-xs" style={{ color: '#06b6d4' }}>Estandarizando clientes...</span>
-          )}
         </div>
       </div>
 
@@ -833,7 +752,7 @@ export default function Clientes() {
                             {grupo.locales.map((c: any) => (
                               <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                 <td className="px-3 py-2">
-                                  <a href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</a>
+                                  <Link href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</Link>
                                 </td>
                                 <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{c.nombre_fiscal || '—'}</td>
                                 <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{c.cif || '—'}</td>
@@ -909,7 +828,7 @@ export default function Clientes() {
                             onChange={() => toggleSeleccion(c.id)} className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
                         </td>
                         <td className="px-4 py-3">
-                          <a href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</a>
+                          <Link href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</Link>
                         </td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{c.nombre_fiscal || '—'}</td>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>{c.cif || '—'}</td>

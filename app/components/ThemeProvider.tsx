@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 
@@ -76,13 +77,13 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
                     filter: 'blur(7px)',
                   }}
                 />
-                <img
-                  src="/assistant-ia-teros-clean.png?v=20260428"
+                <Image
+                  src="/assistant-ia-teros-clean.png"
                   alt="Asistente IA Los Teros"
+                  width={60}
+                  height={60}
                   className="pointer-events-none select-none relative"
                   style={{
-                    width: '60px',
-                    height: '60px',
                     objectFit: 'cover',
                     objectPosition: 'center',
                     backgroundColor: 'transparent',

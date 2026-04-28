@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { ReactNode } from 'react'
 import { useTheme } from '@/lib/useTheme'
 import { s } from '@/lib/styles'
@@ -24,7 +25,7 @@ export default function AppHeader({ title, leftSlot, rightSlot }: AppHeaderProps
           title="Ir al inicio"
           aria-label="Ir al inicio"
         >
-          <img src="/logo.png" alt="Los Teros S.L" className="h-10 w-auto object-contain" />
+          <Image src="/logo.png" alt="Los Teros S.L" width={40} height={40} className="h-10 w-auto object-contain" />
           <span className="font-semibold">Inicio</span>
         </Link>
         {leftSlot}
