@@ -451,7 +451,7 @@ export default function Dashboard() {
     // Garantiza cambio diario automatico.
     programarSiguienteRefrescoDiario()
     // Mantiene el dashboard al dia con cambios de OT en jornada.
-    intervaloRefresco = window.setInterval(refrescarSiVisible, 15 * 60 * 1000)
+    intervaloRefresco = setInterval(refrescarSiVisible, 15 * 60 * 1000)
     document.addEventListener('visibilitychange', refrescarSiVisible)
 
     return () => {
