@@ -436,7 +436,7 @@ export default function Dashboard() {
       siguienteMedianoche.setHours(24, 0, 5, 0)
       const ms = Math.max(1000, siguienteMedianoche.getTime() - ahora.getTime())
 
-      timeoutMedianoche = window.setTimeout(() => {
+      timeoutMedianoche = setTimeout(() => {
         void cargarDatos()
         programarSiguienteRefrescoDiario()
       }, ms)
