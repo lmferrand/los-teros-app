@@ -28,6 +28,13 @@ export default function Planificacion() {
   const [fechaMapa, setFechaMapa] = useState(new Date().toISOString().slice(0, 10))
   const [rutaMapaId, setRutaMapaId] = useState('general')
   const [mensajeCompartirRuta, setMensajeCompartirRuta] = useState('')
+  const [sugiriendoPlan, setSugiriendoPlan] = useState(false)
+  const [aplicandoSugerencia, setAplicandoSugerencia] = useState(false)
+  const [sugerenciaPlan, setSugerenciaPlan] = useState<any>(null)
+  const [sugerenciaPlanId, setSugerenciaPlanId] = useState('')
+  const [errorSugerenciaPlan, setErrorSugerenciaPlan] = useState('')
+  const [mensajeSugerenciaPlan, setMensajeSugerenciaPlan] = useState('')
+  const [cambiosSeleccionadosSugerencia, setCambiosSeleccionadosSugerencia] = useState<number[]>([])
   const router = useRouter()
 
   const [presClienteId, setPresClienteId] = useState('')
@@ -182,7 +189,10 @@ export default function Planificacion() {
 
   function crearMapaEmbedUrl(direcciones: string[]) {
     if (direcciones.length === 0) return null
-    const paradas = direcciones.slice(0, 8)
+    const paradas = direcciones
+      .map((d) => String(d || '').trim())
+      .filter(Boolean)
+      .slice(0, 23)
     if (paradas.length === 1) return `https://maps.google.com/maps?q=${encodeURIComponent(paradas[0])}&output=embed`
     const daddr = encodeURIComponent(paradas.join(' to '))
     return `https://maps.google.com/maps?saddr=${encodeURIComponent('Calle Leonardo Da Vinci 12, Elche')}&daddr=${daddr}&dirflg=d&output=embed`
@@ -190,7 +200,10 @@ export default function Planificacion() {
 
   function crearRutaGoogleMapsUrl(direcciones: string[]) {
     if (direcciones.length === 0) return null
-    const paradas = direcciones.slice(0, 10)
+    const paradas = direcciones
+      .map((d) => String(d || '').trim())
+      .filter(Boolean)
+      .slice(0, 23)
     if (paradas.length === 1) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(paradas[0])}`
     const destino = paradas[paradas.length - 1]
     const waypoints = paradas.slice(0, -1).join('|')
@@ -328,7 +341,7 @@ export default function Planificacion() {
       nombre: 'Ruta general empresa',
       ordenes: ordenadas,
       paradas: paradasGeneral,
-      direcciones: normalizarDirecciones(paradasGeneral.map((p: any) => p.direccion).filter(Boolean)),
+      direcciones: paradasGeneral.map((p: any) => String(p.direccion || '').trim()).filter(Boolean),
     })
 
     const porDia = new Map<string, any[]>()
@@ -422,7 +435,7 @@ export default function Planificacion() {
           nombre: `${labelDia} - Ruta global ${idx + 1}`,
           ordenes: bloque.map((p: any) => p.ot),
           paradas: bloque,
-          direcciones: normalizarDirecciones(bloque.map((p: any) => p.direccion).filter(Boolean)),
+          direcciones: bloque.map((p: any) => String(p.direccion || '').trim()).filter(Boolean),
         })
       })
 
@@ -454,7 +467,7 @@ export default function Planificacion() {
             nombre: `${labelDia} - ${nombreTec} - Ruta ${idx + 1}`,
             ordenes: bloque.map((p: any) => p.ot),
             paradas: bloque,
-            direcciones: normalizarDirecciones(bloque.map((p: any) => p.direccion).filter(Boolean)),
+            direcciones: bloque.map((p: any) => String(p.direccion || '').trim()).filter(Boolean),
           })
         })
       }
@@ -468,7 +481,7 @@ export default function Planificacion() {
             nombre: `${labelDia} - Ruta ${idx + 1} (sin asignar)`,
             ordenes: bloque.map((p: any) => p.ot),
             paradas: bloque,
-            direcciones: normalizarDirecciones(bloque.map((p: any) => p.direccion).filter(Boolean)),
+            direcciones: bloque.map((p: any) => String(p.direccion || '').trim()).filter(Boolean),
           })
         })
       }
@@ -1205,6 +1218,165 @@ export default function Planificacion() {
     }
   }
 
+  function toggleCambioSeleccionadoSugerencia(index: number) {
+    setCambiosSeleccionadosSugerencia((prev) =>
+      prev.includes(index) ? prev.filter((n) => n !== index) : [...prev, index]
+    )
+  }
+
+  async function sugerirPlanificacionOptima() {
+    setSugiriendoPlan(true)
+    setErrorSugerenciaPlan('')
+    setMensajeSugerenciaPlan('')
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        setErrorSugerenciaPlan('Sesion no valida. Vuelve a iniciar sesion.')
+        setSugiriendoPlan(false)
+        return
+      }
+
+      const res = await fetch('/api/planificacion/sugerir', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          scope: periodoRuta,
+          baseDate: fechaRuta,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || data?.error) {
+        setErrorSugerenciaPlan(String(data?.error || 'No se pudo generar sugerencia.'))
+        setSugiriendoPlan(false)
+        return
+      }
+
+      const suggestion = data?.suggestion || null
+      setSugerenciaPlan({
+        ...suggestion,
+        deterministic: data?.deterministic || null,
+        aiError: data?.aiError || null,
+      })
+      setSugerenciaPlanId(String(data?.suggestionId || ''))
+
+      const cambios = Array.isArray(suggestion?.recommendedChanges) ? suggestion.recommendedChanges : []
+      const indicesIniciales = cambios
+        .map((c: any, idx: number) => ({ c, idx }))
+        .filter((x: any) => x.c?.type !== 'warning')
+        .map((x: any) => x.idx)
+      setCambiosSeleccionadosSugerencia(indicesIniciales)
+
+      setMensajeSugerenciaPlan(
+        data?.aiError
+          ? 'Sugerencia generada con calculo estructurado. La capa IA no respondio en formato valido.'
+          : 'Sugerencia generada correctamente.'
+      )
+    } catch (error: any) {
+      setErrorSugerenciaPlan(error?.message || 'Error inesperado al generar sugerencia.')
+    }
+    setSugiriendoPlan(false)
+  }
+
+  async function aplicarSugerenciaOptima(applyAll = false) {
+    if (!sugerenciaPlanId) {
+      setErrorSugerenciaPlan('No hay sugerencia registrada para aplicar.')
+      return
+    }
+    setAplicandoSugerencia(true)
+    setErrorSugerenciaPlan('')
+    setMensajeSugerenciaPlan('')
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        setErrorSugerenciaPlan('Sesion no valida. Vuelve a iniciar sesion.')
+        setAplicandoSugerencia(false)
+        return
+      }
+
+      const res = await fetch('/api/planificacion/aplicar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          suggestionId: sugerenciaPlanId,
+          action: 'apply',
+          applyAll,
+          changeIndexes: applyAll ? [] : cambiosSeleccionadosSugerencia,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) {
+        setErrorSugerenciaPlan(String(data?.error || 'No se pudo aplicar la sugerencia.'))
+        setAplicandoSugerencia(false)
+        return
+      }
+
+      const failed = Number(data?.failed || 0)
+      const applied = Number(data?.applied || 0)
+      setMensajeSugerenciaPlan(
+        failed > 0
+          ? `Aplicados ${applied} cambios con ${failed} incidencias. Revisa las OT afectadas.`
+          : `Aplicados ${applied} cambios de planificacion.`
+      )
+      await cargarDatos()
+    } catch (error: any) {
+      setErrorSugerenciaPlan(error?.message || 'Error inesperado al aplicar cambios.')
+    }
+    setAplicandoSugerencia(false)
+  }
+
+  async function rechazarSugerenciaOptima() {
+    if (!sugerenciaPlanId) {
+      setSugerenciaPlan(null)
+      return
+    }
+    setAplicandoSugerencia(true)
+    setErrorSugerenciaPlan('')
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        setErrorSugerenciaPlan('Sesion no valida. Vuelve a iniciar sesion.')
+        setAplicandoSugerencia(false)
+        return
+      }
+
+      const res = await fetch('/api/planificacion/aplicar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          suggestionId: sugerenciaPlanId,
+          action: 'reject',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data?.error) {
+        setErrorSugerenciaPlan(String(data?.error || 'No se pudo rechazar la sugerencia.'))
+        setAplicandoSugerencia(false)
+        return
+      }
+
+      setMensajeSugerenciaPlan('Sugerencia rechazada. Puedes recalcular una nueva.')
+      setSugerenciaPlan(null)
+      setCambiosSeleccionadosSugerencia([])
+      setSugerenciaPlanId('')
+    } catch (error: any) {
+      setErrorSugerenciaPlan(error?.message || 'Error inesperado al rechazar la sugerencia.')
+    }
+    setAplicandoSugerencia(false)
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }}></div>
@@ -1705,6 +1877,229 @@ export default function Planificacion() {
                       )
                     })}
                   </div>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
+              <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Sugerir planificacion optima</h2>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+                Genera una propuesta inteligente para dia, semana o mes. No aplica cambios automaticamente: primero revisas y luego decides.
+              </p>
+
+              <div className="flex gap-3 items-end flex-wrap mb-4">
+                <div>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>
+                    Alcance sugerencia
+                  </label>
+                  <select
+                    value={periodoRuta}
+                    onChange={(e) => setPeriodoRuta(e.target.value as 'dia' | 'semana' | 'mes')}
+                    className="rounded-xl px-3 py-2 text-sm outline-none"
+                    style={s.inputStyle}
+                  >
+                    <option value="dia">Diario</option>
+                    <option value="semana">Semanal</option>
+                    <option value="mes">Mensual</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>
+                    Fecha base
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaRuta}
+                    onChange={(e) => setFechaRuta(e.target.value)}
+                    className="rounded-xl px-3 py-2 text-sm outline-none"
+                    style={s.inputStyle}
+                  />
+                </div>
+                <button
+                  onClick={sugerirPlanificacionOptima}
+                  disabled={sugiriendoPlan}
+                  className="text-sm px-4 py-2 rounded-xl font-medium disabled:opacity-50"
+                  style={s.btnPrimary}
+                >
+                  {sugiriendoPlan ? 'Generando sugerencia...' : 'Sugerir planificacion optima'}
+                </button>
+              </div>
+
+              {errorSugerenciaPlan && (
+                <div className="rounded-xl p-3 mb-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                  <p className="text-xs" style={{ color: '#f87171' }}>{errorSugerenciaPlan}</p>
+                </div>
+              )}
+              {mensajeSugerenciaPlan && (
+                <div className="rounded-xl p-3 mb-3" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                  <p className="text-xs" style={{ color: '#34d399' }}>{mensajeSugerenciaPlan}</p>
+                </div>
+              )}
+
+              {sugerenciaPlan && (
+                <div className="mt-4">
+                  <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                    <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text)' }}>{sugerenciaPlan.summary || 'Sugerencia generada'}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      Alcance: {String(sugerenciaPlan.planningScope || periodoRuta).toUpperCase()}.
+                      Cambios recomendados: {Array.isArray(sugerenciaPlan.recommendedChanges) ? sugerenciaPlan.recommendedChanges.length : 0}.
+                    </p>
+                    {sugerenciaPlan.aiError && (
+                      <p className="text-xs mt-2" style={{ color: '#fbbf24' }}>
+                        Nota IA: {sugerenciaPlan.aiError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="rounded-xl p-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Carga actual estimada</p>
+                      <div className="space-y-2">
+                        {(sugerenciaPlan?.deterministic?.currentLoadByWorker || []).slice(0, 8).map((w: any) => (
+                          <div key={`curr-${w.workerId}`} className="flex items-center justify-between gap-3">
+                            <p className="text-xs" style={{ color: 'var(--text)' }}>{w.workerName}</p>
+                            <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                              {w.estimatedMinutes} min · {w.orderCount} OT
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="rounded-xl p-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Carga sugerida</p>
+                      <div className="space-y-2">
+                        {(sugerenciaPlan?.deterministic?.suggestedLoadByWorker || []).slice(0, 8).map((w: any) => (
+                          <div key={`sug-${w.workerId}`} className="flex items-center justify-between gap-3">
+                            <p className="text-xs" style={{ color: 'var(--text)' }}>{w.workerName}</p>
+                            <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                              {w.estimatedMinutes} min · {w.orderCount} OT
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                    <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>Rutas sugeridas por trabajador</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {(sugerenciaPlan.suggestedRoutes || []).map((ruta: any) => (
+                        <div key={`${ruta.workerId}-${ruta.date}`} className="rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{ruta.workerName}</p>
+                            <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{ruta.date}</p>
+                          </div>
+                          <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
+                            Servicio {ruta.estimatedServiceMinutes} min · Desplazamiento {ruta.estimatedTravelMinutes} min · Total {ruta.estimatedTotalMinutes} min
+                          </p>
+                          <p className="text-xs mb-2" style={{ color: ruta.overloadMinutes > 0 ? '#f87171' : '#34d399' }}>
+                            {ruta.overloadMinutes > 0
+                              ? `Sobrecarga: ${ruta.overloadMinutes} min`
+                              : `Hueco disponible: ${ruta.freeMinutes} min`}
+                          </p>
+                          <div className="space-y-1">
+                            {(ruta.route || []).slice(0, 6).map((stop: any, idx: number) => (
+                              <p key={`${stop.orderId}-${idx}`} className="text-xs" style={{ color: 'var(--text-subtle)' }}>
+                                {idx + 1}. {stop.suggestedStartTime} - {stop.clientName} ({stop.locality})
+                              </p>
+                            ))}
+                          </div>
+                          <p className="text-xs mt-2" style={{ color: '#06b6d4' }}>{ruta.routeReasoning}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {(sugerenciaPlan.warnings || []).length > 0 && (
+                    <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text)' }}>Alertas detectadas</p>
+                      <div className="space-y-2">
+                        {sugerenciaPlan.warnings.map((warn: any, idx: number) => (
+                          <div key={`warn-${idx}`} className="rounded-lg px-3 py-2"
+                            style={warn.level === 'critical'
+                              ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)' }
+                              : warn.level === 'warning'
+                                ? { background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }
+                                : { background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>
+                            <p className="text-xs" style={{ color: 'var(--text)' }}>{warn.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(sugerenciaPlan.missingData || []).length > 0 && (
+                    <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text)' }}>Datos faltantes que afectan precision</p>
+                      <div className="space-y-2">
+                        {sugerenciaPlan.missingData.slice(0, 10).map((item: any, idx: number) => (
+                          <div key={`missing-${idx}`} className="rounded-lg px-3 py-2" style={{ background: 'rgba(71,85,105,0.08)', border: '1px solid rgba(71,85,105,0.2)' }}>
+                            <p className="text-xs" style={{ color: 'var(--text)' }}>
+                              {item.entityType} {item.entityId}: falta {item.field}. Impacto: {item.impact}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(sugerenciaPlan.recommendedChanges || []).length > 0 && (
+                    <div className="rounded-xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-sm font-semibold mb-2" style={{ color: 'var(--text)' }}>Cambios recomendados (aplicacion parcial)</p>
+                      <div className="space-y-2 max-h-80 overflow-auto pr-1">
+                        {sugerenciaPlan.recommendedChanges.map((change: any, idx: number) => {
+                          const type = String(change.type || 'warning')
+                          const isWarning = type === 'warning'
+                          const checked = cambiosSeleccionadosSugerencia.includes(idx)
+                          return (
+                            <label key={`change-${idx}`} className="flex items-start gap-3 rounded-lg px-3 py-2"
+                              style={{ background: 'var(--card)', border: '1px solid var(--border)', opacity: isWarning ? 0.75 : 1 }}>
+                              <input
+                                type="checkbox"
+                                disabled={isWarning}
+                                checked={isWarning ? false : checked}
+                                onChange={() => toggleCambioSeleccionadoSugerencia(idx)}
+                                className="mt-1"
+                              />
+                              <div>
+                                <p className="text-xs font-semibold uppercase" style={{ color: type === 'warning' ? '#fbbf24' : '#06b6d4' }}>
+                                  {type} - OT {change.orderId}
+                                </p>
+                                <p className="text-xs mt-0.5" style={{ color: 'var(--text)' }}>{change.reason}</p>
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+
+                      <div className="flex gap-2 flex-wrap mt-4">
+                        <button
+                          onClick={() => aplicarSugerenciaOptima(false)}
+                          disabled={aplicandoSugerencia || cambiosSeleccionadosSugerencia.length === 0}
+                          className="text-sm px-4 py-2 rounded-xl font-medium disabled:opacity-50"
+                          style={s.btnPrimary}
+                        >
+                          {aplicandoSugerencia ? 'Aplicando...' : `Aplicar seleccionados (${cambiosSeleccionadosSugerencia.length})`}
+                        </button>
+                        <button
+                          onClick={() => aplicarSugerenciaOptima(true)}
+                          disabled={aplicandoSugerencia}
+                          className="text-sm px-4 py-2 rounded-xl disabled:opacity-50"
+                          style={s.btnSecondary}
+                        >
+                          Aplicar todos
+                        </button>
+                        <button
+                          onClick={rechazarSugerenciaOptima}
+                          disabled={aplicandoSugerencia}
+                          className="text-sm px-4 py-2 rounded-xl disabled:opacity-50"
+                          style={{ background: 'rgba(239,68,68,0.08)', color: '#f87171', border: '1px solid rgba(239,68,68,0.22)' }}
+                        >
+                          Rechazar sugerencia
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
