@@ -24,8 +24,8 @@ export default function AppHeader({ title, leftSlot, rightSlot }: AppHeaderProps
           title="Ir al inicio"
           aria-label="Ir al inicio"
         >
-          <img src="/logo.png" alt="Los Teros" className="h-6 w-auto object-contain" />
-          <span>Inicio</span>
+          <img src="/logo.png" alt="Los Teros S.L" className="h-10 w-auto object-contain" />
+          <span className="font-semibold">Inicio</span>
         </Link>
         {leftSlot}
         <h1 className="font-bold text-lg leading-tight" style={{ color: 'var(--text)' }}>

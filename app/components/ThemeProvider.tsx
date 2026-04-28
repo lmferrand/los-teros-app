@@ -9,7 +9,7 @@ const IA_HINT_KEY = 'ia-asistente-hint-v1'
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mostrarAyudaIA, setMostrarAyudaIA] = useState(false)
   const pathname = usePathname()
-  const ocultarAsistente = pathname === '/login'
+  const ocultarAsistente = pathname === '/login' || pathname.startsWith('/auth/')
 
   useEffect(() => {
     if (ocultarAsistente) return
@@ -55,7 +55,7 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
               className="pointer-events-none absolute right-0 bottom-[86px] px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap opacity-0 translate-y-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0"
               style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}
             >
-              En que puedo ayudarte?
+              ¿En qué puedo ayudarte?
             </div>
             <Link
               href="/asistente"
@@ -63,21 +63,32 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
               title="Abrir asistente IA"
               aria-label="Abrir asistente IA"
             >
-              <span className="-mb-1 text-[11px] leading-none font-bold tracking-wide" style={{ color: '#38bdf8' }}>
+              <span className="-mb-0.5 text-[11px] leading-none font-bold tracking-wide" style={{ color: '#38bdf8' }}>
                 IA
               </span>
-              <img
-                src="/assistant-ia-teros.png?v=20260426a"
-                alt="Asistente IA Los Teros"
-                className="pointer-events-none select-none"
-                style={{
-                  width: '64px',
-                  height: '64px',
-                  objectFit: 'contain',
-                  backgroundColor: 'transparent',
-                  filter: 'drop-shadow(0 2px 6px rgba(14,165,233,0.35))',
-                }}
-              />
+              <div className="relative">
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                  style={{
+                    transform: 'scale(1.12)',
+                    borderRadius: '9999px',
+                    background: 'radial-gradient(circle, rgba(56,189,248,0.26) 0%, rgba(56,189,248,0.14) 42%, rgba(56,189,248,0) 72%)',
+                    filter: 'blur(7px)',
+                  }}
+                />
+                <img
+                  src="/assistant-ia-teros-clean.png?v=20260428"
+                  alt="Asistente IA Los Teros"
+                  className="pointer-events-none select-none relative"
+                  style={{
+                    width: '60px',
+                    height: '60px',
+                    objectFit: 'cover',
+                    objectPosition: 'center',
+                    backgroundColor: 'transparent',
+                  }}
+                />
+              </div>
             </Link>
           </div>
         </div>

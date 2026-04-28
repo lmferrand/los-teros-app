@@ -201,14 +201,15 @@ export default function LoginPage() {
 
           <h1 className="texto-titulo text-3xl font-black uppercase mb-3"
             style={{ color: '#ffffff', letterSpacing: '0.2em' }}>
-            LOS TEROS
+            LOS TEROS S.L
+            <span className="align-super text-[0.5em] ml-0.5">®</span>
           </h1>
 
           <div className="linea-deco mb-4" style={{ width: '50%' }}></div>
 
           <p className="texto-sub text-xs font-semibold uppercase tracking-widest"
             style={{ color: '#06b6d4', letterSpacing: '0.3em' }}>
-            Gestion Operativa
+            GESTIÓN OPERATIVA
           </p>
         </div>
 

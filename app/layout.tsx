@@ -9,8 +9,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Los Teros — Gestion Operativa",
-  description: "App de gestion para Los Teros",
+  title: "Los Teros S.L® - Gestión Operativa",
+  description: "App de gestión para Los Teros S.L",
 };
 
 export default function RootLayout({
@@ -21,7 +21,9 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
           (function() {
             try {
               var root = document.documentElement;
@@ -44,7 +46,9 @@ export default function RootLayout({
               });
             } catch(e) {}
           })();
-        `}} />
+        `,
+          }}
+        />
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>{children}</ThemeProvider>

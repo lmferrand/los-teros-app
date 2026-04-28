@@ -20,6 +20,7 @@ export default function Dashboard() {
     otActivas: 0, otMes: 0, stockBajo: 0,
     equiposCampo: 0, clientesTeros: 0, clientesOlipro: 0, otPendientes: 0,
     vehiculosTotal: 0, vehiculosAlDia: 0, vehiculosPorVencer: 0, vehiculosVencidos: 0,
+    otSinTecnico: 0, otSinFecha: 0, otSinVehiculo: 0,
   })
   const [misOrdenes, setMisOrdenes] = useState<any[]>([])
   const [alertas, setAlertas] = useState<{ tipo: string; texto: string }[]>([])
@@ -67,6 +68,16 @@ export default function Dashboard() {
     })
     const stockBajo = todosMateriales.filter(m => (m.stock || 0) < (m.minimo || 0))
     const equiposCampo = todosEquipos.filter(e => e.estado === 'en_cliente')
+    const otPendientesAsignacion = todasOrdenes.filter(
+      (o) => o.estado === 'pendiente' || o.estado === 'en_curso'
+    )
+    const otSinTecnico = otPendientesAsignacion.filter(
+      (o) =>
+        (!Array.isArray(o.tecnicos_ids) || o.tecnicos_ids.length === 0) &&
+        !o.tecnico_id
+    ).length
+    const otSinFecha = otPendientesAsignacion.filter((o) => !o.fecha_programada).length
+    const otSinVehiculo = otPendientesAsignacion.filter((o) => !o.vehiculo_id).length
     let vehiculosAlDia = 0
     let vehiculosPorVencer = 0
     let vehiculosVencidos = 0
@@ -103,6 +114,9 @@ export default function Dashboard() {
       vehiculosAlDia,
       vehiculosPorVencer,
       vehiculosVencidos,
+      otSinTecnico,
+      otSinFecha,
+      otSinVehiculo,
     })
     setMisOrdenes(misMisOrdenes)
 
@@ -139,7 +153,7 @@ export default function Dashboard() {
     { href: '/equipos', icono: '⚙️', titulo: 'Equipos', desc: 'Turbinas y motores', siempre: true },
     { href: '/flota', icono: '🚚', titulo: 'Flota de vehiculos', desc: 'ITV, seguros y documentos', siempre: true },
     { href: '/albaranes', icono: '🧾', titulo: 'Albaranes', desc: 'Con fotos y firma', siempre: true },
-    { href: '/asistente', iconoImg: '/assistant-ia-teros.png', titulo: 'Asistente IA', desc: 'Pregunta a la IA', siempre: true },
+    { href: '/asistente', iconoImg: '/assistant-ia-teros-clean.png', titulo: 'Asistente IA', desc: 'Pregunta a la IA', siempre: true },
     { href: '/movimientos', icono: '📊', titulo: 'Movimientos', desc: 'Historial consumos', siempre: true },
     { href: '/clientes', icono: '🏢', titulo: 'Clientes', desc: 'Fichas y contacto', soloAdmin: true },
     { href: '/trabajadores', icono: '👷', titulo: 'Trabajadores', desc: 'Gestion personal', soloAdmin: true },
@@ -164,10 +178,13 @@ export default function Dashboard() {
     <div className="min-h-screen" style={{ background: bgMain }}>
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={{ background: bgCard, borderBottom: `1px solid ${border}` }}>
         <div className="flex items-center gap-3">
-          <img src="/logo.png" alt="Los Teros" className="w-10 h-10 object-contain" style={{ mixBlendMode: tema === 'dark' ? 'screen' : 'normal' }} />
+          <img src="/logo.png" alt="Los Teros S.L" className="w-24 h-24 object-contain" style={{ mixBlendMode: tema === 'dark' ? 'screen' : 'normal' }} />
           <div>
-            <h1 className="font-bold text-lg leading-tight" style={{ color: textColor }}>LOS TEROS</h1>
-            <p className="text-xs" style={{ color: '#06b6d4' }}>Gestion Operativa</p>
+            <h1 className="font-bold text-lg leading-tight" style={{ color: textColor }}>
+              Los Teros S.L
+              <span className="align-super text-[0.52em] ml-0.5">®</span>
+            </h1>
+            <p className="text-xs" style={{ color: '#06b6d4' }}>Gestión operativa</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -238,25 +255,57 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           {[
-            { label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, color: '#06b6d4' },
-            { label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', color: '#10b981' },
-            { label: 'Clientes Teros', valor: stats.clientesTeros, sub: 'Los Teros', color: '#06b6d4' },
-            { label: 'Clientes Olipro', valor: stats.clientesOlipro, sub: 'Olipro', color: '#8b5cf6' },
-            { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', color: stats.stockBajo > 0 ? '#f59e0b' : '#10b981' },
-            { label: 'Equipos en campo', valor: stats.equiposCampo, sub: 'en cliente', color: '#fb923c' },
+            { label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, color: '#06b6d4', href: '/ordenes' },
+            { label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', color: '#10b981', href: '/ordenes?estado=completada' },
+            { label: 'Clientes Teros', valor: stats.clientesTeros, sub: 'Los Teros', color: '#06b6d4', href: '/clientes?empresa=teros' },
+            { label: 'Clientes Olipro', valor: stats.clientesOlipro, sub: 'Olipro', color: '#8b5cf6', href: '/clientes?empresa=olipro' },
+            { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', color: stats.stockBajo > 0 ? '#f59e0b' : '#10b981', href: '/inventario' },
+            { label: 'Equipos en campo', valor: stats.equiposCampo, sub: 'en cliente', color: '#fb923c', href: '/equipos' },
             {
               label: 'Flota al dia',
               valor: stats.vehiculosAlDia,
               sub: `${stats.vehiculosTotal} total - ${stats.vehiculosPorVencer} por vencer - ${stats.vehiculosVencidos} vencidos`,
               color: stats.vehiculosVencidos > 0 ? '#f87171' : stats.vehiculosPorVencer > 0 ? '#fbbf24' : '#34d399',
+              href: '/flota',
             },
           ].map((s, i) => (
-            <div key={i} className="rounded-xl p-4" style={{ background: bgCard, border: `1px solid ${border}` }}>
+            <a
+              key={i}
+              href={s.href}
+              className="rounded-xl p-4 block transition-all"
+              style={{ background: bgCard, border: `1px solid ${border}` }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = border}
+            >
               <p className="text-xs uppercase tracking-wider mb-2" style={{ color: textMuted }}>{s.label}</p>
               <p className="text-3xl font-bold" style={{ color: s.color }}>{s.valor}</p>
               <p className="text-xs mt-1" style={{ color: textMuted }}>{s.sub}</p>
-            </div>
+            </a>
           ))}
+        </div>
+
+        <div className="rounded-xl p-4 mb-8" style={{ background: bgCard, border: `1px solid ${border}` }}>
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+            <h3 className="font-semibold text-sm" style={{ color: textColor }}>Flujo operativo</h3>
+            <a href="/ordenes" className="text-xs" style={{ color: '#06b6d4' }}>Abrir ordenes</a>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {[
+              { label: 'OT sin tecnico', valor: stats.otSinTecnico, href: '/ordenes?estado=pendiente&falta=tecnico' },
+              { label: 'OT sin fecha', valor: stats.otSinFecha, href: '/ordenes?estado=pendiente&falta=fecha' },
+              { label: 'OT sin vehiculo', valor: stats.otSinVehiculo, href: '/ordenes?estado=pendiente&falta=vehiculo' },
+            ].map((f) => (
+              <a
+                key={f.label}
+                href={f.href}
+                className="rounded-lg px-3 py-2 block"
+                style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
+              >
+                <p className="text-xs" style={{ color: textMuted }}>{f.label}</p>
+                <p className="text-xl font-semibold mt-1" style={{ color: f.valor > 0 ? '#fbbf24' : '#34d399' }}>{f.valor}</p>
+              </a>
+            ))}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">

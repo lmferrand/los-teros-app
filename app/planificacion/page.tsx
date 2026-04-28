@@ -19,6 +19,7 @@ export default function Planificacion() {
   const [mostrarFormPres, setMostrarFormPres] = useState(false)
   const [editandoPres, setEditandoPres] = useState<any>(null)
   const [fechaRuta, setFechaRuta] = useState(new Date().toISOString().slice(0, 10))
+  const [periodoRuta, setPeriodoRuta] = useState<'dia' | 'semana' | 'mes'>('dia')
   const [resultadoRuta, setResultadoRuta] = useState<any>(null)
   const [calculando, setCalculando] = useState(false)
   const [escaneando, setEscaneando] = useState(false)
@@ -468,9 +469,11 @@ export default function Planificacion() {
       zonaFinal: zonaActual,
       trasladoTotalMin: totalTraslado,
       esperaTotalMin: totalEspera,
+      trabajoTotalMin: totalTrabajo,
       extraMin,
       utilizacionPct: utilizacion,
       ahorroTrasladoMin,
+      zonasVisitadas: Array.from(new Set(ruta.map((r: any) => r.zona).filter(Boolean))),
       advertencias,
     }
   }
@@ -531,32 +534,222 @@ export default function Planificacion() {
     return sugerencias
   }
 
-  function calcularRutas() {
-    setCalculando(true)
-    const otsDelDia = ordenes.filter(o => {
+  function fechaKeyLocal(d: Date) {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  function obtenerRangoOptimizacion(periodo: 'dia' | 'semana' | 'mes', fechaBaseIso: string) {
+    const { inicio, fin, etiqueta } = calcularRangoMapa(periodo, fechaBaseIso)
+    const dias: string[] = []
+    const cursor = new Date(inicio)
+    cursor.setHours(12, 0, 0, 0)
+    while (cursor <= fin) {
+      dias.push(fechaKeyLocal(cursor))
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return { inicio, fin, etiqueta, dias }
+  }
+
+  function filtrarOtsActivasEnRango(inicio: Date, fin: Date) {
+    return ordenes.filter((o) => {
       if (!o.fecha_programada) return false
       const f = new Date(o.fecha_programada)
-      return f.toISOString().slice(0, 10) === fechaRuta && (o.estado === 'pendiente' || o.estado === 'en_curso')
+      if (Number.isNaN(f.getTime())) return false
+      return (o.estado === 'pendiente' || o.estado === 'en_curso') && f >= inicio && f <= fin
     })
-    if (otsDelDia.length === 0) { setResultadoRuta({ vacio: true }); setCalculando(false); return }
-    const tecnicosDelDia = tecnicos.filter(t => otsDelDia.some(o => o.tecnicos_ids?.includes(t.id) || o.tecnico_id === t.id))
-    const resultados = tecnicosDelDia.map(t => ({ tecnico: t, ...optimizarRutaTecnico(otsDelDia, t.id) }))
-    const otsSinAsignar = otsDelDia.filter(o => (!o.tecnicos_ids || o.tecnicos_ids.length === 0) && !o.tecnico_id)
+  }
+
+  function resumenDiaOptimizacion(fechaIso: string, otsDia: any[]) {
+    if (!otsDia.length) return null
+    const tecnicosDelDia = tecnicos.filter((t) => otsDia.some((o) => obtenerTecnicosOt(o).includes(t.id)))
+    const resultados = tecnicosDelDia.map((t) => ({ tecnico: t, ...optimizarRutaTecnico(otsDia, t.id) }))
+    const otsSinAsignar = otsDia.filter((o) => (!o.tecnicos_ids || o.tecnicos_ids.length === 0) && !o.tecnico_id)
     const sugerencias = sugerirAsignaciones(otsSinAsignar, resultados)
     const totalTraslado = resultados.reduce((acc: number, r: any) => acc + Number(r.trasladoTotalMin || 0), 0)
     const totalAhorro = resultados.reduce((acc: number, r: any) => acc + Number(r.ahorroTrasladoMin || 0), 0)
     const totalExtra = resultados.reduce((acc: number, r: any) => acc + Number(r.extraMin || 0), 0)
-    setResultadoRuta({
+    const zonas = resultados.flatMap((r: any) => r.zonasVisitadas || [])
+    const contador = new Map<string, number>()
+    for (const z of zonas) contador.set(z, (contador.get(z) || 0) + 1)
+    const zonasDominantes = Array.from(contador.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([zona]) => ZONAS[zona]?.nombre || zona)
+
+    return {
+      fecha: fechaIso,
       resultados,
       otsSinAsignar,
       sugerencias,
-      fecha: fechaRuta,
-      totalOTs: otsDelDia.length,
+      totalOTs: otsDia.length,
       totalTraslado,
       totalAhorro,
       totalExtra,
-    })
-    setCalculando(false)
+      zonasDominantes,
+    }
+  }
+
+  function construirEstadoTecnicosPeriodo(resumenDias: any[]) {
+    const estado = new Map<string, any>()
+    for (const dia of resumenDias) {
+      for (const res of dia.resultados || []) {
+        const key = `${dia.fecha}__${res.tecnico.id}`
+        estado.set(key, {
+          tecnicoId: res.tecnico.id,
+          tecnicoNombre: res.tecnico.nombre,
+          cargaMin: Number(res.trabajoTotalMin || 0) + Number(res.trasladoTotalMin || 0),
+          horaFinalTrabajo: Number(res.horaFinalTrabajo || 6 * 60),
+          zonas: (res.zonasVisitadas || []).length > 0 ? res.zonasVisitadas : ['elche'],
+          fijas: (res.ruta || []).filter((p: any) => p.horaFija).length,
+        })
+      }
+    }
+    return estado
+  }
+
+  function generarOpcionesFlexiblesPeriodo(otsPeriodo: any[], resumenDias: any[], diasPeriodo: string[]) {
+    const estadoTecnicos = construirEstadoTecnicosPeriodo(resumenDias)
+    const flexibles = otsPeriodo
+      .filter((o) => !o.hora_fija && obtenerTecnicosOt(o).length > 0)
+      .sort((a, b) => prioridadPeso(b.prioridad || '2') - prioridadPeso(a.prioridad || '2'))
+
+    const opciones: any[] = []
+
+    for (const ot of flexibles) {
+      const techIds = obtenerTecnicosOt(ot)
+      if (!techIds.length) continue
+      const clienteOt = obtenerClienteOt(ot)
+      const zonaOt = detectarZona(clienteOt?.direccion || '')
+      const fechaOriginal = ot.fecha_programada ? fechaKeyLocal(new Date(ot.fecha_programada)) : diasPeriodo[0]
+      const duracion = duracionOtMin(ot)
+      const candidatas: any[] = []
+
+      for (const tecnicoId of techIds) {
+        for (const dia of diasPeriodo) {
+          const key = `${dia}__${tecnicoId}`
+          const st = estadoTecnicos.get(key) || {
+            tecnicoId,
+            tecnicoNombre: tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico',
+            cargaMin: 0,
+            horaFinalTrabajo: 6 * 60,
+            zonas: ['elche'],
+            fijas: 0,
+          }
+
+          const zonasRef = [...(st.zonas || []), 'elche']
+          const trasladoEstimado = zonasRef
+            .map((z: string) => calcularTiempoEntreZonas(z, zonaOt))
+            .reduce((min: number, v: number) => Math.min(min, v), Number.POSITIVE_INFINITY)
+
+          const cargaProyectada = st.cargaMin + trasladoEstimado + duracion
+          const extraMin = Math.max(0, cargaProyectada - (9 * 60))
+          const movePenalty = dia === fechaOriginal ? 0 : 8
+          const fixedPenalty = st.fijas > 0 ? 6 : 0
+          const score = trasladoEstimado * 1.25 + extraMin * 2.3 + movePenalty + fixedPenalty + st.cargaMin * 0.08
+
+          const inicioEstimado = Math.max(6 * 60, Math.min(14 * 60, Math.round((Math.max(st.horaFinalTrabajo, 6 * 60) + trasladoEstimado) / 30) * 30))
+          const finEstimado = inicioEstimado + duracion
+
+          candidatas.push({
+            tecnicoId: st.tecnicoId,
+            tecnicoNombre: st.tecnicoNombre,
+            fecha: dia,
+            score,
+            trasladoEstimado,
+            extraMin,
+            inicioEstimado,
+            finEstimado,
+            esDiaOriginal: dia === fechaOriginal,
+          })
+        }
+      }
+
+      const mejores = candidatas
+        .sort((a, b) => a.score - b.score)
+        .filter((op, idx, arr) => idx === arr.findIndex((x) => x.fecha === op.fecha && x.tecnicoId === op.tecnicoId))
+        .slice(0, 3)
+
+      if (mejores.length === 0) continue
+      opciones.push({
+        ot,
+        cliente: clienteOt,
+        zona: zonaOt,
+        fechaOriginal,
+        opciones: mejores,
+      })
+    }
+
+    return opciones
+      .sort((a, b) => {
+        const sa = Number(a.opciones?.[0]?.score || 0)
+        const sb = Number(b.opciones?.[0]?.score || 0)
+        return sa - sb
+      })
+      .slice(0, 40)
+  }
+
+  function calcularRutas() {
+    setCalculando(true)
+    try {
+      const rango = obtenerRangoOptimizacion(periodoRuta, fechaRuta)
+      const otsPeriodo = filtrarOtsActivasEnRango(rango.inicio, rango.fin)
+
+      if (otsPeriodo.length === 0) {
+        setResultadoRuta({ vacio: true, periodo: periodoRuta, etiquetaPeriodo: rango.etiqueta })
+        return
+      }
+
+      if (periodoRuta === 'dia') {
+        const resumenDia = resumenDiaOptimizacion(fechaRuta, otsPeriodo)
+        if (!resumenDia) {
+          setResultadoRuta({ vacio: true, periodo: 'dia', etiquetaPeriodo: rango.etiqueta })
+          return
+        }
+        setResultadoRuta({
+          periodo: 'dia',
+          etiquetaPeriodo: rango.etiqueta,
+          ...resumenDia,
+        })
+        return
+      }
+
+      const resumenDias = rango.dias
+        .map((dia) => {
+          const otsDia = otsPeriodo.filter((o) => {
+            if (!o.fecha_programada) return false
+            return fechaKeyLocal(new Date(o.fecha_programada)) === dia
+          })
+          return resumenDiaOptimizacion(dia, otsDia)
+        })
+        .filter(Boolean) as any[]
+
+      if (resumenDias.length === 0) {
+        setResultadoRuta({ vacio: true, periodo: periodoRuta, etiquetaPeriodo: rango.etiqueta })
+        return
+      }
+
+      const totalOTs = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalOTs || 0), 0)
+      const totalTraslado = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalTraslado || 0), 0)
+      const totalAhorro = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalAhorro || 0), 0)
+      const totalExtra = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalExtra || 0), 0)
+      const opcionesFlexibles = generarOpcionesFlexiblesPeriodo(otsPeriodo, resumenDias, rango.dias)
+
+      setResultadoRuta({
+        periodo: periodoRuta,
+        etiquetaPeriodo: rango.etiqueta,
+        resumenDias,
+        opcionesFlexibles,
+        totalOTs,
+        totalTraslado,
+        totalAhorro,
+        totalExtra,
+      })
+    } finally {
+      setCalculando(false)
+    }
   }
 
   function convertirFecha(fecha: string): string {
@@ -1234,11 +1427,26 @@ export default function Planificacion() {
             <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
               <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Optimizador de rutas</h2>
               <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                Optimiza por hora, trabajador asignado, duracion, grado de intervencion y proximidad geografica para reducir traslados (jornada objetivo 06:00-15:00).
+                Optimiza por zona, trabajador, horario fijo/flexible y carga de jornada. En modo semana/mes propone alternativas para negociar horas de OT flexibles.
               </p>
               <div className="flex gap-3 items-end flex-wrap">
                 <div>
-                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Dia a planificar</label>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Periodo</label>
+                  <select
+                    value={periodoRuta}
+                    onChange={(e) => setPeriodoRuta(e.target.value as 'dia' | 'semana' | 'mes')}
+                    className="rounded-xl px-3 py-2 text-sm outline-none"
+                    style={s.inputStyle}
+                  >
+                    <option value="dia">Diario</option>
+                    <option value="semana">Semanal</option>
+                    <option value="mes">Mensual</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>
+                    {periodoRuta === 'dia' ? 'Dia a planificar' : periodoRuta === 'semana' ? 'Semana base' : 'Mes base'}
+                  </label>
                   <input type="date" value={fechaRuta} onChange={e => setFechaRuta(e.target.value)}
                     className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
                 </div>
@@ -1252,11 +1460,15 @@ export default function Planificacion() {
             {resultadoRuta?.vacio && (
               <div className="text-center py-12 rounded-2xl" style={s.cardStyle}>
                 <p className="text-3xl mb-2">📅</p>
-                <p style={{ color: 'var(--text-muted)' }}>No hay ordenes pendientes para ese dia.</p>
+                <p style={{ color: 'var(--text-muted)' }}>
+                  {resultadoRuta?.periodo === 'dia'
+                    ? 'No hay ordenes pendientes para ese dia.'
+                    : `No hay ordenes pendientes para este periodo (${resultadoRuta?.etiquetaPeriodo || ''}).`}
+                </p>
               </div>
             )}
 
-            {resultadoRuta?.resultados && (
+            {resultadoRuta?.periodo === 'dia' && resultadoRuta?.resultados && (
               <div className="flex flex-col gap-6">
                 <div className="rounded-2xl p-4" style={s.cardStyle}>
                   <p className="font-semibold" style={{ color: 'var(--text)' }}>{new Date(resultadoRuta.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</p>
@@ -1427,6 +1639,94 @@ export default function Planificacion() {
                           <p className="text-xs" style={{ color: '#06b6d4' }}>
                             traslado {sug.trasladoMin} min{(sug.extraMin || 0) > 0 ? ` - extra ${sug.extraMin} min` : ''}
                           </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {resultadoRuta?.periodo !== 'dia' && resultadoRuta?.resumenDias && (
+              <div className="flex flex-col gap-6">
+                <div className="rounded-2xl p-4" style={s.cardStyle}>
+                  <p className="font-semibold" style={{ color: 'var(--text)' }}>
+                    {resultadoRuta.etiquetaPeriodo}
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                    {resultadoRuta.totalOTs} ordenes - {resultadoRuta.resumenDias.length} dias con actividad
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                    <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Traslado total</p>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{resultadoRuta.totalTraslado || 0} min</p>
+                    </div>
+                    <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Ahorro estimado</p>
+                      <p className="text-sm font-semibold" style={{ color: '#34d399' }}>{resultadoRuta.totalAhorro || 0} min</p>
+                    </div>
+                    <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Horas extra previstas</p>
+                      <p className="text-sm font-semibold" style={{ color: (resultadoRuta.totalExtra || 0) > 0 ? '#f87171' : '#34d399' }}>{resultadoRuta.totalExtra || 0} min</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl p-5" style={s.cardStyle}>
+                  <p className="font-semibold mb-3" style={{ color: 'var(--text)' }}>Resumen por dia</p>
+                  <div className="flex flex-col gap-2">
+                    {resultadoRuta.resumenDias.map((dia: any) => (
+                      <div key={`dia-${dia.fecha}`} className="rounded-xl px-3 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                        <div>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                            {new Date(`${dia.fecha}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: '2-digit' })}
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                            {dia.totalOTs} OT - {dia.resultados.length} trabajadores - Zonas: {(dia.zonasDominantes || []).join(', ') || 'Mixto'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs" style={{ color: '#06b6d4' }}>Traslado {dia.totalTraslado || 0} min</p>
+                          <p className="text-xs" style={{ color: (dia.totalExtra || 0) > 0 ? '#f87171' : '#34d399' }}>Extra {dia.totalExtra || 0} min</p>
+                          <button
+                            onClick={() => {
+                              setFechaRuta(dia.fecha)
+                              setPeriodoRuta('dia')
+                              setResultadoRuta(null)
+                            }}
+                            className="mt-1 text-xs px-2 py-1 rounded-lg"
+                            style={{ color: '#a78bfa', background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)' }}
+                          >
+                            Ver detalle diario
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {(resultadoRuta.opcionesFlexibles || []).length > 0 && (
+                  <div className="rounded-2xl p-5" style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.25)' }}>
+                    <p className="font-semibold mb-2" style={{ color: '#06b6d4' }}>Opciones para OT flexibles</p>
+                    <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+                      Estas alternativas mantienen las OT con hora fija y te proponen huecos de mejor eficiencia por zona/carga para semana o mes.
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      {resultadoRuta.opcionesFlexibles.map((item: any) => (
+                        <div key={`flex-${item.ot.id}`} className="rounded-xl px-3 py-3" style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)' }}>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                            {item.ot.codigo} - {nombreComercialCliente(item.cliente) || item.cliente?.nombre || '—'}
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                            Actual: {item.fechaOriginal} - Zona {ZONAS[item.zona]?.nombre || item.zona}
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {item.opciones.map((op: any, idx: number) => (
+                              <span key={`${item.ot.id}-op-${idx}`} className="text-xs px-2 py-1 rounded-lg" style={{ background: idx === 0 ? 'rgba(16,185,129,0.18)' : 'rgba(124,58,237,0.12)', color: idx === 0 ? '#34d399' : '#a78bfa', border: idx === 0 ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(124,58,237,0.25)' }}>
+                                {idx === 0 ? 'Recomendada' : `Opcion ${idx + 1}`}: {new Date(`${op.fecha}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} - {op.tecnicoNombre} - {formatHora(op.inicioEstimado)}-{formatHora(op.finEstimado)}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>

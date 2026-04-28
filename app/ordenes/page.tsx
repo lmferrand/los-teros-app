@@ -42,6 +42,7 @@ export default function Ordenes() {
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
+  const [filtroFalta, setFiltroFalta] = useState<'tecnico' | 'fecha' | 'vehiculo' | ''>('')
   const [ordenDetalle, setOrdenDetalle] = useState<any>(null)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [subiendo, setSubiendo] = useState(false)
@@ -84,6 +85,15 @@ export default function Ordenes() {
   useEffect(() => {
     verificarSesion()
     cargarDatos()
+  }, [])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const estadoUrl = String(params.get('estado') || '').toLowerCase()
+    const faltaUrl = String(params.get('falta') || '').toLowerCase()
+    const estadosValidos = new Set(['pendiente', 'en_curso', 'completada', 'cancelada'])
+    if (estadosValidos.has(estadoUrl)) setFiltroEstado(estadoUrl)
+    if (faltaUrl === 'tecnico' || faltaUrl === 'fecha' || faltaUrl === 'vehiculo') setFiltroFalta(faltaUrl)
   }, [])
 
   async function verificarSesion() {
@@ -457,7 +467,13 @@ export default function Ordenes() {
     urgente: '#34d399',
   }
 
-  const ordenesFiltradas = filtroEstado ? ordenes.filter(o => o.estado === filtroEstado) : ordenes
+  const ordenesPorEstado = filtroEstado ? ordenes.filter((o) => o.estado === filtroEstado) : ordenes
+  const ordenesFiltradas = ordenesPorEstado.filter((o) => {
+    if (filtroFalta === 'tecnico') return (!Array.isArray(o.tecnicos_ids) || o.tecnicos_ids.length === 0) && !o.tecnico_id
+    if (filtroFalta === 'fecha') return !o.fecha_programada
+    if (filtroFalta === 'vehiculo') return !o.vehiculo_id
+    return true
+  })
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>

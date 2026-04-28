@@ -1,15 +1,99 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { s } from '@/lib/styles'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
 
+function normalizarTextoBusqueda(valor: unknown) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9@.\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function coeficienteDice(a: string, b: string) {
+  if (!a || !b) return 0
+  if (a === b) return 1
+  if (a.length < 2 || b.length < 2) return 0
+
+  const paresA = new Map<string, number>()
+  for (let i = 0; i < a.length - 1; i++) {
+    const par = a.slice(i, i + 2)
+    paresA.set(par, (paresA.get(par) || 0) + 1)
+  }
+
+  let interseccion = 0
+  for (let i = 0; i < b.length - 1; i++) {
+    const par = b.slice(i, i + 2)
+    const count = paresA.get(par) || 0
+    if (count > 0) {
+      paresA.set(par, count - 1)
+      interseccion++
+    }
+  }
+
+  return (2 * interseccion) / ((a.length - 1) + (b.length - 1))
+}
+
+function puntuarClienteBusqueda(cliente: any, busqueda: string) {
+  const q = normalizarTextoBusqueda(busqueda)
+  if (!q) return 0
+
+  const terminos = q.split(' ').filter(Boolean)
+  const nombre = normalizarTextoBusqueda(cliente?.nombre)
+  const fiscal = normalizarTextoBusqueda(cliente?.nombre_fiscal)
+  const cif = normalizarTextoBusqueda(cliente?.cif)
+  const poblacion = normalizarTextoBusqueda(cliente?.poblacion)
+  const telefono = normalizarTextoBusqueda(cliente?.telefono)
+  const movil = normalizarTextoBusqueda(cliente?.movil)
+  const email = normalizarTextoBusqueda(cliente?.email)
+  const compuesto = [nombre, fiscal, cif, poblacion, telefono, movil, email].filter(Boolean).join(' ')
+
+  let score = 0
+
+  if (cif && cif === q) score += 180
+  else if (cif && cif.startsWith(q)) score += 120
+
+  if (nombre && nombre === q) score += 160
+  else if (nombre && nombre.startsWith(q)) score += 120
+
+  if (fiscal && fiscal === q) score += 150
+  else if (fiscal && fiscal.startsWith(q)) score += 110
+
+  for (const t of terminos) {
+    const peso = t.length >= 5 ? 22 : 14
+    if (nombre.includes(t)) score += peso + 10
+    if (fiscal.includes(t)) score += peso + 8
+    if (cif.includes(t)) score += peso + 12
+    if (poblacion.includes(t)) score += peso
+    if (telefono.includes(t) || movil.includes(t)) score += peso
+    if (email.includes(t)) score += peso
+  }
+
+  if (compuesto.includes(q)) score += 24
+
+  const fuzzy = Math.max(
+    coeficienteDice(nombre, q),
+    coeficienteDice(fiscal, q),
+    coeficienteDice(cif, q),
+    coeficienteDice(poblacion, q),
+    coeficienteDice(compuesto, q)
+  )
+  if (fuzzy >= 0.4) score += Math.round(fuzzy * 50)
+
+  return score
+}
+
 export default function Clientes() {
   const [clientes, setClientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [sesionOK, setSesionOK] = useState(false)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [importando, setImportando] = useState(false)
@@ -21,8 +105,17 @@ export default function Clientes() {
   const [seleccionados, setSeleccionados] = useState<string[]>([])
   const [borrandoMasivo, setBorrandoMasivo] = useState(false)
   const [estandarizando, setEstandarizando] = useState(false)
+  const [agruparPorCif, setAgruparPorCif] = useState(false)
+  const [busquedaInteligente, setBusquedaInteligente] = useState(true)
+  const [mostrarBarraLateralFija, setMostrarBarraLateralFija] = useState(false)
+  const [anchoScrollTabla, setAnchoScrollTabla] = useState(0)
   const POR_PAGINA = 50
   const fileRef = useRef<HTMLInputElement>(null)
+  const autoEstandarizadoRef = useRef(false)
+  const tablaScrollRef = useRef<HTMLDivElement | null>(null)
+  const barraFijaScrollRef = useRef<HTMLDivElement | null>(null)
+  const syncDesdeTablaRef = useRef(false)
+  const syncDesdeBarraRef = useRef(false)
   const router = useRouter()
 
   const [nombre, setNombre] = useState('')
@@ -55,7 +148,71 @@ export default function Clientes() {
   }
 
   useEffect(() => { verificarSesion() }, [])
-  useEffect(() => { cargarClientes() }, [pagina, busqueda, filtroEmpresa])
+  useEffect(() => { cargarClientes() }, [pagina, busqueda, filtroEmpresa, agruparPorCif])
+  useEffect(() => {
+    if (!sesionOK || autoEstandarizadoRef.current) return
+    autoEstandarizadoRef.current = true
+    void estandarizarNombresClientes({ forzarTodos: true })
+  }, [sesionOK])
+  useEffect(() => {
+    if (agruparPorCif || loading) {
+      setMostrarBarraLateralFija(false)
+      return
+    }
+
+    const contenedor = tablaScrollRef.current
+    if (!contenedor) {
+      setMostrarBarraLateralFija(false)
+      return
+    }
+
+    const actualizar = () => {
+      const necesita = contenedor.scrollWidth > contenedor.clientWidth + 1
+      setMostrarBarraLateralFija(necesita)
+      setAnchoScrollTabla(contenedor.scrollWidth)
+      if (!syncDesdeBarraRef.current) {
+        const barra = barraFijaScrollRef.current
+        if (barra) barra.scrollLeft = contenedor.scrollLeft
+      }
+    }
+
+    const onScrollTabla = () => {
+      if (syncDesdeBarraRef.current) return
+      syncDesdeTablaRef.current = true
+      const barra = barraFijaScrollRef.current
+      if (barra) barra.scrollLeft = contenedor.scrollLeft
+      requestAnimationFrame(() => { syncDesdeTablaRef.current = false })
+    }
+
+    const onScrollBarra = () => {
+      if (syncDesdeTablaRef.current) return
+      syncDesdeBarraRef.current = true
+      contenedor.scrollLeft = barraFijaScrollRef.current?.scrollLeft || 0
+      requestAnimationFrame(() => { syncDesdeBarraRef.current = false })
+    }
+
+    actualizar()
+    contenedor.addEventListener('scroll', onScrollTabla, { passive: true })
+    barraFijaScrollRef.current?.addEventListener('scroll', onScrollBarra, { passive: true })
+    window.addEventListener('resize', actualizar)
+    const ro = new ResizeObserver(actualizar)
+    ro.observe(contenedor)
+
+    return () => {
+      contenedor.removeEventListener('scroll', onScrollTabla)
+      barraFijaScrollRef.current?.removeEventListener('scroll', onScrollBarra)
+      window.removeEventListener('resize', actualizar)
+      ro.disconnect()
+    }
+  }, [agruparPorCif, loading, clientes.length, mostrarBarraLateralFija])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const empresaUrl = String(new URLSearchParams(window.location.search).get('empresa') || '').toLowerCase()
+    if (empresaUrl === 'teros' || empresaUrl === 'olipro') {
+      setFiltroEmpresa(empresaUrl)
+      setPagina(0)
+    }
+  }, [])
 
   async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
@@ -64,17 +221,104 @@ export default function Clientes() {
     if (data?.rol !== 'gerente' && data?.rol !== 'oficina') {
       router.push('/dashboard'); return
     }
+    setSesionOK(true)
   }
 
   async function cargarClientes() {
     setLoading(true)
-    let query = (supabase.from('clientes') as any).select('*', { count: 'exact' })
-    if (filtroEmpresa !== 'todos') query = query.eq('empresa', filtroEmpresa)
-    if (busqueda.trim()) query = query.ilike('nombre', `%${busqueda.trim()}%`)
-    const { data, count } = await query.order('nombre').range(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA - 1)
-    if (data) setClientes(data)
-    if (count !== null) setTotalClientes(count)
-    setLoading(false)
+    const termino = busqueda.trim()
+    const construirQueryBase = (aplicarBusquedaBd: boolean) => {
+      let q = (supabase.from('clientes') as any).select('*', { count: 'exact' })
+      if (filtroEmpresa !== 'todos') q = q.eq('empresa', filtroEmpresa)
+      if (aplicarBusquedaBd && termino) {
+        q = q.or(
+          `nombre.ilike.%${termino}%,nombre_fiscal.ilike.%${termino}%,cif.ilike.%${termino}%,poblacion.ilike.%${termino}%`
+        )
+      }
+      return q
+    }
+
+    try {
+      if (!agruparPorCif) {
+        if (termino && busquedaInteligente) {
+          const LOTE = 500
+          const MAX_PAGINAS = 20
+          const todos: any[] = []
+          let page = 0
+          let total = 0
+          while (page < MAX_PAGINAS) {
+            const { data, count } = await construirQueryBase(false)
+              .order('nombre')
+              .range(page * LOTE, (page + 1) * LOTE - 1)
+
+            if (count !== null) total = count
+            if (!data || data.length === 0) break
+            todos.push(...data)
+            if (data.length < LOTE) break
+            page += 1
+          }
+
+          const ranked = todos
+            .map((c) => ({ c, score: puntuarClienteBusqueda(c, termino) }))
+            .filter((x) => x.score > 0)
+            .sort((a, b) => b.score - a.score || String(a.c.nombre || '').localeCompare(String(b.c.nombre || ''), 'es'))
+            .map((x) => x.c)
+
+          const inicio = pagina * POR_PAGINA
+          const fin = (pagina + 1) * POR_PAGINA
+          setClientes(ranked.slice(inicio, fin))
+          setTotalClientes(ranked.length)
+          if (ranked.length === 0 && total > 0) {
+            const { data } = await construirQueryBase(true).order('nombre').range(0, POR_PAGINA - 1)
+            if (data) {
+              setClientes(data)
+              setTotalClientes(data.length)
+            }
+          }
+        } else {
+          const { data, count } = await construirQueryBase(Boolean(termino))
+            .order('nombre')
+            .range(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA - 1)
+          if (data) setClientes(data)
+          if (count !== null) setTotalClientes(count)
+        }
+      } else {
+        const LOTE = 500
+        const todos: any[] = []
+        let page = 0
+        let total = 0
+        const MAX_PAGINAS = 40
+
+        while (page < MAX_PAGINAS) {
+          const { data, count } = await construirQueryBase(Boolean(termino) && !busquedaInteligente)
+            .order('cif', { nullsFirst: false })
+            .order('nombre')
+            .range(page * LOTE, (page + 1) * LOTE - 1)
+
+          if (count !== null) total = count
+          if (!data || data.length === 0) break
+
+          todos.push(...data)
+          if (data.length < LOTE) break
+          page += 1
+        }
+
+        if (termino && busquedaInteligente) {
+          const ranked = todos
+            .map((c) => ({ c, score: puntuarClienteBusqueda(c, termino) }))
+            .filter((x) => x.score > 0)
+            .sort((a, b) => b.score - a.score || String(a.c.nombre || '').localeCompare(String(b.c.nombre || ''), 'es'))
+            .map((x) => x.c)
+          setClientes(ranked)
+          setTotalClientes(ranked.length)
+        } else {
+          setClientes(todos)
+          setTotalClientes(total)
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   function abrirFormNuevo() {
@@ -229,8 +473,11 @@ export default function Clientes() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  async function estandarizarNombresClientes() {
-    if (!confirm('Estandarizar nombres de clientes (comercial y fiscal) segun el filtro actual?')) return
+  async function estandarizarNombresClientes(opts?: { forzarTodos?: boolean; silencioso?: boolean }) {
+    const filtroObjetivo = opts?.forzarTodos ? 'todos' : filtroEmpresa
+    if (!opts?.silencioso && !opts?.forzarTodos) {
+      if (!confirm('Estandarizar nombres de clientes (comercial y fiscal) segun el filtro actual?')) return
+    }
     setEstandarizando(true)
     try {
       const LOTE_LECTURA = 500
@@ -243,7 +490,7 @@ export default function Clientes() {
           .order('id')
           .range(paginaLectura * LOTE_LECTURA, (paginaLectura + 1) * LOTE_LECTURA - 1)
 
-        if (filtroEmpresa !== 'todos') q = q.eq('empresa', filtroEmpresa)
+        if (filtroObjetivo !== 'todos') q = q.eq('empresa', filtroObjetivo)
 
         const { data, error } = await q
         if (error) throw new Error(error.message)
@@ -260,26 +507,21 @@ export default function Clientes() {
       let primerError = ''
 
       for (const c of filas) {
-        const normalizado = normalizarRegistroCliente(c)
-        const actual = normalizarRegistroCliente({
-          nombre: c.nombre || '',
-          nombre_fiscal: c.nombre_fiscal || '',
-          cif: c.cif || '',
-          direccion: c.direccion || '',
-          poblacion: c.poblacion || '',
-          telefono: c.telefono || '',
-          movil: c.movil || '',
-          email: c.email || '',
-          notas: c.notas || '',
-          empresa: c.empresa || 'teros',
-        })
+        const nombreNormalizado = estandarizarNombreComercial(c.nombre || '')
+        const fiscalOriginal = String(c.nombre_fiscal || '').trim()
+        const fiscalBase = fiscalOriginal || c.nombre || ''
+        const fiscalNormalizado = estandarizarNombreFiscal(fiscalBase)
+        const cambios: any = {}
 
-        if (JSON.stringify(actual) === JSON.stringify(normalizado)) {
+        if ((c.nombre || '') !== nombreNormalizado) cambios.nombre = nombreNormalizado
+        if (fiscalOriginal && fiscalOriginal !== fiscalNormalizado) cambios.nombre_fiscal = fiscalNormalizado
+
+        if (Object.keys(cambios).length === 0) {
           sinCambios++
           continue
         }
 
-        const { error: errUpdate } = await (supabase.from('clientes') as any).update(normalizado).eq('id', c.id)
+        const { error: errUpdate } = await (supabase.from('clientes') as any).update(cambios).eq('id', c.id)
         if (errUpdate) {
           fallidos++
           if (!primerError) primerError = errUpdate.message || 'Error desconocido'
@@ -292,7 +534,9 @@ export default function Clientes() {
       if (fallidos > 0) {
         alert(`Estandarizacion completada con incidencias.\nActualizados: ${cambiados}\nSin cambios: ${sinCambios}\nFallidos: ${fallidos}\nPrimer error: ${primerError}`)
       } else {
-        alert(`Estandarizacion completada.\nActualizados: ${cambiados}\nSin cambios: ${sinCambios}`)
+        if (!opts?.silencioso || cambiados > 0) {
+          alert(`Estandarizacion completada.\nActualizados: ${cambiados}\nSin cambios: ${sinCambios}`)
+        }
       }
     } catch (error: any) {
       alert('No se pudo completar la estandarizacion: ' + String(error?.message || 'Error desconocido'))
@@ -320,6 +564,31 @@ export default function Clientes() {
     XLSX.writeFile(wb, `clientes_${filtroEmpresa}_${new Date().toISOString().slice(0, 10)}.xlsx`)
   }
 
+  function claveCif(valor: unknown) {
+    return String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  }
+
+  const gruposPorCif = useMemo(() => {
+    const map = new Map<string, { cif: string; clientes: any[] }>()
+
+    for (const c of clientes) {
+      const key = claveCif(c.cif) || `SIN_CIF:${c.id}`
+      const cifLabel = String(c.cif || '').trim() || 'SIN CIF'
+      if (!map.has(key)) map.set(key, { cif: cifLabel, clientes: [] })
+      map.get(key)!.clientes.push(c)
+    }
+
+    return Array.from(map.values())
+      .sort((a, b) => {
+        if (b.clientes.length !== a.clientes.length) return b.clientes.length - a.clientes.length
+        return a.cif.localeCompare(b.cif, 'es')
+      })
+      .map((g) => ({
+        ...g,
+        locales: g.clientes.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')),
+      }))
+  }, [clientes])
+
   const totalPaginas = Math.ceil(totalClientes / POR_PAGINA)
 
   const EMPRESAS = [
@@ -343,17 +612,12 @@ export default function Clientes() {
           <button onClick={exportarExcel} className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>
             Exportar Excel
           </button>
-          <button
-            onClick={estandarizarNombresClientes}
-            disabled={estandarizando}
-            className="text-sm px-4 py-2 rounded-xl disabled:opacity-50"
-            style={s.btnSecondary}
-          >
-            {estandarizando ? 'Estandarizando...' : 'Estandarizar nombres de clientes'}
-          </button>
           <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nuevo cliente
           </button>
+          {estandarizando && (
+            <span className="text-xs" style={{ color: '#06b6d4' }}>Estandarizando clientes...</span>
+          )}
         </div>
       </div>
 
@@ -409,8 +673,32 @@ export default function Clientes() {
             className="flex-1 rounded-xl px-4 py-2 text-sm outline-none"
             style={s.inputStyle}
           />
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{totalClientes} clientes</p>
+          <button
+            onClick={() => { setAgruparPorCif(v => !v); setPagina(0); setSeleccionados([]) }}
+            className="text-sm px-4 py-2 rounded-xl font-medium"
+            style={agruparPorCif
+              ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }
+              : s.btnSecondary}
+          >
+            {agruparPorCif ? 'Vista normal' : 'Agrupar por CIF'}
+          </button>
+          <button
+            onClick={() => { setBusquedaInteligente(v => !v); setPagina(0) }}
+            className="text-sm px-4 py-2 rounded-xl font-medium"
+            style={busquedaInteligente
+              ? { background: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }
+              : s.btnSecondary}
+            title="Activa ranking inteligente por nombre comercial, fiscal, CIF, población y teléfonos"
+          >
+            {busquedaInteligente ? 'IA búsqueda ON' : 'IA búsqueda OFF'}
+          </button>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            {agruparPorCif ? `${gruposPorCif.length} grupos` : `${totalClientes} clientes`}
+          </p>
         </div>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+          Si faltan columnas por ver, desplaza la tabla lateralmente.
+        </p>
 
         {seleccionados.length > 0 && (
           <div className="rounded-2xl p-3 mb-4 flex items-center gap-3 flex-wrap" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
@@ -504,9 +792,101 @@ export default function Clientes() {
           </div>
         ) : (
           <>
+            {agruparPorCif && (
+              <div className="flex flex-col gap-3 mb-4">
+                {gruposPorCif.map((grupo) => {
+                  const fiscales = Array.from(
+                    new Set(
+                      grupo.locales
+                        .map((c: any) => String(c.nombre_fiscal || '').trim())
+                        .filter(Boolean)
+                    )
+                  )
+                  const fiscalTxt = fiscales.length === 0
+                    ? 'Sin nombre fiscal'
+                    : fiscales.length === 1
+                      ? fiscales[0]
+                      : `${fiscales[0]} (+${fiscales.length - 1})`
+
+                  return (
+                    <div key={`${grupo.cif}-${grupo.locales[0]?.id || 'x'}`} className="rounded-2xl p-4" style={s.cardStyle}>
+                      <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>CIF</p>
+                          <p className="font-semibold text-base" style={{ color: 'var(--text)' }}>{grupo.cif}</p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{fiscalTxt}</p>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+                          {grupo.locales.length} {grupo.locales.length === 1 ? 'local' : 'locales'}
+                        </span>
+                      </div>
+                      <div className="overflow-x-scroll pb-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+                        <table className="min-w-[1150px] w-full text-sm">
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                              {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Poblacion', 'Telefono', 'Empresa', ''].map(h => (
+                                <th key={h} className="text-left px-3 py-2 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {grupo.locales.map((c: any) => (
+                              <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                <td className="px-3 py-2">
+                                  <a href={`/clientes/${c.id}`} className="font-medium hover:underline" style={{ color: 'var(--text)' }}>{c.nombre}</a>
+                                </td>
+                                <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{c.nombre_fiscal || '—'}</td>
+                                <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{c.cif || '—'}</td>
+                                <td className="px-3 py-2 text-xs" style={{ color: 'var(--text-muted)' }}>{c.poblacion || '—'}</td>
+                                <td className="px-3 py-2">
+                                  {c.telefono
+                                    ? <a href={`tel:${c.telefono}`} className="text-sm font-medium" style={{ color: '#34d399' }}>📞 {c.telefono}</a>
+                                    : c.movil
+                                    ? <a href={`tel:${c.movil}`} className="text-sm font-medium" style={{ color: '#34d399' }}>📱 {c.movil}</a>
+                                    : <span style={{ color: 'var(--text-subtle)' }}>—</span>}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className="text-xs px-2 py-0.5 rounded-full"
+                                    style={c.empresa === 'teros'
+                                      ? { background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }
+                                      : { background: 'rgba(124,58,237,0.15)', color: '#a78bfa' }}>
+                                    {c.empresa === 'teros' ? 'Teros' : 'Olipro'}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex gap-2 justify-end">
+                                    {(c.direccion || c.poblacion) && (
+                                      <button onClick={() => abrirMaps(`${c.direccion} ${c.poblacion}`)} className="text-xs px-2 py-1 rounded-lg"
+                                        style={{ color: '#06b6d4', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.2)' }}>
+                                        Maps
+                                      </button>
+                                    )}
+                                    <button onClick={() => abrirFormEditar(c)} className="text-xs px-2 py-1 rounded-lg"
+                                      style={{ color: '#a78bfa', background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)' }}>
+                                      Editar
+                                    </button>
+                                    <button onClick={() => eliminarCliente(c.id)} className="text-xs px-2 py-1 rounded-lg"
+                                      style={{ color: '#f87171', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                                      Eliminar
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {!agruparPorCif && (
+              <>
             <div className="rounded-2xl overflow-hidden mb-4" style={s.cardStyle}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div ref={tablaScrollRef} className="overflow-x-scroll pb-2" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <table className="min-w-[1150px] w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
                       <th className="px-4 py-3">
@@ -589,9 +969,20 @@ export default function Clientes() {
                 </button>
               </div>
             </div>
+              </>
+            )}
           </>
         )}
       </div>
+      {mostrarBarraLateralFija && !agruparPorCif && (
+        <div className="fixed left-0 right-0 z-[70] px-3 md:px-6" style={{ bottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}>
+          <div className="max-w-6xl mx-auto rounded-lg px-2 py-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+            <div ref={barraFijaScrollRef} className="overflow-x-scroll overflow-y-hidden" style={{ height: '14px', WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ width: `${anchoScrollTabla}px`, height: '1px' }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
