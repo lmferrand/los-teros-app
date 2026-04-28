@@ -199,45 +199,282 @@ export default function Planificacion() {
     return url
   }
 
-  function construirRutasMapa(ordenesBase: any[]) {
-    const direccionesGenerales: string[] = []
-    const rutasPorTecnico = new Map<string, { id: string; nombre: string; ordenes: any[]; direcciones: string[] }>()
+  function fechaOtKey(ot: any) {
+    if (!ot?.fecha_programada) return 'sin_fecha'
+    const d = new Date(ot.fecha_programada)
+    if (Number.isNaN(d.getTime())) return 'sin_fecha'
+    return d.toISOString().slice(0, 10)
+  }
 
-    for (const o of ordenesBase) {
-      const cliente = getClienteOt(o)
-      const direccion = String(cliente?.direccion || '').trim()
-      if (direccion) direccionesGenerales.push(direccion)
+  function etiquetaDiaRuta(key: string) {
+    if (key === 'sin_fecha') return 'Sin fecha'
+    const d = new Date(`${key}T12:00:00`)
+    return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })
+  }
 
-      let tecnicosAsignados: string[] = []
-      if (Array.isArray(o.tecnicos_ids) && o.tecnicos_ids.length > 0) tecnicosAsignados = o.tecnicos_ids
-      else if (o.tecnico_id) tecnicosAsignados = [o.tecnico_id]
-      else tecnicosAsignados = ['sin_asignar']
+  function ordenarOtsParaMapa(ots: any[]) {
+    const conHora = ots
+      .filter((o) => o.hora_fija && o.fecha_programada)
+      .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
+    const flexibles = ots
+      .filter((o) => !o.hora_fija)
+      .sort((a, b) => prioridadPeso(b.prioridad || '2') - prioridadPeso(a.prioridad || '2'))
 
-      for (const tecnicoId of tecnicosAsignados) {
-        const key = `tec-${tecnicoId}`
-        if (!rutasPorTecnico.has(key)) {
-          const nombreTecnico = tecnicoId === 'sin_asignar'
-            ? 'Sin asignar'
-            : tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico'
-          rutasPorTecnico.set(key, { id: key, nombre: nombreTecnico, ordenes: [], direcciones: [] })
+    const paradas: any[] = []
+    let zonaActual = 'elche'
+    let horaCursor = 6 * 60
+
+    function elegirFlexible(hastaMin: number | null) {
+      let bestIdx = -1
+      let bestScore = Number.POSITIVE_INFINITY
+      for (let i = 0; i < flexibles.length; i++) {
+        const ot = flexibles[i]
+        const cli = getClienteOt(ot)
+        const zona = detectarZona(cli?.direccion || '')
+        const traslado = calcularTiempoEntreZonas(zonaActual, zona)
+        const inicio = horaCursor + traslado
+        const fin = inicio + duracionOtMin(ot)
+        if (hastaMin !== null && fin > hastaMin) continue
+        const score = traslado * 1.6 + (ZONAS[zona]?.orden || 2) * 2 - prioridadPeso(ot.prioridad || '2')
+        if (score < bestScore) {
+          bestScore = score
+          bestIdx = i
         }
-        const rutaTec = rutasPorTecnico.get(key)!
-        rutaTec.ordenes.push(o)
-        if (direccion) rutaTec.direcciones.push(direccion)
+      }
+      return bestIdx
+    }
+
+    function insertarFlexibles(hastaMin: number | null) {
+      while (flexibles.length > 0) {
+        const idx = elegirFlexible(hastaMin)
+        if (idx < 0) break
+        const [ot] = flexibles.splice(idx, 1)
+        const cli = getClienteOt(ot)
+        const zona = detectarZona(cli?.direccion || '')
+        const traslado = calcularTiempoEntreZonas(zonaActual, zona)
+        const inicio = horaCursor + traslado
+        const fin = inicio + duracionOtMin(ot)
+        paradas.push({
+          ot,
+          cliente: cli,
+          zona,
+          direccion: String(cli?.direccion || '').trim(),
+          estInicioMin: inicio,
+          estFinMin: fin,
+          horaFija: false,
+          trasladoDesdeAnterior: traslado,
+        })
+        horaCursor = fin
+        zonaActual = zona
       }
     }
 
-    return [
-      {
-        id: 'general',
-        nombre: 'Ruta general empresa',
-        ordenes: ordenesBase,
-        direcciones: normalizarDirecciones(direccionesGenerales),
-      },
-      ...Array.from(rutasPorTecnico.values())
-        .map((ruta) => ({ ...ruta, direcciones: normalizarDirecciones(ruta.direcciones) }))
-        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')),
-    ]
+    for (const fija of conHora) {
+      const fijaMin = horaOtMin(fija)
+      insertarFlexibles(fijaMin)
+      const cli = getClienteOt(fija)
+      const zona = detectarZona(cli?.direccion || '')
+      const traslado = calcularTiempoEntreZonas(zonaActual, zona)
+      const llegada = horaCursor + traslado
+      const inicio = Math.max(fijaMin || llegada, llegada)
+      const fin = inicio + duracionOtMin(fija)
+      paradas.push({
+        ot: fija,
+        cliente: cli,
+        zona,
+        direccion: String(cli?.direccion || '').trim(),
+        estInicioMin: inicio,
+        estFinMin: fin,
+        horaFija: true,
+        trasladoDesdeAnterior: traslado,
+      })
+      horaCursor = fin
+      zonaActual = zona
+    }
+
+    insertarFlexibles(null)
+    return paradas
+  }
+
+  function dividirParadasEnRutas(paradas: any[], maxMin = 9 * 60) {
+    if (!paradas.length) return []
+    const rutas: any[][] = []
+    let actual: any[] = []
+    let carga = 0
+    for (const p of paradas) {
+      const dur = Math.max(20, Number(p.estFinMin || 0) - Number(p.estInicioMin || 0))
+      const traslado = Number(p.trasladoDesdeAnterior || 0)
+      const consumo = dur + traslado
+      if (actual.length > 0 && carga + consumo > maxMin) {
+        rutas.push(actual)
+        actual = []
+        carga = 0
+      }
+      actual.push(p)
+      carga += consumo
+    }
+    if (actual.length > 0) rutas.push(actual)
+    return rutas
+  }
+
+  function construirRutasMapa(ordenesBase: any[]) {
+    if (!ordenesBase.length) return []
+    const ordenadas = [...ordenesBase].sort((a, b) => new Date(a.fecha_programada || 0).getTime() - new Date(b.fecha_programada || 0).getTime())
+    const rutas: any[] = []
+
+    const paradasGeneral = ordenarOtsParaMapa(ordenadas)
+    rutas.push({
+      id: 'general',
+      nombre: 'Ruta general empresa',
+      ordenes: ordenadas,
+      paradas: paradasGeneral,
+      direcciones: normalizarDirecciones(paradasGeneral.map((p: any) => p.direccion).filter(Boolean)),
+    })
+
+    const porDia = new Map<string, any[]>()
+    for (const ot of ordenadas) {
+      const key = fechaOtKey(ot)
+      if (!porDia.has(key)) porDia.set(key, [])
+      porDia.get(key)!.push(ot)
+    }
+
+    for (const [diaKey, otsDia] of Array.from(porDia.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+      const labelDia = etiquetaDiaRuta(diaKey)
+      const porTecnico = new Map<string, any[]>()
+      const sinAsignar: any[] = []
+
+      for (const ot of otsDia) {
+        const techs = obtenerTecnicosOt(ot)
+        if (!techs.length) {
+          sinAsignar.push(ot)
+          continue
+        }
+        for (const tech of techs) {
+          if (!porTecnico.has(tech)) porTecnico.set(tech, [])
+          porTecnico.get(tech)!.push(ot)
+        }
+      }
+
+      for (const [tecnicoId, otsTec] of Array.from(porTecnico.entries()).sort((a, b) => {
+        const n1 = tecnicos.find((t) => t.id === a[0])?.nombre || ''
+        const n2 = tecnicos.find((t) => t.id === b[0])?.nombre || ''
+        return n1.localeCompare(n2, 'es')
+      })) {
+        const nombreTec = tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico'
+        const paradas = ordenarOtsParaMapa(otsTec)
+        rutas.push({
+          id: `dia-${diaKey}-tec-${tecnicoId}`,
+          nombre: `${labelDia} · ${nombreTec}`,
+          ordenes: otsTec,
+          paradas,
+          direcciones: normalizarDirecciones(paradas.map((p: any) => p.direccion).filter(Boolean)),
+        })
+      }
+
+      if (sinAsignar.length > 0) {
+        const paradasSinAsignar = ordenarOtsParaMapa(sinAsignar)
+        const bloques = dividirParadasEnRutas(paradasSinAsignar, 9 * 60)
+        bloques.forEach((bloque, idx) => {
+          rutas.push({
+            id: `dia-${diaKey}-sin-${idx + 1}`,
+            nombre: `${labelDia} · Ruta ${idx + 1} (sin asignar)`,
+            ordenes: bloque.map((p: any) => p.ot),
+            paradas: bloque,
+            direcciones: normalizarDirecciones(bloque.map((p: any) => p.direccion).filter(Boolean)),
+          })
+        })
+      }
+    }
+
+    return rutas
+  }
+
+  function construirRutasMapaExtendido(ordenesBase: any[]) {
+    if (!ordenesBase.length) return []
+    const ordenadas = [...ordenesBase].sort((a, b) => new Date(a.fecha_programada || 0).getTime() - new Date(b.fecha_programada || 0).getTime())
+    const rutas: any[] = []
+    const capacidadRutaMin = 9 * 60
+
+    const paradasGeneral = ordenarOtsParaMapa(ordenadas)
+    rutas.push({
+      id: 'general',
+      nombre: 'Ruta general empresa',
+      ordenes: ordenadas,
+      paradas: paradasGeneral,
+      direcciones: normalizarDirecciones(paradasGeneral.map((p: any) => p.direccion).filter(Boolean)),
+    })
+
+    const porDia = new Map<string, any[]>()
+    for (const ot of ordenadas) {
+      const key = fechaOtKey(ot)
+      if (!porDia.has(key)) porDia.set(key, [])
+      porDia.get(key)!.push(ot)
+    }
+
+    for (const [diaKey, otsDia] of Array.from(porDia.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+      const labelDia = etiquetaDiaRuta(diaKey)
+
+      const paradasDia = ordenarOtsParaMapa(otsDia)
+      const bloquesDia = dividirParadasEnRutas(paradasDia, capacidadRutaMin)
+      bloquesDia.forEach((bloque, idx) => {
+        rutas.push({
+          id: `dia-${diaKey}-global-${idx + 1}`,
+          nombre: `${labelDia} - Ruta global ${idx + 1}`,
+          ordenes: bloque.map((p: any) => p.ot),
+          paradas: bloque,
+          direcciones: normalizarDirecciones(bloque.map((p: any) => p.direccion).filter(Boolean)),
+        })
+      })
+
+      const porTecnico = new Map<string, any[]>()
+      const sinAsignar: any[] = []
+      for (const ot of otsDia) {
+        const techs = obtenerTecnicosOt(ot)
+        if (!techs.length) {
+          sinAsignar.push(ot)
+          continue
+        }
+        for (const tech of techs) {
+          if (!porTecnico.has(tech)) porTecnico.set(tech, [])
+          porTecnico.get(tech)!.push(ot)
+        }
+      }
+
+      for (const [tecnicoId, otsTec] of Array.from(porTecnico.entries()).sort((a, b) => {
+        const n1 = tecnicos.find((t) => t.id === a[0])?.nombre || ''
+        const n2 = tecnicos.find((t) => t.id === b[0])?.nombre || ''
+        return n1.localeCompare(n2, 'es')
+      })) {
+        const nombreTec = tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico'
+        const paradasTecnico = ordenarOtsParaMapa(otsTec)
+        const bloquesTecnico = dividirParadasEnRutas(paradasTecnico, capacidadRutaMin)
+        bloquesTecnico.forEach((bloque, idx) => {
+          rutas.push({
+            id: `dia-${diaKey}-tec-${tecnicoId}-${idx + 1}`,
+            nombre: `${labelDia} - ${nombreTec} - Ruta ${idx + 1}`,
+            ordenes: bloque.map((p: any) => p.ot),
+            paradas: bloque,
+            direcciones: normalizarDirecciones(bloque.map((p: any) => p.direccion).filter(Boolean)),
+          })
+        })
+      }
+
+      if (sinAsignar.length > 0) {
+        const paradasSinAsignar = ordenarOtsParaMapa(sinAsignar)
+        const bloquesSinAsignar = dividirParadasEnRutas(paradasSinAsignar, capacidadRutaMin)
+        bloquesSinAsignar.forEach((bloque, idx) => {
+          rutas.push({
+            id: `dia-${diaKey}-sin-${idx + 1}`,
+            nombre: `${labelDia} - Ruta ${idx + 1} (sin asignar)`,
+            ordenes: bloque.map((p: any) => p.ot),
+            paradas: bloque,
+            direcciones: normalizarDirecciones(bloque.map((p: any) => p.direccion).filter(Boolean)),
+          })
+        })
+      }
+    }
+
+    return rutas
   }
 
   const ZONAS: any = {
@@ -270,6 +507,13 @@ export default function Planificacion() {
     const h = Math.floor(minutos / 60)
     const m = minutos % 60
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  }
+
+  function letraParada(idx: number) {
+    const abecedario = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    if (idx < abecedario.length) return abecedario[idx]
+    const prefijo = abecedario[Math.floor(idx / abecedario.length) - 1] || 'Z'
+    return `${prefijo}${abecedario[idx % abecedario.length]}`
   }
 
   function obtenerOpcionesNegociables(parada: any) {
@@ -845,7 +1089,7 @@ export default function Planificacion() {
     })
     .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
 
-  const rutasMapa = construirRutasMapa(ordenesMapa)
+  const rutasMapa = construirRutasMapaExtendido(ordenesMapa)
   const rutaMapaActiva = rutasMapa.find((r) => r.id === rutaMapaId) || rutasMapa[0]
   const rutaMapaEmbedUrl = rutaMapaActiva ? crearMapaEmbedUrl(rutaMapaActiva.direcciones) : null
   const rutaMapaAbrirUrl = rutaMapaActiva ? crearRutaGoogleMapsUrl(rutaMapaActiva.direcciones) : null
@@ -857,7 +1101,7 @@ export default function Planificacion() {
     const fecha = new Date(o.fecha_programada)
     return fecha >= inicioRutaDiaria && fecha <= finRutaDiaria
   })
-  const rutasMapaDiaria = construirRutasMapa(ordenesRutaDiaria)
+  const rutasMapaDiaria = construirRutasMapaExtendido(ordenesRutaDiaria)
   const rutaDiariaActiva = rutasMapaDiaria.find((r) => r.id === rutaMapaId) || rutasMapaDiaria[0]
   const rutaDiariaCompartirUrl = rutaDiariaActiva ? crearRutaGoogleMapsUrl(rutaDiariaActiva.direcciones) : null
 
@@ -1420,6 +1664,47 @@ export default function Planificacion() {
               ) : (
                 <div className="rounded-xl p-4 text-sm" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>
                   No hay direcciones suficientes para mostrar el mapa en este periodo.
+                </div>
+              )}
+
+              {Array.isArray(rutaMapaActiva?.paradas) && rutaMapaActiva.paradas.length > 0 && (
+                <div className="mt-4 rounded-xl p-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                  <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>
+                    Itinerario operativo de la ruta
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {rutaMapaActiva.paradas.map((parada: any, idx: number) => {
+                      const clienteNombre = nombreComercialCliente(parada?.cliente) || parada?.cliente?.nombre || 'Sin cliente'
+                      const ot = parada?.ot
+                      const codigoOt = String(ot?.codigo || '').trim()
+                      const direccion = String(parada?.direccion || parada?.cliente?.direccion || '').trim()
+                      const inicio = Number(parada?.estInicioMin || 0)
+                      const fin = Number(parada?.estFinMin || 0)
+                      return (
+                        <div
+                          key={`${rutaMapaActiva.id}-parada-${idx}-${ot?.id || 'x'}`}
+                          className="rounded-xl px-3 py-3"
+                          style={{ border: '1px solid var(--border)', background: 'var(--card)' }}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
+                              {letraParada(idx)}
+                            </span>
+                            <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                              {formatHora(inicio)} - {formatHora(fin)}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{clienteNombre}</p>
+                          {codigoOt && (
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>OT {codigoOt}</p>
+                          )}
+                          {direccion && (
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{direccion}</p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
             </div>
