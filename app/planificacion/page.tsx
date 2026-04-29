@@ -349,7 +349,7 @@ export default function Planificacion() {
         const n2 = tecnicos.find((t) => t.id === b[0])?.nombre || ''
         return n1.localeCompare(n2, 'es')
       })) {
-        const nombreTec = tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico'
+        const nombreTec = tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Técnico'
         const paradas = ordenarOtsParaMapa(otsTec)
         rutas.push({
           id: `dia-${diaKey}-tec-${tecnicoId}`,
@@ -436,7 +436,7 @@ export default function Planificacion() {
         const n2 = tecnicos.find((t) => t.id === b[0])?.nombre || ''
         return n1.localeCompare(n2, 'es')
       })) {
-        const nombreTec = tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico'
+        const nombreTec = tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Técnico'
         const paradasTecnico = ordenarOtsParaMapa(otsTec)
         const bloquesTecnico = dividirParadasEnRutas(paradasTecnico, capacidadRutaMin)
         bloquesTecnico.forEach((bloque, idx) => {
@@ -587,7 +587,7 @@ export default function Planificacion() {
           setPresTitulo(json.descripcion || '')
           setPresImporte(String(json.importe || 0))
           setPresFecha(json.fecha ? convertirFecha(json.fecha) : new Date().toISOString().slice(0, 10))
-          setPresObs(`Presupuesto ${json.numero || ''} escaneado automaticamente`)
+        setPresObs(`Presupuesto ${json.numero || ''} escaneado automáticamente`)
           const objetivo = String(json.cliente || '').toLowerCase().trim()
           const clienteEncontrado = clientes.find((c: any) => {
             const comercial = nombreComercialCliente(c).toLowerCase()
@@ -792,7 +792,7 @@ export default function Planificacion() {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) {
-        setErrorSugerenciaPlan('Sesion no valida. Vuelve a iniciar sesion.')
+        setErrorSugerenciaPlan('Sesión no válida. Vuelve a iniciar sesión.')
         setSugiriendoPlan(false)
         return
       }
@@ -854,7 +854,7 @@ export default function Planificacion() {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) {
-        setErrorSugerenciaPlan('Sesion no valida. Vuelve a iniciar sesion.')
+        setErrorSugerenciaPlan('Sesión no válida. Vuelve a iniciar sesión.')
         setAplicandoSugerencia(false)
         return
       }
@@ -884,7 +884,7 @@ export default function Planificacion() {
       setMensajeSugerenciaPlan(
         failed > 0
           ? `Aplicados ${applied} cambios con ${failed} incidencias. Revisa las OT afectadas.`
-          : `Aplicados ${applied} cambios de planificacion.`
+          : `Aplicados ${applied} cambios de planificación.`
       )
       await refresh()
     } catch (error: any) {
@@ -904,7 +904,7 @@ export default function Planificacion() {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) {
-        setErrorSugerenciaPlan('Sesion no valida. Vuelve a iniciar sesion.')
+        setErrorSugerenciaPlan('Sesión no válida. Vuelve a iniciar sesión.')
         setAplicandoSugerencia(false)
         return
       }
@@ -945,7 +945,7 @@ export default function Planificacion() {
 
   const TABS = [
     { key: 'calendario', label: 'Calendario' },
-    { key: 'mis_ordenes', label: 'Mis ordenes', badge: misOrdenesPendientes.length },
+    { key: 'mis_ordenes', label: 'Mis órdenes', badge: misOrdenesPendientes.length },
     ...(esAdminOOficina ? [{ key: 'presupuestos', label: 'Presupuestos', badge: presEnviados }] : []),
     { key: 'rutas', label: 'Optimizar rutas' },
   ]
@@ -1057,12 +1057,12 @@ export default function Planificacion() {
         {vistaActiva === 'mis_ordenes' && (
           <div>
             <div className="mb-6">
-              <h2 className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Mis ordenes pendientes y en curso</h2>
-              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Solo las ordenes asignadas a ti</p>
+              <h2 className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Mis órdenes pendientes y en curso</h2>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Solo las órdenes asignadas a ti</p>
               {misOrdenesPendientes.length === 0 ? (
                 <div className="text-center py-12 rounded-2xl" style={s.cardStyle}>
                   <p className="text-3xl mb-2">✅</p>
-                  <p style={{ color: 'var(--text-muted)' }}>No tienes ordenes pendientes</p>
+                  <p style={{ color: 'var(--text-muted)' }}>No tienes órdenes pendientes</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -1094,7 +1094,7 @@ export default function Planificacion() {
             </div>
             {misOrdenesCompletadas.length > 0 && (
               <div>
-                <h2 className="font-semibold mb-4" style={{ color: 'var(--text)' }}>Mis ordenes completadas</h2>
+                <h2 className="font-semibold mb-4" style={{ color: 'var(--text)' }}>Mis órdenes completadas</h2>
                 <div className="flex flex-col gap-2">
                   {misOrdenesCompletadas.map(o => (
                     <div key={o.id} onClick={() => setOrdenSeleccionada(o)}
@@ -1133,7 +1133,7 @@ export default function Planificacion() {
 
             <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
               <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Escanear o subir presupuesto</p>
-              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Fotografía o sube el presupuesto de Holded y los datos se rellenaran automaticamente.</p>
+              <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Fotografía o sube el presupuesto de Holded y los datos se rellenarán automáticamente.</p>
               <label className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-medium cursor-pointer"
                 style={escaneando ? { ...s.btnSecondary, opacity: 0.6 } : s.btnPrimary}>
                 {escaneando ? 'Procesando imagen...' : '📷 Fotografiar o subir presupuesto'}
@@ -1262,7 +1262,7 @@ export default function Planificacion() {
             <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
               <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Mapa de rutas</h2>
               <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                Visualiza las ubicaciones por dia, semana o mes, y comparte la ruta diaria por enlace de Google Maps.
+                Visualiza las ubicaciones por día, semana o mes, y comparte la ruta diaria por enlace de Google Maps.
               </p>
 
               <div className="flex gap-2 flex-wrap mb-4">
@@ -1401,9 +1401,9 @@ export default function Planificacion() {
             </div>
 
             <div className="rounded-2xl p-5 mb-6" style={s.cardStyle}>
-              <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Sugerir planificacion optima</h2>
+              <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Sugerir planificación óptima</h2>
               <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-                Genera una propuesta inteligente para dia, semana o mes. No aplica cambios automaticamente: primero revisas y luego decides.
+                Genera una propuesta inteligente para día, semana o mes. No aplica cambios automáticamente: primero revisas y luego decides.
               </p>
 
               <div className="flex gap-3 items-end flex-wrap mb-4">
@@ -1440,7 +1440,7 @@ export default function Planificacion() {
                   className="text-sm px-4 py-2 rounded-xl font-medium disabled:opacity-50"
                   style={s.btnPrimary}
                 >
-                  {sugiriendoPlan ? 'Generando sugerencia...' : 'Sugerir planificacion optima'}
+                  {sugiriendoPlan ? 'Generando sugerencia...' : 'Sugerir planificación óptima'}
                 </button>
               </div>
 
@@ -1644,7 +1644,7 @@ export default function Planificacion() {
                 </div>
                 <div>
                   <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>
-                    {periodoRuta === 'dia' ? 'Dia a planificar' : periodoRuta === 'semana' ? 'Semana base' : 'Mes base'}
+                    {periodoRuta === 'dia' ? 'Día a planificar' : periodoRuta === 'semana' ? 'Semana base' : 'Mes base'}
                   </label>
                   <input type="date" value={fechaRuta} onChange={e => setFechaRuta(e.target.value)}
                     className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
@@ -1661,8 +1661,8 @@ export default function Planificacion() {
                 <p className="text-3xl mb-2">📅</p>
                 <p style={{ color: 'var(--text-muted)' }}>
                   {resultadoRuta?.periodo === 'dia'
-                    ? 'No hay ordenes pendientes para ese dia.'
-                    : `No hay ordenes pendientes para este periodo (${resultadoRuta?.etiquetaPeriodo || ''}).`}
+                    ? 'No hay órdenes pendientes para ese día.'
+                    : `No hay órdenes pendientes para este periodo (${resultadoRuta?.etiquetaPeriodo || ''}).`}
                 </p>
               </div>
             )}
@@ -1671,7 +1671,7 @@ export default function Planificacion() {
               <div className="flex flex-col gap-6">
                 <div className="rounded-2xl p-4" style={s.cardStyle}>
                   <p className="font-semibold" style={{ color: 'var(--text)' }}>{new Date(resultadoRuta.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</p>
-                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{resultadoRuta.totalOTs} ordenes - {resultadoRuta.resultados.length} trabajadores</p>
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{resultadoRuta.totalOTs} órdenes - {resultadoRuta.resultados.length} trabajadores</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
                     <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                       <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Traslado total</p>
@@ -1853,7 +1853,7 @@ export default function Planificacion() {
                     {resultadoRuta.etiquetaPeriodo}
                   </p>
                   <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-                    {resultadoRuta.totalOTs} ordenes - {resultadoRuta.resumenDias.length} dias con actividad
+                    {resultadoRuta.totalOTs} órdenes - {resultadoRuta.resumenDias.length} días con actividad
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
                     <div className="rounded-xl px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
@@ -1872,7 +1872,7 @@ export default function Planificacion() {
                 </div>
 
                 <div className="rounded-2xl p-5" style={s.cardStyle}>
-                  <p className="font-semibold mb-3" style={{ color: 'var(--text)' }}>Resumen por dia</p>
+                  <p className="font-semibold mb-3" style={{ color: 'var(--text)' }}>Resumen por día</p>
                   <div className="flex flex-col gap-2">
                     {resultadoRuta.resumenDias.map((dia: any) => (
                       <div key={`dia-${dia.fecha}`} className="rounded-xl px-3 py-3 flex items-center justify-between gap-3 flex-wrap" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
@@ -1922,7 +1922,7 @@ export default function Planificacion() {
                           <div className="flex flex-wrap gap-2 mt-2">
                             {item.opciones.map((op: any, idx: number) => (
                               <span key={`${item.ot.id}-op-${idx}`} className="text-xs px-2 py-1 rounded-lg" style={{ background: idx === 0 ? 'rgba(16,185,129,0.18)' : 'rgba(124,58,237,0.12)', color: idx === 0 ? '#34d399' : '#a78bfa', border: idx === 0 ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(124,58,237,0.25)' }}>
-                                {idx === 0 ? 'Recomendada' : `Opcion ${idx + 1}`}: {new Date(`${op.fecha}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} - {op.tecnicoNombre} - {formatHora(op.inicioEstimado)}-{formatHora(op.finEstimado)}
+                                {idx === 0 ? 'Recomendada' : `Opción ${idx + 1}`}: {new Date(`${op.fecha}T12:00:00`).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })} - {op.tecnicoNombre} - {formatHora(op.inicioEstimado)}-{formatHora(op.finEstimado)}
                               </span>
                             ))}
                           </div>

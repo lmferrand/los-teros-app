@@ -72,10 +72,10 @@ function getConfigBasica() {
 
 async function validarPermisos(req: NextRequest) {
   const token = getBearer(req)
-  if (!token) return { ok: false as const, status: 401, error: 'Falta token de autenticacion.' }
+  if (!token) return { ok: false as const, status: 401, error: 'Falta token de autenticación.' }
 
   const { url, anon } = getConfigBasica()
-  if (!url || !anon) return { ok: false as const, status: 500, error: 'Falta configuracion de Supabase.' }
+  if (!url || !anon) return { ok: false as const, status: 500, error: 'Falta configuración de Supabase.' }
 
   const supabaseUsuario = createClient(url, anon, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -84,7 +84,7 @@ async function validarPermisos(req: NextRequest) {
 
   const { data: userData, error: userError } = await supabaseUsuario.auth.getUser()
   if (userError || !userData?.user) {
-    return { ok: false as const, status: 401, error: 'Sesion no valida. Inicia sesion de nuevo.' }
+    return { ok: false as const, status: 401, error: 'Sesión no válida. Inicia sesión de nuevo.' }
   }
 
   const { data: perfil, error: perfilError } = await supabaseUsuario
@@ -228,8 +228,8 @@ async function resolverTokenProveedor(
 
     throw new Error(
       proveedor === 'dropbox'
-        ? 'No tienes Dropbox conectado. Conectalo en el modulo Respaldo.'
-        : 'No tienes Google Drive conectado. Conectalo en el modulo Respaldo.'
+        ? 'No tienes Dropbox conectado. Conéctalo en el módulo Respaldo.'
+        : 'No tienes Google Drive conectado. Conéctalo en el módulo Respaldo.'
     )
   }
 
@@ -244,8 +244,8 @@ async function resolverTokenProveedor(
   if (!integracion.refresh_token) {
     throw new Error(
       proveedor === 'dropbox'
-        ? 'El token de Dropbox caduco y no hay refresh token. Reconecta tu cuenta.'
-        : 'El token de Google Drive caduco y no hay refresh token. Reconecta tu cuenta.'
+        ? 'El token de Dropbox caducó y no hay refresh token. Reconecta tu cuenta.'
+        : 'El token de Google Drive caducó y no hay refresh token. Reconecta tu cuenta.'
     )
   }
 
@@ -356,7 +356,7 @@ async function subirADropbox(contenido: string, fileName: string, token: string)
     return {
       ok: false,
       destino: 'dropbox',
-      error: body?.error_summary || `Dropbox respondio ${res.status}.`,
+      error: body?.error_summary || `Dropbox respondió ${res.status}.`,
     }
   }
 
@@ -409,7 +409,7 @@ async function subirAGoogleDrive(contenido: string, fileName: string, token: str
     return {
       ok: false,
       destino: 'google_drive',
-      error: json?.error?.message || `Google Drive respondio ${res.status}.`,
+      error: json?.error?.message || `Google Drive respondió ${res.status}.`,
     }
   }
 
@@ -487,7 +487,7 @@ export async function POST(req: NextRequest) {
     const destinosValidos = new Set(['dropbox', 'google_drive', 'drive', 'all'])
     if (!destinosValidos.has(destino)) {
       return NextResponse.json(
-        { error: 'Destino invalido. Usa: dropbox, google_drive o all.' },
+        { error: 'Destino inválido. Usa: dropbox, google_drive o all.' },
         { status: 400 }
       )
     }

@@ -25,10 +25,10 @@ function getSupabasePublic() {
 
 async function validarUsuario(req: NextRequest) {
   const token = getBearer(req)
-  if (!token) throw new Error('Falta token de sesion.')
+  if (!token) throw new Error('Falta token de sesión.')
 
   const cfg = getSupabasePublic()
-  if (!cfg) throw new Error('Falta configuracion de Supabase.')
+  if (!cfg) throw new Error('Falta configuración de Supabase.')
 
   const userClient = createClient(cfg.url, cfg.anon, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -36,7 +36,7 @@ async function validarUsuario(req: NextRequest) {
   })
 
   const { data, error } = await userClient.auth.getUser()
-  if (error || !data?.user?.id) throw new Error('Sesion no valida.')
+  if (error || !data?.user?.id) throw new Error('Sesión no válida.')
   return data.user
 }
 
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     const autoUpload = Boolean(body?.auto_upload || body?.autoUpload)
 
     if (provider !== 'dropbox' && provider !== 'google_drive') {
-      return NextResponse.json({ error: 'Proveedor invalido. Usa dropbox o google_drive.' }, { status: 400 })
+      return NextResponse.json({ error: 'Proveedor inválido. Usa dropbox o google_drive.' }, { status: 400 })
     }
 
     const url =
@@ -113,9 +113,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, url })
   } catch (error: any) {
     return NextResponse.json(
-      { error: `No se pudo iniciar conexion OAuth: ${String(error?.message || 'Error desconocido')}` },
+      { error: `No se pudo iniciar conexión OAuth: ${String(error?.message || 'Error desconocido')}` },
       { status: 500 }
     )
   }
 }
-

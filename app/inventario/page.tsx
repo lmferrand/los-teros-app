@@ -8,6 +8,18 @@ import QRCode from 'qrcode'
 import AppHeader from '@/app/components/AppHeader'
 
 type VistaInventario = 'materiales' | 'equipos'
+type QrModalData = {
+  abierto: boolean
+  titulo: string
+  subtitulo: string
+  qrUrl: string
+}
+type OtEquipoData = {
+  ordenId: string
+  codigo: string
+  cliente: string
+  fecha: string
+}
 
 export default function Inventario() {
   const [materiales, setMateriales] = useState<any[]>([])
@@ -36,8 +48,48 @@ export default function Inventario() {
   const [marcaEq, setMarcaEq] = useState('')
   const [modeloEq, setModeloEq] = useState('')
   const [estadoEq, setEstadoEq] = useState('disponible')
+  const [cantidadDisponibleEq, setCantidadDisponibleEq] = useState('1')
   const [ubicacionEq, setUbicacionEq] = useState('')
   const [notasEq, setNotasEq] = useState('')
+  const [qrModal, setQrModal] = useState<QrModalData>({
+    abierto: false,
+    titulo: '',
+    subtitulo: '',
+    qrUrl: '',
+  })
+  const [otPorEquipo, setOtPorEquipo] = useState<Record<string, OtEquipoData>>({})
+
+  const cargarOtEquiposEnCliente = useCallback(async (listaEquipos: any[]) => {
+    const equiposEnCliente = (listaEquipos || []).filter((e: any) => e?.estado === 'en_cliente')
+    if (equiposEnCliente.length === 0) {
+      setOtPorEquipo({})
+      return
+    }
+
+    const idsEquipos = equiposEnCliente.map((e: any) => e.id).filter(Boolean)
+    const { data } = await (supabase.from('movimientos') as any)
+      .select('equipo_id, orden_id, fecha, ordenes(id, codigo, clientes(nombre, nombre_comercial))')
+      .in('equipo_id', idsEquipos)
+      .eq('tipo', 'salida')
+      .not('orden_id', 'is', null)
+      .order('fecha', { ascending: false, nullsFirst: false })
+
+    const mapa: Record<string, OtEquipoData> = {}
+    for (const mov of data || []) {
+      const equipoId = String(mov?.equipo_id || '').trim()
+      if (!equipoId || mapa[equipoId]) continue
+
+      const orden = Array.isArray(mov?.ordenes) ? mov.ordenes[0] : mov?.ordenes
+      const cliente = Array.isArray(orden?.clientes) ? orden.clientes[0] : orden?.clientes
+      mapa[equipoId] = {
+        ordenId: String(orden?.id || mov?.orden_id || ''),
+        codigo: String(orden?.codigo || '').trim(),
+        cliente: String(cliente?.nombre_comercial || cliente?.nombre || '').trim(),
+        fecha: String(mov?.fecha || ''),
+      }
+    }
+    setOtPorEquipo(mapa)
+  }, [])
 
   const verificarSesion = useCallback(async () => {
     const {
@@ -52,9 +104,11 @@ export default function Inventario() {
       supabase.from('equipos').select('*').order('codigo'),
     ])
     if (mats.data) setMateriales(mats.data)
+    const equiposData = eqs.data || []
     if (eqs.data) setEquipos(eqs.data)
+    await cargarOtEquiposEnCliente(equiposData)
     setLoading(false)
-  }, [])
+  }, [cargarOtEquiposEnCliente])
 
   useEffect(() => {
     void verificarSesion()
@@ -72,6 +126,15 @@ export default function Inventario() {
     setVista(nuevaVista)
     const query = nuevaVista === 'equipos' ? '?tab=equipos' : ''
     router.replace(`/inventario${query}`)
+  }
+
+  function extraerPathStorageMaterialUrl(url: string) {
+    const marcador = '/storage/v1/object/public/fotos-materiales/'
+    const idx = String(url || '').indexOf(marcador)
+    if (idx < 0) return null
+    const encodedPath = String(url || '').slice(idx + marcador.length)
+    if (!encodedPath) return null
+    return decodeURIComponent(encodedPath)
   }
 
   async function subirFotoMaterial(e: React.ChangeEvent<HTMLInputElement>) {
@@ -116,6 +179,8 @@ export default function Inventario() {
 
   async function guardarMaterial(e: React.FormEvent) {
     e.preventDefault()
+    const fotoAnterior = String(editandoMaterial?.foto_url || '').trim()
+    const fotoNueva = String(fotoUrl || '').trim()
     const datos = {
       nombre,
       referencia,
@@ -127,14 +192,35 @@ export default function Inventario() {
       notas,
       foto_url: fotoUrl || null,
     }
+    let materialGuardado: any = null
     if (editandoMaterial) {
-      await supabase.from('materiales').update(datos).eq('id', editandoMaterial.id)
+      const { data } = await supabase
+        .from('materiales')
+        .update(datos)
+        .eq('id', editandoMaterial.id)
+        .select('*')
+        .single()
+      materialGuardado = data || { ...editandoMaterial, ...datos }
     } else {
-      await supabase.from('materiales').insert(datos)
+      const { data } = await supabase
+        .from('materiales')
+        .insert(datos)
+        .select('*')
+        .single()
+      materialGuardado = data || null
+    }
+    if (editandoMaterial && fotoAnterior && fotoAnterior !== fotoNueva) {
+      const pathAnterior = extraerPathStorageMaterialUrl(fotoAnterior)
+      if (pathAnterior) {
+        await supabase.storage.from('fotos-materiales').remove([pathAnterior])
+      }
     }
     setMostrarFormMaterial(false)
     setEditandoMaterial(null)
-    cargarTodo()
+    await cargarTodo()
+    if (materialGuardado) {
+      await generarQRMaterial(materialGuardado)
+    }
   }
 
   async function ajustarStock(id: string, cantidad: number) {
@@ -151,24 +237,41 @@ export default function Inventario() {
     cargarTodo()
   }
 
+  function payloadQrMaterial(mat: any) {
+    return JSON.stringify({
+      tipo: 'material',
+      id: mat.id,
+      nombre: mat.nombre,
+      referencia: mat.referencia || null,
+      unidad: mat.unidad || null,
+    })
+  }
+
+  function payloadQrEquipo(eq: any) {
+    return JSON.stringify({
+      tipo: 'equipo',
+      id: eq.id,
+      codigo: eq.codigo,
+      tipo_equipo: eq.tipo || null,
+    })
+  }
+
+  async function abrirQrEnModal(titulo: string, subtitulo: string, payload: string) {
+    const qrUrl = await QRCode.toDataURL(payload, { width: 360, margin: 2 })
+    setQrModal({
+      abierto: true,
+      titulo,
+      subtitulo,
+      qrUrl,
+    })
+  }
+
   async function generarQRMaterial(mat: any) {
-    const datos = JSON.stringify({ tipo: 'material', id: mat.id, nombre: mat.nombre })
-    const url = await QRCode.toDataURL(datos, { width: 300, margin: 2 })
-    const win = window.open('', '_blank')
-    if (win) {
-      win.document.write(`<html><head><title>QR - ${mat.nombre}</title>
-      <style>body{font-family:sans-serif;text-align:center;padding:30px;background:#fff}
-      .etiqueta{border:2px solid #000;padding:20px;display:inline-block;border-radius:8px}
-      h2{margin:10px 0 5px;font-size:18px}p{margin:4px 0;font-size:13px;color:#444}
-      @media print{button{display:none}}</style></head>
-      <body><div class="etiqueta"><img src="${url}" style="width:200px;height:200px">
-      <h2>${mat.nombre}</h2><p>Ref: ${mat.referencia || '-'}</p>
-      <p>Ubicacion: ${mat.ubicacion || '-'}</p><p>Stock: ${mat.stock || 0} ${mat.unidad || ''}</p>
-      <p style="font-size:10px;color:#999">Los Teros - Escanea para registrar salida</p></div>
-      <br><button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#7c3aed;color:#fff;border:none;border-radius:8px;margin-top:10px">Imprimir</button>
-      </body></html>`)
-      win.document.close()
-    }
+    await abrirQrEnModal(
+      mat.nombre || 'Material',
+      `Ref: ${mat.referencia || '-'} | Stock: ${mat.stock || 0} ${mat.unidad || ''}`,
+      payloadQrMaterial(mat)
+    )
   }
 
   function abrirFormEquipo(eq?: any) {
@@ -179,6 +282,7 @@ export default function Inventario() {
       setMarcaEq(eq.marca || '')
       setModeloEq(eq.modelo || '')
       setEstadoEq(eq.estado || 'disponible')
+      setCantidadDisponibleEq(String(Math.max(0, Number(eq.cantidad_disponible ?? 1) || 0)))
       setUbicacionEq(eq.ubicacion || '')
       setNotasEq(eq.notas || '')
     } else {
@@ -188,6 +292,7 @@ export default function Inventario() {
       setMarcaEq('')
       setModeloEq('')
       setEstadoEq('disponible')
+      setCantidadDisponibleEq('1')
       setUbicacionEq('')
       setNotasEq('')
     }
@@ -202,17 +307,33 @@ export default function Inventario() {
       marca: marcaEq,
       modelo: modeloEq,
       estado: estadoEq,
+      cantidad_disponible: Math.max(0, Number.parseInt(cantidadDisponibleEq, 10) || 0),
       ubicacion: ubicacionEq,
       notas: notasEq,
     }
+    let equipoGuardado: any = null
     if (editandoEquipo) {
-      await supabase.from('equipos').update(datos).eq('id', editandoEquipo.id)
+      const { data } = await supabase
+        .from('equipos')
+        .update(datos)
+        .eq('id', editandoEquipo.id)
+        .select('*')
+        .single()
+      equipoGuardado = data || { ...editandoEquipo, ...datos }
     } else {
-      await supabase.from('equipos').insert(datos)
+      const { data } = await supabase
+        .from('equipos')
+        .insert(datos)
+        .select('*')
+        .single()
+      equipoGuardado = data || null
     }
     setMostrarFormEquipo(false)
     setEditandoEquipo(null)
-    cargarTodo()
+    await cargarTodo()
+    if (equipoGuardado) {
+      await generarQREquipo(equipoGuardado)
+    }
   }
 
   async function cambiarEstadoEquipo(id: string, nuevoEstado: string) {
@@ -227,51 +348,78 @@ export default function Inventario() {
   }
 
   async function generarQREquipo(eq: any) {
-    const datos = JSON.stringify({ tipo: 'equipo', id: eq.id, codigo: eq.codigo })
-    const url = await QRCode.toDataURL(datos, { width: 300, margin: 2 })
-    const win = window.open('', '_blank')
-    if (win) {
-      win.document.write(`<html><head><title>QR - ${eq.codigo}</title>
-      <style>body{font-family:sans-serif;text-align:center;padding:30px;background:#fff}
-      .etiqueta{border:2px solid #000;padding:20px;display:inline-block;border-radius:8px}
-      h2{margin:10px 0 5px;font-size:18px;font-family:monospace;color:#7c3aed}
-      p{margin:4px 0;font-size:13px;color:#444}
-      @media print{button{display:none}}</style></head>
-      <body><div class="etiqueta"><img src="${url}" style="width:200px;height:200px">
-      <h2>${eq.codigo}</h2><p>${eq.tipo} ${eq.marca || ''} ${eq.modelo || ''}</p>
-      <p>Ubicacion: ${eq.ubicacion || '-'}</p>
-      <p style="font-size:10px;color:#999">Los Teros - Escanea para registrar movimiento</p></div>
-      <br><button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#7c3aed;color:#fff;border:none;border-radius:8px;margin-top:10px">Imprimir</button>
-      </body></html>`)
-      win.document.close()
-    }
+    await abrirQrEnModal(
+      eq.codigo || 'Equipo',
+      `${eq.tipo || ''} ${eq.marca || ''} ${eq.modelo || ''}`.trim(),
+      payloadQrEquipo(eq)
+    )
   }
 
-  async function generarQRTodosEquipos() {
-    const equiposConQr = await Promise.all(
-      equipos.map(async (eq) => {
-        const datos = JSON.stringify({ tipo: 'equipo', id: eq.id, codigo: eq.codigo })
-        const qrUrl = await QRCode.toDataURL(datos, { width: 200, margin: 1 })
-        return { ...eq, qrUrl }
-      })
-    )
+  async function generarQRTodos() {
+    const [materialesConQr, equiposConQr] = await Promise.all([
+      Promise.all(
+        materiales.map(async (mat) => {
+          const qrUrl = await QRCode.toDataURL(payloadQrMaterial(mat), { width: 180, margin: 1 })
+          return { ...mat, qrUrl }
+        })
+      ),
+      Promise.all(
+        equipos.map(async (eq) => {
+          const qrUrl = await QRCode.toDataURL(payloadQrEquipo(eq), { width: 180, margin: 1 })
+          return { ...eq, qrUrl }
+        })
+      ),
+    ])
+
     const win = window.open('', '_blank')
     if (win) {
-      win.document.write(`<html><head><title>QR Todos los equipos</title>
+      win.document.write(`<html><head><title>QR Inventario y equipos</title>
       <style>body{font-family:sans-serif;padding:20px;background:#fff}
       h1{font-size:20px;margin-bottom:20px}.grid{display:flex;flex-wrap:wrap;gap:15px}
       .etiqueta{border:2px solid #000;padding:12px;border-radius:6px;text-align:center;width:180px}
       h3{margin:6px 0 3px;font-size:13px;font-family:monospace;color:#7c3aed}
       p{margin:2px 0;font-size:10px;color:#555}
       @media print{button{display:none}}</style></head>
-      <body><h1>Los Teros - QR todos los equipos</h1>
+      <body>
+      <h1>Los Teros - QR inventario y equipos</h1>
       <button onclick="window.print()" style="padding:10px 20px;font-size:14px;cursor:pointer;background:#7c3aed;color:#fff;border:none;border-radius:6px;margin-bottom:20px">Imprimir todos</button>
+      <h2 style="font-size:16px;margin:8px 0 12px">Materiales (${materialesConQr.length})</h2>
+      <div class="grid">${materialesConQr.map(mat => `<div class="etiqueta">
+        <img src="${mat.qrUrl}" style="width:130px;height:130px">
+        <h3>${mat.nombre}</h3><p>Ref: ${mat.referencia || '-'}</p><p>${mat.unidad || ''}</p>
+      </div>`).join('')}</div>
+      <h2 style="font-size:16px;margin:16px 0 12px">Equipos (${equiposConQr.length})</h2>
       <div class="grid">${equiposConQr.map(eq => `<div class="etiqueta">
         <img src="${eq.qrUrl}" style="width:140px;height:140px">
-        <h3>${eq.codigo}</h3><p>${eq.tipo} ${eq.marca || ''}</p><p>${eq.modelo || ''}</p>
+        <h3>${eq.codigo}</h3><p>${eq.tipo} ${eq.marca || ''}</p><p>${eq.modelo || ''}</p><p>Cant.: ${Math.max(0, Number(eq.cantidad_disponible ?? 1) || 0)}</p>
       </div>`).join('')}</div></body></html>`)
       win.document.close()
     }
+  }
+
+  function imprimirQrActual() {
+    if (!qrModal.qrUrl) return
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(`<html><head><title>QR - ${qrModal.titulo}</title>
+    <style>
+      body{font-family:sans-serif;text-align:center;padding:26px;background:#fff}
+      .etiqueta{border:2px solid #000;padding:18px;display:inline-block;border-radius:8px}
+      h2{margin:10px 0 5px;font-size:18px}
+      p{margin:4px 0;font-size:13px;color:#444}
+      @media print{button{display:none}}
+    </style></head>
+    <body>
+      <div class="etiqueta">
+        <img src="${qrModal.qrUrl}" style="width:210px;height:210px">
+        <h2>${qrModal.titulo}</h2>
+        <p>${qrModal.subtitulo}</p>
+        <p style="font-size:10px;color:#999">Los Teros - Código QR</p>
+      </div>
+      <br>
+      <button onclick="window.print()" style="padding:12px 24px;font-size:16px;cursor:pointer;background:#7c3aed;color:#fff;border:none;border-radius:8px;margin-top:12px">Imprimir</button>
+    </body></html>`)
+    win.document.close()
   }
 
   const stockBajo = materiales.filter((m) => (m.stock || 0) < (m.minimo || 0))
@@ -280,13 +428,17 @@ export default function Inventario() {
     disponible: { color: '#34d399', bg: 'rgba(16,185,129,0.15)', label: 'Disponible' },
     en_cliente: { color: '#fbbf24', bg: 'rgba(234,179,8,0.15)', label: 'En cliente' },
     pendiente_limpieza: { color: '#a78bfa', bg: 'rgba(124,58,237,0.15)', label: 'Pend. limpieza' },
-    pendiente_revision: { color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: 'Pend. revision' },
+    pendiente_revision: { color: '#22d3ee', bg: 'rgba(6,182,212,0.15)', label: 'Pend. revisión' },
     averiado: { color: '#f87171', bg: 'rgba(239,68,68,0.15)', label: 'Averiado' },
   }
 
+  const cantidadEquipo = (eq: any) => Math.max(0, Number(eq?.cantidad_disponible ?? 1) || 0)
   const enCliente = equipos.filter((e) => e.estado === 'en_cliente')
   const pendientes = equipos.filter((e) => e.estado === 'pendiente_limpieza' || e.estado === 'pendiente_revision')
   const disponibles = equipos.filter((e) => e.estado === 'disponible')
+  const totalEnCliente = enCliente.reduce((acc, eq) => acc + cantidadEquipo(eq), 0)
+  const totalPendientes = pendientes.reduce((acc, eq) => acc + cantidadEquipo(eq), 0)
+  const totalDisponibles = disponibles.reduce((acc, eq) => acc + cantidadEquipo(eq), 0)
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -295,25 +447,20 @@ export default function Inventario() {
         rightSlot={(
           <div className="flex items-center gap-3 flex-wrap">
             <button
-              onClick={() => router.push('/escanear')}
+              onClick={generarQRTodos}
               className="text-sm px-4 py-2 rounded-xl font-medium"
               style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}
             >
-              Escanear QR
+              QR todos
             </button>
             {vista === 'materiales' ? (
               <button onClick={() => abrirFormMaterial()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
                 + Nuevo material
               </button>
             ) : (
-              <>
-                <button onClick={generarQRTodosEquipos} className="text-sm px-4 py-2 rounded-xl font-medium" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
-                  QR todos
-                </button>
-                <button onClick={() => abrirFormEquipo()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-                  + Nuevo equipo
-                </button>
-              </>
+              <button onClick={() => abrirFormEquipo()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
+                + Nuevo equipo
+              </button>
             )}
           </div>
         )}
@@ -353,9 +500,9 @@ export default function Inventario() {
         {vista === 'equipos' && (
           <div className="grid grid-cols-3 gap-4 mb-6">
             {[
-              { label: 'Disponibles', valor: disponibles.length, color: '#34d399', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)' },
-              { label: 'En cliente', valor: enCliente.length, color: '#fbbf24', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.2)' },
-              { label: 'Pendientes', valor: pendientes.length, color: '#a78bfa', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)' },
+              { label: 'Disponibles', valor: totalDisponibles, color: '#34d399', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.2)' },
+              { label: 'En cliente', valor: totalEnCliente, color: '#fbbf24', bg: 'rgba(234,179,8,0.08)', border: 'rgba(234,179,8,0.2)' },
+              { label: 'Pendientes', valor: totalPendientes, color: '#a78bfa', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)' },
             ].map((statsEq, i) => (
               <div key={i} className="rounded-2xl p-4 text-center" style={{ background: statsEq.bg, border: `1px solid ${statsEq.border}` }}>
                 <p className="text-3xl font-bold" style={{ color: statsEq.color }}>{statsEq.valor}</p>
@@ -389,7 +536,7 @@ export default function Inventario() {
                   label: 'Categoria', el: (
                     <select value={categoria} onChange={(e) => setCategoria(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                       <option value="limpieza">Limpieza</option><option value="filtros">Filtros</option>
-                      <option value="repuestos">Repuestos</option><option value="instalacion">Instalacion</option><option value="otro">Otro</option>
+                      <option value="repuestos">Repuestos</option><option value="instalacion">Instalación</option><option value="otro">Otro</option>
                     </select>
                   ),
                 },
@@ -402,8 +549,8 @@ export default function Inventario() {
                   ),
                 },
                 { label: 'Stock actual', el: <input type="number" value={stock} onChange={(e) => setStock(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} /> },
-                { label: 'Stock minimo', el: <input type="number" value={minimo} onChange={(e) => setMinimo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} /> },
-                { label: 'Ubicacion', el: <input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Estanteria A, balda 3" /> },
+                { label: 'Stock mínimo', el: <input type="number" value={minimo} onChange={(e) => setMinimo(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} /> },
+                { label: 'Ubicación', el: <input value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Estantería A, balda 3" /> },
                 { label: 'Notas', el: <input value={notas} onChange={(e) => setNotas(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Proveedor, especificaciones..." /> },
               ].map((f, i) => (
                 <div key={i}>
@@ -417,13 +564,23 @@ export default function Inventario() {
                 <input type="file" accept="image/*" onChange={subirFotoMaterial} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
                 {subiendo && <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
                 {fotoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={fotoUrl}
-                    alt="foto"
-                    className="mt-2 h-20 w-20 object-cover rounded-xl"
-                    style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
-                  />
+                  <div className="mt-2 flex items-start gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={fotoUrl}
+                      alt="foto"
+                      className="h-20 w-20 object-cover rounded-xl"
+                      style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFotoUrl('')}
+                      className="text-xs px-3 py-1.5 rounded-lg"
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}
+                    >
+                      Quitar foto
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -444,12 +601,12 @@ export default function Inventario() {
             <h2 className="font-semibold mb-5" style={{ color: 'var(--text)' }}>{editandoEquipo ? 'Editar equipo' : 'Nuevo equipo'}</h2>
             <form onSubmit={guardarEquipo} className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
-                { label: 'Codigo', el: <input value={codigoEq} onChange={(e) => setCodigoEq(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="TRB-001" /> },
+                { label: 'Código', el: <input value={codigoEq} onChange={(e) => setCodigoEq(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="TRB-001" /> },
                 {
                   label: 'Tipo', el: (
                     <select value={tipoEq} onChange={(e) => setTipoEq(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                       <option value="turbina">Turbina</option><option value="motor">Motor</option>
-                      <option value="caja_extraccion">Caja extraccion</option><option value="otro">Otro</option>
+                      <option value="caja_extraccion">Caja extracción</option><option value="otro">Otro</option>
                     </select>
                   ),
                 },
@@ -460,11 +617,24 @@ export default function Inventario() {
                     <select value={estadoEq} onChange={(e) => setEstadoEq(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                       <option value="disponible">Disponible</option><option value="en_cliente">En cliente</option>
                       <option value="pendiente_limpieza">Pendiente limpieza</option>
-                      <option value="pendiente_revision">Pendiente revision</option><option value="averiado">Averiado</option>
+                      <option value="pendiente_revision">Pendiente revisión</option><option value="averiado">Averiado</option>
                     </select>
                   ),
                 },
-                { label: 'Ubicacion', el: <input value={ubicacionEq} onChange={(e) => setUbicacionEq(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Nave principal, zona A" /> },
+                {
+                  label: 'Cantidad disponible', el: (
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={cantidadDisponibleEq}
+                      onChange={(e) => setCantidadDisponibleEq(e.target.value)}
+                      className="w-full rounded-xl px-3 py-2 text-sm outline-none"
+                      style={s.inputStyle}
+                    />
+                  ),
+                },
+                { label: 'Ubicación', el: <input value={ubicacionEq} onChange={(e) => setUbicacionEq(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Nave principal, zona A" /> },
               ].map((f, i) => (
                 <div key={i}>
                   <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>{f.label}</label>
@@ -472,7 +642,7 @@ export default function Inventario() {
                 </div>
               ))}
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Notas tecnicas</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Notas técnicas</label>
                 <textarea value={notasEq} onChange={(e) => setNotasEq(e.target.value)} rows={2} className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle} />
               </div>
               <div className="md:col-span-2 flex gap-3">
@@ -494,7 +664,7 @@ export default function Inventario() {
         ) : vista === 'materiales' && materiales.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">📦</p>
-            <p style={{ color: 'var(--text-muted)' }}>No hay materiales. Anade el primero.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay materiales. Añade el primero.</p>
           </div>
         ) : vista === 'equipos' && equipos.length === 0 ? (
           <div className="text-center py-20">
@@ -507,7 +677,7 @@ export default function Inventario() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                    {['Foto', 'Material', 'Categoria', 'Stock', 'Minimo', 'Ubicacion', ''].map((h) => (
+                    {['Foto', 'Material', 'Categoría', 'Stock', 'Mínimo', 'Ubicación', ''].map((h) => (
                       <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                     ))}
                   </tr>
@@ -577,12 +747,32 @@ export default function Inventario() {
                     <p className="font-mono text-sm font-bold" style={{ color: '#06b6d4' }}>{e.codigo}</p>
                     <p className="font-semibold mt-1 capitalize" style={{ color: 'var(--text)' }}>{e.tipo.replace('_', ' ')}</p>
                     <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{e.marca} {e.modelo}</p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Cantidad: {cantidadEquipo(e)}</p>
                   </div>
                   <span className="text-xs px-2 py-1 rounded-full" style={{ background: ESTADOS_EQUIPO[e.estado]?.bg, color: ESTADOS_EQUIPO[e.estado]?.color }}>
                     {ESTADOS_EQUIPO[e.estado]?.label || e.estado}
                   </span>
                 </div>
                 {e.ubicacion && <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>📍 {e.ubicacion}</p>}
+                {e.estado === 'en_cliente' && (
+                  <div className="rounded-xl p-2 mb-3" style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.25)' }}>
+                    {otPorEquipo[e.id] ? (
+                      <>
+                        <p className="text-[11px] uppercase tracking-wider" style={{ color: '#fbbf24' }}>OT actual</p>
+                        <p className="text-xs font-semibold mt-1" style={{ color: 'var(--text)' }}>
+                          {otPorEquipo[e.id].codigo || otPorEquipo[e.id].ordenId}
+                        </p>
+                        {otPorEquipo[e.id].cliente && (
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            Cliente: {otPorEquipo[e.id].cliente}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs" style={{ color: '#fbbf24' }}>En cliente, sin OT vinculada detectada.</p>
+                    )}
+                  </div>
+                )}
                 {e.notas && <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{e.notas}</p>}
                 <div className="flex flex-wrap gap-2 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                   {(e.estado === 'pendiente_limpieza' || e.estado === 'pendiente_revision') && (
@@ -612,6 +802,46 @@ export default function Inventario() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {qrModal.abierto && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.72)' }}>
+            <div className="w-full max-w-md rounded-2xl p-5" style={s.cardStyle}>
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="font-semibold text-base" style={{ color: 'var(--text)' }}>{qrModal.titulo}</h3>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{qrModal.subtitulo}</p>
+                </div>
+                <button
+                  onClick={() => setQrModal((prev) => ({ ...prev, abierto: false }))}
+                  className="text-xs px-2 py-1 rounded-lg"
+                  style={s.btnSecondary}
+                >
+                  Cerrar
+                </button>
+              </div>
+              <div className="rounded-xl p-3 flex items-center justify-center" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrModal.qrUrl} alt="QR" className="w-72 h-72 max-w-full object-contain" />
+              </div>
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={imprimirQrActual}
+                  className="flex-1 text-sm px-4 py-2 rounded-xl font-medium"
+                  style={s.btnPrimary}
+                >
+                  Imprimir QR
+                </button>
+                <button
+                  onClick={() => setQrModal((prev) => ({ ...prev, abierto: false }))}
+                  className="flex-1 text-sm px-4 py-2 rounded-xl"
+                  style={s.btnSecondary}
+                >
+                  Listo
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

@@ -43,6 +43,7 @@ function esTablaServiciosNoDisponible(error: any) {
 }
 
 export default function Ordenes() {
+  type EmpresaFiltroCliente = 'todos' | 'teros' | 'olipro'
   const [ordenes, setOrdenes] = useState<any[]>([])
   const [vehiculos, setVehiculos] = useState<any[]>([])
   const [tecnicos, setTecnicos] = useState<any[]>([])
@@ -59,7 +60,7 @@ export default function Ordenes() {
   const [resultadosCliente, setResultadosCliente] = useState<any[]>([])
   const [buscandoCliente, setBuscandoCliente] = useState(false)
   const [nombreClienteSeleccionado, setNombreClienteSeleccionado] = useState('')
-  const [empresaOt, setEmpresaOt] = useState<'teros' | 'olipro'>('teros')
+  const [empresaOt, setEmpresaOt] = useState<EmpresaFiltroCliente>('teros')
   const [incidenciasOrden, setIncidenciasOrden] = useState<any[]>([])
   const [movimientosOt, setMovimientosOt] = useState<any[]>([])
   const [cargandoMovimientosOt, setCargandoMovimientosOt] = useState(false)
@@ -211,7 +212,12 @@ export default function Ordenes() {
         .limit(40)
       data = fallback.data || []
     }
-    setResultadosCliente((data || []).filter((c: any) => normalizarEmpresaCliente(c?.tipo_cliente || c?.empresa) === empresaFiltro))
+    setResultadosCliente(
+      (data || []).filter((c: any) => {
+        if (empresaFiltro === 'todos') return true
+        return normalizarEmpresaCliente(c?.tipo_cliente || c?.empresa) === empresaFiltro
+      })
+    )
     setBuscandoCliente(false)
   }
 
@@ -412,7 +418,7 @@ export default function Ordenes() {
             estado: 'pendiente',
             fecha: new Date().toISOString().slice(0, 10),
             fotos_urls: [urlData.publicUrl],
-            observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
+            observaciones: `Creado automáticamente desde OT ${ordenDetalle.codigo}`,
           })
           if (albError) errores++
         }
@@ -422,7 +428,7 @@ export default function Ordenes() {
       setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
 
       if (tipoFoto === 'albaran' && subidasOK > 0) {
-        alert('Albaran creado automaticamente en Albaranes.')
+        alert('Albarán creado automáticamente en Albaranes.')
       }
       if (errores > 0) {
         alert(`Se subieron ${subidasOK} foto(s). ${errores} no se pudieron registrar.`)
@@ -952,7 +958,7 @@ export default function Ordenes() {
       movil: data.movil || '',
       email: data.email || '',
       notas: data.notas || '',
-      empresa: data.empresa || empresaOt || 'teros',
+      empresa: data.empresa || (empresaOt === 'olipro' ? 'olipro' : 'teros'),
     })
     setMostrarEditarClienteOt(true)
   }
@@ -1058,7 +1064,7 @@ export default function Ordenes() {
                 <input value={clienteOtForm.direccion} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, direccion: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Poblacion</label>
+                <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Población</label>
                 <input value={clienteOtForm.poblacion} onChange={(e) => setClienteOtForm((p: any) => ({ ...p, poblacion: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
@@ -1125,8 +1131,8 @@ export default function Ordenes() {
                   <option value="limpieza">Limpieza</option>
                   <option value="sustitucion">Sustitucion</option>
                   <option value="mantenimiento">Mantenimiento</option>
-                  <option value="instalacion">Instalacion</option>
-                  <option value="revision">Revision</option>
+                  <option value="instalacion">Instalación</option>
+                  <option value="revision">Revisión</option>
                   <option value="otro">Otro</option>
                 </select>
               </div>
@@ -1135,7 +1141,7 @@ export default function Ordenes() {
                 <select
                   value={empresaOt}
                   onChange={e => {
-                    setEmpresaOt((e.target.value || 'teros') as 'teros' | 'olipro')
+                    setEmpresaOt((e.target.value || 'teros') as EmpresaFiltroCliente)
                     setClienteId('')
                     setBusquedaCliente('')
                     setNombreClienteSeleccionado('')
@@ -1144,6 +1150,7 @@ export default function Ordenes() {
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none"
                   style={s.inputStyle}
                 >
+                  <option value="todos">Todos (Teros + Olipro)</option>
                   <option value="teros">Clientes Teros</option>
                   <option value="olipro">Clientes Olipro</option>
                 </select>
@@ -1370,27 +1377,29 @@ export default function Ordenes() {
                   </div>
                 )}
 
-                <div className="rounded-2xl p-4 mb-4" style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.2)' }}>
-                  <p className="font-medium text-sm mb-1" style={{ color: '#06b6d4' }}>Escanear material o equipo</p>
-                  <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>Escanea el QR para registrar salida vinculada a esta OT.</p>
-                  <button onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
-                    className="w-full py-2.5 rounded-xl text-sm font-medium"
-                    style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)', color: 'white' }}>
-                    Abrir escaner QR
-                  </button>
-                </div>
-
                 <div className="rounded-2xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                  <div className="flex items-center justify-between mb-3 gap-2">
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
                     <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Inventario y equipos registrados en OT</h3>
-                    <button
-                      onClick={() => void cargarMovimientosOtDetalle(ordenDetalle)}
-                      className="text-xs px-3 py-1.5 rounded-lg"
-                      style={s.btnSecondary}
-                    >
-                      Actualizar
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => router.push(`/escanear?orden=${ordenDetalle.id}`)}
+                        className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                        style={{ background: 'linear-gradient(135deg, #059669, #06b6d4)', color: 'white' }}
+                      >
+                        Abrir escaner QR
+                      </button>
+                      <button
+                        onClick={() => void cargarMovimientosOtDetalle(ordenDetalle)}
+                        className="text-xs px-3 py-1.5 rounded-lg"
+                        style={s.btnSecondary}
+                      >
+                        Actualizar
+                      </button>
+                    </div>
                   </div>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+                    Escanea material o equipo y quedara registrado aqui dentro de esta OT.
+                  </p>
                   {cargandoMovimientosOt ? (
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cargando movimientos...</p>
                   ) : movimientosOt.length === 0 ? (
@@ -1691,7 +1700,7 @@ export default function Ordenes() {
         ) : ordenesFiltradas.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-5xl mb-4">📋</p>
-            <p style={{ color: 'var(--text-muted)' }}>No hay ordenes. Crea la primera.</p>
+            <p style={{ color: 'var(--text-muted)' }}>No hay órdenes. Crea la primera.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-3">

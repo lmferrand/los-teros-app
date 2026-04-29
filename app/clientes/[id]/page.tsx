@@ -237,7 +237,7 @@ export default function ClienteDetalle() {
                     )}
                     {cliente.poblacion && (
                       <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                        Poblacion: {cliente.poblacion}
+                        Población: {cliente.poblacion}
                       </p>
                     )}
                     {cliente.direccion && (
@@ -286,7 +286,7 @@ export default function ClienteDetalle() {
                     <input value={clienteForm.direccion} onChange={(e) => setClienteForm((p: any) => ({ ...p, direccion: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Poblacion</label>
+                    <label className="text-xs uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>Población</label>
                     <input value={clienteForm.poblacion} onChange={(e) => setClienteForm((p: any) => ({ ...p, poblacion: e.target.value }))} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
                   </div>
                   <div>

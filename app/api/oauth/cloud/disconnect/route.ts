@@ -20,10 +20,10 @@ function getSupabasePublic() {
 export async function POST(req: NextRequest) {
   try {
     const token = getBearer(req)
-    if (!token) return NextResponse.json({ error: 'Falta token de sesion.' }, { status: 401 })
+    if (!token) return NextResponse.json({ error: 'Falta token de sesión.' }, { status: 401 })
 
     const cfg = getSupabasePublic()
-    if (!cfg) return NextResponse.json({ error: 'Falta configuracion de Supabase.' }, { status: 500 })
+    if (!cfg) return NextResponse.json({ error: 'Falta configuración de Supabase.' }, { status: 500 })
 
     const userClient = createClient(cfg.url, cfg.anon, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -35,13 +35,13 @@ export async function POST(req: NextRequest) {
       error: userError,
     } = await userClient.auth.getUser()
     if (userError || !user?.id) {
-      return NextResponse.json({ error: 'Sesion no valida.' }, { status: 401 })
+      return NextResponse.json({ error: 'Sesión no válida.' }, { status: 401 })
     }
 
     const body = await req.json().catch(() => ({}))
     const provider = String(body?.provider || '').toLowerCase()
     if (!['dropbox', 'google_drive'].includes(provider)) {
-      return NextResponse.json({ error: 'Proveedor invalido.' }, { status: 400 })
+      return NextResponse.json({ error: 'Proveedor inválido.' }, { status: 400 })
     }
 
     const { error } = await userClient
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: `No se pudo desconectar: ${error.message}`,
-          hint: 'Si falta la tabla, ejecuta la migracion SQL 20260427_integraciones_nube_oauth.sql',
+          hint: 'Si falta la tabla, ejecuta la migración SQL 20260427_integraciones_nube_oauth.sql',
         },
         { status: 400 }
       )
@@ -68,4 +68,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-

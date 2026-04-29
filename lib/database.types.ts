@@ -173,6 +173,7 @@ export type Database = {
           marca: string | null
           modelo: string | null
           estado: string | null
+          cantidad_disponible: number
           ubicacion: string | null
           fecha_salida: string | null
           notas: string | null
@@ -185,6 +186,7 @@ export type Database = {
           marca?: string | null
           modelo?: string | null
           estado?: string | null
+          cantidad_disponible?: number
           ubicacion?: string | null
           fecha_salida?: string | null
           notas?: string | null
@@ -197,6 +199,7 @@ export type Database = {
           marca?: string | null
           modelo?: string | null
           estado?: string | null
+          cantidad_disponible?: number
           ubicacion?: string | null
           fecha_salida?: string | null
           notas?: string | null

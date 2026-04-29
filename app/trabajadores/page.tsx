@@ -111,7 +111,7 @@ export default function Trabajadores() {
   const ROLES: any = {
     gerente: { label: 'Gerente', color: '#a78bfa', bg: 'rgba(124,58,237,0.15)' },
     oficina: { label: 'Oficina', color: '#06b6d4', bg: 'rgba(6,182,212,0.15)' },
-    tecnico: { label: 'Tecnico', color: '#34d399', bg: 'rgba(16,185,129,0.15)' },
+    tecnico: { label: 'Técnico', color: '#34d399', bg: 'rgba(16,185,129,0.15)' },
     almacen: { label: 'Almacen', color: '#fbbf24', bg: 'rgba(234,179,8,0.15)' },
     supervisor: { label: 'Supervisor', color: '#fb923c', bg: 'rgba(249,115,22,0.15)' },
   }
@@ -178,7 +178,7 @@ export default function Trabajadores() {
                     <option value="gerente">Gerente</option>
                     <option value="oficina">Oficina</option>
                     <option value="supervisor">Supervisor</option>
-                    <option value="tecnico">Tecnico</option>
+                    <option value="tecnico">Técnico</option>
                     <option value="almacen">Almacen</option>
                   </select>
                 </div>
@@ -251,7 +251,7 @@ export default function Trabajadores() {
                     <option value="gerente">Gerente</option>
                     <option value="oficina">Oficina</option>
                     <option value="supervisor">Supervisor</option>
-                    <option value="tecnico">Tecnico</option>
+                    <option value="tecnico">Técnico</option>
                     <option value="almacen">Almacen</option>
                   </select>
                   <button onClick={() => abrirFormEditar(t)} className="w-full text-sm py-1.5 rounded-xl mb-2"

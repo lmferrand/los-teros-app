@@ -283,7 +283,7 @@ export default function Planificacion() {
           setPresTitulo(json.descripcion || '')
           setPresImporte(String(json.importe || 0))
           setPresFecha(json.fecha ? convertirFecha(json.fecha) : new Date().toISOString().slice(0, 10))
-          setPresObs(`Presupuesto ${json.numero || ''} escaneado automaticamente`)
+          setPresObs(`Presupuesto ${json.numero || ''} escaneado automáticamente`)
           const clienteEncontrado = clientes.find(c =>
             c.nombre.toLowerCase().includes((json.cliente || '').toLowerCase()) ||
             (json.cliente || '').toLowerCase().includes(c.nombre.toLowerCase())
@@ -291,7 +291,7 @@ export default function Planificacion() {
           if (clienteEncontrado) setPresClienteId(clienteEncontrado.id)
           setMostrarFormPres(true)
         } catch {
-          alert('No se pudieron extraer los datos. Intentalo de nuevo con mejor iluminacion.')
+          alert('No se pudieron extraer los datos. Inténtalo de nuevo con mejor iluminación.')
         }
         setEscaneando(false)
       }
@@ -429,7 +429,7 @@ export default function Planificacion() {
   return (
     <div className="min-h-screen bg-gray-950">
       <AppHeader
-        title="Planificacion"
+        title="Planificación"
         rightSlot={
           <>
             {vistaActiva === 'calendario' && (
@@ -454,7 +454,7 @@ export default function Planificacion() {
             Calendario
           </button>
           <button onClick={() => setVistaActiva('mis_ordenes')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${vistaActiva === 'mis_ordenes' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
-            Mis ordenes
+            Mis órdenes
             {misOrdenesPendientes.length > 0 && (
               <span className="ml-1 bg-blue-500 text-white text-xs px-1.5 py-0.5 rounded-full">{misOrdenesPendientes.length}</span>
             )}
@@ -483,8 +483,8 @@ export default function Planificacion() {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between"><span className="text-gray-400">Tipo</span><span className="text-white capitalize">{ordenSeleccionada.tipo}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Estado</span><span className={`text-xs px-2 py-0.5 rounded-full ${ESTADOS_OT[ordenSeleccionada.estado]}`}>{ordenSeleccionada.estado.replace('_', ' ')}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Duracion</span><span className="text-white">{ordenSeleccionada.duracion_horas || 2}h</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Hora fija</span><span className="text-white">{ordenSeleccionada.hora_fija ? 'Si' : 'No'}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Duración</span><span className="text-white">{ordenSeleccionada.duracion_horas || 2}h</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Hora fija</span><span className="text-white">{ordenSeleccionada.hora_fija ? 'Sí' : 'No'}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Fecha</span><span className="text-white text-xs">{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span></div>
                 <div className="flex justify-between"><span className="text-gray-400">Trabajadores</span><span className="text-white text-right text-xs">{getNombresTecnicos(ordenSeleccionada.tecnicos_ids || [])}</span></div>
                 {ordenSeleccionada.descripcion && (
@@ -563,12 +563,12 @@ export default function Planificacion() {
         {vistaActiva === 'mis_ordenes' && (
           <div>
             <div className="mb-6">
-              <h2 className="text-white font-semibold mb-1">Mis ordenes pendientes y en curso</h2>
-              <p className="text-gray-500 text-sm mb-4">Solo las ordenes asignadas a ti</p>
+              <h2 className="text-white font-semibold mb-1">Mis órdenes pendientes y en curso</h2>
+              <p className="text-gray-500 text-sm mb-4">Solo las órdenes asignadas a ti</p>
               {misOrdenesPendientes.length === 0 ? (
                 <div className="text-center py-12 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">
                   <p className="text-3xl mb-2">✅</p>
-                  <p>No tienes ordenes pendientes</p>
+                  <p>No tienes órdenes pendientes</p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
@@ -597,7 +597,7 @@ export default function Planificacion() {
             </div>
             {misOrdenesCompletadas.length > 0 && (
               <div>
-                <h2 className="text-white font-semibold mb-4">Mis ordenes completadas</h2>
+                <h2 className="text-white font-semibold mb-4">Mis órdenes completadas</h2>
                 <div className="flex flex-col gap-2">
                   {misOrdenesCompletadas.map(o => (
                     <div key={o.id} onClick={() => setOrdenSeleccionada(o)} className="bg-gray-900 border border-gray-800 rounded-xl p-4 cursor-pointer hover:border-gray-700 transition-colors opacity-70">
@@ -638,18 +638,18 @@ export default function Planificacion() {
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
-              <p className="text-white font-semibold mb-1">Escanear presupuesto con camara</p>
-              <p className="text-gray-400 text-sm mb-4">Fotografía el presupuesto de Holded y los datos se rellenaran automaticamente.</p>
+              <p className="text-white font-semibold mb-1">Escanear presupuesto con cámara</p>
+              <p className="text-gray-400 text-sm mb-4">Fotografía el presupuesto de Holded y los datos se rellenarán automáticamente.</p>
               <label className={`w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-medium cursor-pointer transition-colors ${escaneando ? 'bg-gray-700 text-gray-400' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
                 {escaneando ? 'Procesando imagen...' : '📷 Fotografiar presupuesto'}
                 <input type="file" accept="image/*" capture="environment" className="hidden" onChange={escanearPresupuesto} disabled={escaneando} />
               </label>
               {datosEscaneados && (
                 <div className="mt-3 bg-green-950 border border-green-800 rounded-lg p-3">
-                  <p className="text-green-300 text-xs font-semibold mb-1">Datos extraidos correctamente</p>
+                  <p className="text-green-300 text-xs font-semibold mb-1">Datos extraídos correctamente</p>
                   <p className="text-green-200 text-xs">Cliente: {datosEscaneados.cliente}</p>
                   <p className="text-green-200 text-xs">Importe: {datosEscaneados.importe} EUR</p>
-                  <p className="text-green-200 text-xs">Numero: {datosEscaneados.numero}</p>
+                  <p className="text-green-200 text-xs">Número: {datosEscaneados.numero}</p>
                 </div>
               )}
             </div>
@@ -666,7 +666,7 @@ export default function Planificacion() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-gray-400 text-xs uppercase mb-1 block">Descripcion</label>
+                    <label className="text-gray-400 text-xs uppercase mb-1 block">Descripción</label>
                     <input value={presTitulo} onChange={e => setPresTitulo(e.target.value)} required className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" placeholder="Limpieza campanas..." />
                   </div>
                   <div>
@@ -674,7 +674,7 @@ export default function Planificacion() {
                     <input type="number" value={presImporte} onChange={e => setPresImporte(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" min="0" step="0.01" />
                   </div>
                   <div>
-                    <label className="text-gray-400 text-xs uppercase mb-1 block">Fecha envio</label>
+                    <label className="text-gray-400 text-xs uppercase mb-1 block">Fecha envío</label>
                     <input type="date" value={presFecha} onChange={e => setPresFecha(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
                   </div>
                   <div>
@@ -791,7 +791,7 @@ export default function Planificacion() {
             {resultadoRuta?.vacio && (
               <div className="text-center py-12 text-gray-500 bg-gray-900 rounded-xl border border-gray-800">
                 <p className="text-3xl mb-2">📅</p>
-                <p>No hay ordenes pendientes para ese dia.</p>
+                <p>No hay órdenes pendientes para ese día.</p>
               </div>
             )}
 
@@ -799,7 +799,7 @@ export default function Planificacion() {
               <div className="flex flex-col gap-6">
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <p className="text-white font-semibold">{new Date(resultadoRuta.fecha + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</p>
-                  <p className="text-gray-400 text-sm mt-1">{resultadoRuta.totalOTs} ordenes — {resultadoRuta.resultados.length} trabajadores</p>
+                  <p className="text-gray-400 text-sm mt-1">{resultadoRuta.totalOTs} órdenes — {resultadoRuta.resultados.length} trabajadores</p>
                 </div>
 
                 {resultadoRuta.resultados.map((res: any) => (

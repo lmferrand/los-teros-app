@@ -42,12 +42,12 @@ export async function POST(req: NextRequest) {
   try {
     const token = getBearer(req)
     if (!token) {
-      return NextResponse.json({ error: 'Falta token de autenticacion.' }, { status: 401 })
+      return NextResponse.json({ error: 'Falta token de autenticación.' }, { status: 401 })
     }
 
     const cfg = getConfig()
     if (!cfg.url || !cfg.anon) {
-      return NextResponse.json({ error: 'Falta configuracion de Supabase.' }, { status: 500 })
+      return NextResponse.json({ error: 'Falta configuración de Supabase.' }, { status: 500 })
     }
 
     const supabaseUser = createClient(cfg.url, cfg.anon, {
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const { data: authData, error: authError } = await supabaseUser.auth.getUser()
     if (authError || !authData?.user) {
-      return NextResponse.json({ error: 'Sesion invalida.' }, { status: 401 })
+      return NextResponse.json({ error: 'Sesión inválida.' }, { status: 401 })
     }
 
     const { data: perfil, error: perfilError } = await supabaseUser
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No se pudo validar perfil.' }, { status: 403 })
     }
     if (!ROLES_PERMITIDOS.has(String(perfil.rol || '').toLowerCase())) {
-      return NextResponse.json({ error: 'No tienes permisos para sugerir planificacion.' }, { status: 403 })
+      return NextResponse.json({ error: 'No tienes permisos para sugerir planificación.' }, { status: 403 })
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     ])
 
     if (ordersRes.error) {
-      return NextResponse.json({ error: `No se pudieron leer ordenes: ${ordersRes.error.message}` }, { status: 500 })
+      return NextResponse.json({ error: `No se pudieron leer órdenes: ${ordersRes.error.message}` }, { status: 500 })
     }
     if (workersRes.error) {
       return NextResponse.json({ error: `No se pudieron leer trabajadores: ${workersRes.error.message}` }, { status: 500 })
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
     if (insertError) {
       return NextResponse.json(
         {
-          error: `Se genero la sugerencia pero no se pudo registrar trazabilidad: ${insertError.message}`,
+          error: `Se generó la sugerencia pero no se pudo registrar trazabilidad: ${insertError.message}`,
           deterministic,
           suggestion: aiResult.finalSuggestion,
           aiError: aiResult.aiError,

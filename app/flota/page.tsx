@@ -56,9 +56,9 @@ function estiloVencimiento(dias: number | null) {
 
 function textoDias(dias: number | null) {
   if (dias === null) return 'Sin fecha'
-  if (dias < 0) return `Caducado hace ${Math.abs(dias)} dias`
+  if (dias < 0) return `Caducado hace ${Math.abs(dias)} días`
   if (dias === 0) return 'Caduca hoy'
-  return `${dias} dias restantes`
+  return `${dias} días restantes`
 }
 
 function kmRestantesRevision(vehiculo: any) {
@@ -78,7 +78,7 @@ function estiloRevisionKm(restanteKm: number | null) {
 function textoRevisionKm(restanteKm: number | null) {
   if (restanteKm === null) return 'Sin objetivo KM'
   if (restanteKm < 0) return `Vencida por ${Math.abs(restanteKm).toLocaleString('es-ES')} km`
-  if (restanteKm === 0) return 'Toca revision ahora'
+  if (restanteKm === 0) return 'Toca revisión ahora'
   return `Faltan ${restanteKm.toLocaleString('es-ES')} km`
 }
 
@@ -332,7 +332,7 @@ export default function FlotaPage() {
 
   function abrirNuevoVehiculo() {
     if (!puedeEditar) {
-      alert('No tienes permisos para crear vehiculos.')
+      alert('No tienes permisos para crear vehículos.')
       return
     }
     setEditandoId(null)
@@ -342,7 +342,7 @@ export default function FlotaPage() {
 
   function abrirEditarVehiculo(v: any) {
     if (!puedeEditar) {
-      alert('No tienes permisos para editar vehiculos.')
+      alert('No tienes permisos para editar vehículos.')
       return
     }
     setEditandoId(v.id)
@@ -370,7 +370,7 @@ export default function FlotaPage() {
   async function guardarVehiculo(e: React.FormEvent) {
     e.preventDefault()
     if (!puedeEditar) {
-      alert('No tienes permisos para guardar vehiculos.')
+      alert('No tienes permisos para guardar vehículos.')
       return
     }
     setGuardandoVehiculo(true)
@@ -407,7 +407,7 @@ export default function FlotaPage() {
       await cargarVehiculos(editandoId || vehiculoDetalle?.id)
       if (vehiculoDetalle?.id) await cargarDocumentosVehiculo(vehiculoDetalle.id)
     } catch (error: any) {
-      alert(`No se pudo guardar el vehiculo: ${String(error?.message || 'Error desconocido')}`)
+      alert(`No se pudo guardar el vehículo: ${String(error?.message || 'Error desconocido')}`)
     } finally {
       setGuardandoVehiculo(false)
     }
@@ -423,7 +423,7 @@ export default function FlotaPage() {
       alert('No tienes permisos para dar de baja.')
       return
     }
-    if (!confirm(`Dar de baja el vehiculo ${v.matricula}?`)) return
+    if (!confirm(`Dar de baja el vehículo ${v.matricula}?`)) return
     await supabase.from('vehiculos_flota').update({ activo: false }).eq('id', v.id)
     if (vehiculoDetalle?.id === v.id) {
       setVehiculoDetalle(null)
@@ -506,7 +506,7 @@ export default function FlotaPage() {
     setAnalizandoDocId(doc.id)
     try {
       const prompt = `
-Analiza este documento de vehiculo y devuelve SOLO JSON valido:
+Analiza este documento de vehículo y devuelve SOLO JSON válido:
 {
   "matricula": "",
   "marca": "",
@@ -615,7 +615,7 @@ Si no identificas un campo dejalo vacio.
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <AppHeader
-        title="Flota de Vehiculos"
+        title="Flota de Vehículos"
         rightSlot={(
           <div className="flex items-center gap-2">
             <button onClick={() => void cargarVehiculos(vehiculoDetalle?.id)} className="text-sm px-3 py-2 rounded-xl" style={s.btnSecondary}>
@@ -623,7 +623,7 @@ Si no identificas un campo dejalo vacio.
             </button>
             {puedeEditar && (
               <button onClick={abrirNuevoVehiculo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-                + Nuevo vehiculo
+                + Nuevo vehículo
               </button>
             )}
           </div>
@@ -643,7 +643,7 @@ Si no identificas un campo dejalo vacio.
             </div>
             {alertasRevisionKm.length > 0 && (
               <>
-                <p className="text-sm font-semibold mt-3" style={{ color: '#fbbf24' }}>Revisiones por kilometraje proximas</p>
+                <p className="text-sm font-semibold mt-3" style={{ color: '#fbbf24' }}>Revisiones por kilometraje próximas</p>
                 <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                   {alertasRevisionKm.slice(0, 6).map((a, idx) => (
                     <p key={`km-${idx}`} className="text-xs" style={{ color: 'var(--text-muted)' }}>
@@ -659,7 +659,7 @@ Si no identificas un campo dejalo vacio.
         {mostrarForm && (
           <div className="rounded-2xl p-5 mb-4" style={s.cardStyle}>
             <h2 className="font-semibold mb-4" style={{ color: 'var(--text)' }}>
-              {editandoId ? 'Editar vehiculo' : 'Nuevo vehiculo'}
+              {editandoId ? 'Editar vehículo' : 'Nuevo vehículo'}
             </h2>
             <form onSubmit={guardarVehiculo} className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <input value={matricula} onChange={(e) => setMatricula(e.target.value)} required placeholder="Matricula" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
@@ -682,16 +682,16 @@ Si no identificas un campo dejalo vacio.
               </select>
               <input value={anio} onChange={(e) => setAnio(e.target.value)} type="number" placeholder="Anio" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               <input value={kmActual} onChange={(e) => setKmActual(e.target.value)} type="number" placeholder="KM actuales" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
-              <input value={kmUltimaRevision} onChange={(e) => setKmUltimaRevision(e.target.value)} type="number" placeholder="KM ultima revision" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
-              <input value={proximaRevisionKm} onChange={(e) => setProximaRevisionKm(e.target.value)} type="number" placeholder="Proxima revision (KM)" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
-              <input value={companiaSeguro} onChange={(e) => setCompaniaSeguro(e.target.value)} placeholder="Compania seguro" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
-              <input value={numeroPoliza} onChange={(e) => setNumeroPoliza(e.target.value)} placeholder="Numero poliza" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              <input value={kmUltimaRevision} onChange={(e) => setKmUltimaRevision(e.target.value)} type="number" placeholder="KM última revisión" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              <input value={proximaRevisionKm} onChange={(e) => setProximaRevisionKm(e.target.value)} type="number" placeholder="Próxima revisión (KM)" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              <input value={companiaSeguro} onChange={(e) => setCompaniaSeguro(e.target.value)} placeholder="Compañía seguro" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
+              <input value={numeroPoliza} onChange={(e) => setNumeroPoliza(e.target.value)} placeholder="Número póliza" className="rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               <div>
-                <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Ultima revision</label>
+                <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Última revisión</label>
                 <input value={ultimaRevisionFecha} onChange={(e) => setUltimaRevisionFecha(e.target.value)} type="date" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
-                <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Proxima ITV</label>
+                <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Próxima ITV</label>
                 <input value={proximaItv} onChange={(e) => setProximaItv(e.target.value)} type="date" className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
@@ -709,7 +709,7 @@ Si no identificas un campo dejalo vacio.
               <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} placeholder="Notas" className="md:col-span-3 rounded-xl px-3 py-2 text-sm outline-none resize-none" style={s.inputStyle} />
               <div className="md:col-span-3 flex gap-2">
                 <button type="submit" disabled={guardandoVehiculo} className="px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-60" style={s.btnPrimary}>
-                  {guardandoVehiculo ? 'Guardando...' : editandoId ? 'Guardar cambios' : 'Crear vehiculo'}
+                  {guardandoVehiculo ? 'Guardando...' : editandoId ? 'Guardar cambios' : 'Crear vehículo'}
                 </button>
                 <button
                   type="button"
@@ -728,7 +728,7 @@ Si no identificas un campo dejalo vacio.
           <div className="lg:col-span-1 flex flex-col gap-3">
             {vehiculos.length === 0 ? (
               <div className="rounded-2xl p-5" style={s.cardStyle}>
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No hay vehiculos registrados.</p>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No hay vehículos registrados.</p>
               </div>
             ) : (
               vehiculos.map((v: any) => {
@@ -752,7 +752,7 @@ Si no identificas un campo dejalo vacio.
                   >
                     <p className="font-mono text-sm font-semibold mb-1" style={{ color: '#06b6d4' }}>{v.matricula}</p>
                     <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                      {v.alias || `${v.marca || ''} ${v.modelo || ''}`.trim() || 'Vehiculo'}
+                      {v.alias || `${v.marca || ''} ${v.modelo || ''}`.trim() || 'Vehículo'}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-2">
                       <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: badgeItv.bg, color: badgeItv.color, border: `1px solid ${badgeItv.border}` }}>
@@ -762,7 +762,7 @@ Si no identificas un campo dejalo vacio.
                         Seguro: {textoDias(diasSeguro)}
                       </span>
                       <span className="text-[11px] px-2 py-1 rounded-full" style={{ background: badgeRevisionKm.bg, color: badgeRevisionKm.color, border: `1px solid ${badgeRevisionKm.border}` }}>
-                        Revision: {textoRevisionKm(restanteRevisionKm)}
+                        Revisión: {textoRevisionKm(restanteRevisionKm)}
                       </span>
                     </div>
                   </button>
@@ -775,7 +775,7 @@ Si no identificas un campo dejalo vacio.
             {!vehiculoDetalle ? (
               <div className="rounded-2xl p-6" style={s.cardStyle}>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Selecciona un vehiculo para ver su ficha, vencimientos y documentos.
+                  Selecciona un vehículo para ver su ficha, vencimientos y documentos.
                 </p>
               </div>
             ) : (
@@ -784,17 +784,17 @@ Si no identificas un campo dejalo vacio.
                   <div>
                     <p className="font-mono text-sm font-semibold" style={{ color: '#06b6d4' }}>{vehiculoDetalle.matricula}</p>
                     <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
-                      {vehiculoDetalle.alias || `${vehiculoDetalle.marca || ''} ${vehiculoDetalle.modelo || ''}`.trim() || 'Vehiculo'}
+                      {vehiculoDetalle.alias || `${vehiculoDetalle.marca || ''} ${vehiculoDetalle.modelo || ''}`.trim() || 'Vehículo'}
                     </h2>
                     <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                       KM: {Number(vehiculoDetalle.km_actual || 0).toLocaleString('es-ES')} - {vehiculoDetalle.combustible || 'N/D'}
                     </p>
                     <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                      Ultima revision: {vehiculoDetalle.ultima_revision_fecha || 'N/D'}
+                      Última revisión: {vehiculoDetalle.ultima_revision_fecha || 'N/D'}
                       {' - '}
-                      KM ultima: {vehiculoDetalle.km_ultima_revision ? Number(vehiculoDetalle.km_ultima_revision).toLocaleString('es-ES') : 'N/D'}
+                      KM última: {vehiculoDetalle.km_ultima_revision ? Number(vehiculoDetalle.km_ultima_revision).toLocaleString('es-ES') : 'N/D'}
                       {' - '}
-                      Proxima: {vehiculoDetalle.proxima_revision_km ? Number(vehiculoDetalle.proxima_revision_km).toLocaleString('es-ES') : 'N/D'} km
+                      Próxima: {vehiculoDetalle.proxima_revision_km ? Number(vehiculoDetalle.proxima_revision_km).toLocaleString('es-ES') : 'N/D'} km
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -836,7 +836,7 @@ Si no identificas un campo dejalo vacio.
                     const st = estiloRevisionKm(restanteKm)
                     return (
                       <div className="rounded-xl px-3 py-2" style={{ background: st.bg, border: `1px solid ${st.border}` }}>
-                        <p className="text-xs uppercase tracking-wider" style={{ color: st.color }}>Revision KM</p>
+                        <p className="text-xs uppercase tracking-wider" style={{ color: st.color }}>Revisión KM</p>
                         <p className="text-sm" style={{ color: st.color }}>
                           Objetivo: {vehiculoDetalle.proxima_revision_km ? Number(vehiculoDetalle.proxima_revision_km).toLocaleString('es-ES') : 'Sin dato'} km
                         </p>
@@ -844,7 +844,7 @@ Si no identificas un campo dejalo vacio.
                           {textoRevisionKm(restanteKm)}
                         </p>
                         <p className="text-xs mt-1" style={{ color: st.color }}>
-                          Ultima: {vehiculoDetalle.ultima_revision_fecha || 'N/D'} - KM {vehiculoDetalle.km_ultima_revision ? Number(vehiculoDetalle.km_ultima_revision).toLocaleString('es-ES') : 'N/D'}
+                          Última: {vehiculoDetalle.ultima_revision_fecha || 'N/D'} - KM {vehiculoDetalle.km_ultima_revision ? Number(vehiculoDetalle.km_ultima_revision).toLocaleString('es-ES') : 'N/D'}
                         </p>
                       </div>
                     )
@@ -860,11 +860,11 @@ Si no identificas un campo dejalo vacio.
                       <option value="itv">ITV</option>
                       <option value="itc">ITC</option>
                       <option value="impuesto">Impuesto</option>
-                      <option value="permiso_circulacion">Permiso circulacion</option>
-                      <option value="ficha_tecnica">Ficha tecnica</option>
+                      <option value="permiso_circulacion">Permiso circulación</option>
+                      <option value="ficha_tecnica">Ficha técnica</option>
                     </select>
-                    <input value={proveedorDoc} onChange={(e) => setProveedorDoc(e.target.value)} placeholder="Proveedor / Compania" className="rounded-lg px-2 py-2 text-sm outline-none" style={s.inputStyle} />
-                    <input value={numeroDoc} onChange={(e) => setNumeroDoc(e.target.value)} placeholder="Numero documento" className="rounded-lg px-2 py-2 text-sm outline-none" style={s.inputStyle} />
+                    <input value={proveedorDoc} onChange={(e) => setProveedorDoc(e.target.value)} placeholder="Proveedor / Compañía" className="rounded-lg px-2 py-2 text-sm outline-none" style={s.inputStyle} />
+                    <input value={numeroDoc} onChange={(e) => setNumeroDoc(e.target.value)} placeholder="Número documento" className="rounded-lg px-2 py-2 text-sm outline-none" style={s.inputStyle} />
                     <div className="grid grid-cols-2 gap-2">
                       <input value={fechaEmisionDoc} onChange={(e) => setFechaEmisionDoc(e.target.value)} type="date" className="rounded-lg px-2 py-2 text-sm outline-none" style={s.inputStyle} />
                       <input value={fechaCaducidadDoc} onChange={(e) => setFechaCaducidadDoc(e.target.value)} type="date" className="rounded-lg px-2 py-2 text-sm outline-none" style={s.inputStyle} />
@@ -890,7 +890,7 @@ Si no identificas un campo dejalo vacio.
                 </div>
 
                 <div>
-                  <p className="font-semibold text-sm mb-2" style={{ color: 'var(--text)' }}>Documentos del vehiculo</p>
+                  <p className="font-semibold text-sm mb-2" style={{ color: 'var(--text)' }}>Documentos del vehículo</p>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
                     <div className="rounded-lg px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
                       <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>Total</p>

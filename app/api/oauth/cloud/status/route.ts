@@ -27,10 +27,10 @@ function isConnected(expiresAt: string | null | undefined) {
 export async function GET(req: NextRequest) {
   try {
     const token = getBearer(req)
-    if (!token) return NextResponse.json({ error: 'Falta token de sesion.' }, { status: 401 })
+    if (!token) return NextResponse.json({ error: 'Falta token de sesión.' }, { status: 401 })
 
     const cfg = getSupabasePublic()
-    if (!cfg) return NextResponse.json({ error: 'Falta configuracion de Supabase.' }, { status: 500 })
+    if (!cfg) return NextResponse.json({ error: 'Falta configuración de Supabase.' }, { status: 500 })
 
     const userClient = createClient(cfg.url, cfg.anon, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
     const { data: userData, error: userError } = await userClient.auth.getUser()
     if (userError || !userData?.user?.id) {
-      return NextResponse.json({ error: 'Sesion no valida.' }, { status: 401 })
+      return NextResponse.json({ error: 'Sesión no válida.' }, { status: 401 })
     }
 
     const { data, error } = await userClient
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(
         {
           error: `No se pudo leer integraciones_nube: ${error.message}`,
-          hint: 'Ejecuta la migracion SQL 20260427_integraciones_nube_oauth.sql',
+          hint: 'Ejecuta la migración SQL 20260427_integraciones_nube_oauth.sql',
         },
         { status: 400 }
       )
@@ -87,4 +87,3 @@ export async function GET(req: NextRequest) {
     )
   }
 }
-

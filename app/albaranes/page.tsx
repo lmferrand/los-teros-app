@@ -666,7 +666,7 @@ export default function Albaranes() {
                 <input value={responsable} onChange={(e) => setResponsable(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Instalacion a tratar</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Instalación a tratar</label>
                 <input value={instalacion} onChange={(e) => setInstalacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div className="md:col-span-2">
@@ -725,7 +725,7 @@ export default function Albaranes() {
                     { label: 'Telefono', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{albDetalle.telefono || telefonoCliente(albDetalle.clientes) || '-'}</span> },
                     { label: 'Email', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{albDetalle.email || emailCliente(albDetalle.clientes) || '-'}</span> },
                     { label: 'Responsable', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{albDetalle.responsable || nombresTecnicos(albDetalle.ordenes?.tecnicos_ids) || '-'}</span> },
-                    { label: 'Instalacion', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{albDetalle.instalacion || nombreClientePrincipal(albDetalle.clientes) || '-'}</span> },
+                    { label: 'Instalación', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{albDetalle.instalacion || nombreClientePrincipal(albDetalle.clientes) || '-'}</span> },
                     {
                       label: 'Firmas',
                       val: (

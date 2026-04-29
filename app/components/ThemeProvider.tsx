@@ -42,7 +42,7 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
                 x
               </button>
               <p className="pr-5 leading-relaxed">
-                Este es el asistente de IA de la empresa. Puedes usarlo para consultar ordenes, inventario, clientes y planificacion.
+                Este es el asistente de IA de la empresa. Puedes usarlo para consultar órdenes, inventario, clientes y planificación.
               </p>
               <div
                 className="absolute right-5 -bottom-2 w-3 h-3 rotate-45"

@@ -10,13 +10,13 @@ export async function POST(req: NextRequest) {
     if (imagen) {
       const promptImagen = String(prompt || '').trim() || `Analiza este presupuesto y extrae los siguientes datos en formato JSON exacto, sin texto adicional:
 {
-  "numero": "numero del presupuesto",
+  "numero": "número del presupuesto",
   "cliente": "nombre del cliente",
   "importe": 0.00,
   "fecha": "DD/MM/YYYY",
-  "descripcion": "descripcion resumida de los trabajos"
+  "descripcion": "descripción resumida de los trabajos"
 }
-Si no encuentras algun dato deja el campo vacio o en 0.`
+Si no encuentras algún dato deja el campo vacío o en 0.`
 
       messages = [
         {
@@ -37,7 +37,7 @@ Si no encuentras algun dato deja el campo vacio o en 0.`
       messages = [
         {
           role: 'system',
-          content: `Eres el asistente de Los Teros, empresa de mantenimiento industrial. Responde en espanol de forma concisa. Contexto: ${contexto || 'Sin datos'}`
+          content: `Eres el asistente de Los Teros, empresa de mantenimiento industrial. Responde en español de forma concisa. Contexto: ${contexto || 'Sin datos'}`
         },
         {
           role: 'user',
@@ -68,12 +68,12 @@ Si no encuentras algun dato deja el campo vacio o en 0.`
       })
     }
 
-    const respuesta = data.choices?.[0]?.message?.content || 'Respuesta vacia'
+    const respuesta = data.choices?.[0]?.message?.content || 'Respuesta vacía'
     return NextResponse.json({ respuesta })
 
   } catch (error: any) {
     return NextResponse.json({
-      respuesta: `Error tecnico: ${error.message}`
+      respuesta: `Error técnico: ${error.message}`
     })
   }
 }

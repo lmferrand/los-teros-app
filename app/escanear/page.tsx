@@ -103,7 +103,7 @@ function EscanearContenido() {
       )
     } catch {
       setEscaneando(false)
-      setMensaje('No se pudo acceder a la camara. Permite el acceso en tu navegador.')
+      setMensaje('No se pudo acceder a la cámara. Permite el acceso en tu navegador.')
     }
   }
 
@@ -136,7 +136,7 @@ function EscanearContenido() {
 
       setMensaje('QR no reconocido. Escanea un QR generado por Los Teros.')
     } catch {
-      setMensaje('QR no valido.')
+      setMensaje('QR no válido.')
     }
   }
 
@@ -309,7 +309,7 @@ function EscanearContenido() {
               {orden.clientes?.nombre || '-'}
             </p>
             <p className="text-xs mt-1" style={{ color: '#a78bfa' }}>
-              El movimiento se vinculara automaticamente a esta OT.
+              El movimiento se vinculará automáticamente a esta OT.
             </p>
           </div>
         )}
@@ -336,8 +336,8 @@ function EscanearContenido() {
             </select>
             <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
               {ordenesDisponibles.length > 0
-                ? 'Este movimiento se guardara dentro de la OT seleccionada.'
-                : 'Sin OTs activas, el movimiento se registrara sin OT.'}
+                ? 'Este movimiento se guardará dentro de la OT seleccionada.'
+                : 'Sin OTs activas, el movimiento se registrará sin OT.'}
             </p>
           </div>
         )}
@@ -347,13 +347,13 @@ function EscanearContenido() {
             <div className="rounded-2xl p-8 mb-6" style={s.cardStyle}>
               <p className="text-6xl mb-4">QR</p>
               <p className="font-semibold mb-2" style={{ color: 'var(--text)' }}>
-                Escanear codigo QR
+                Escanear código QR
               </p>
               <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
-                Apunta la camara al codigo QR del material o equipo
+                Apunta la cámara al código QR del material o equipo
               </p>
               <button onClick={iniciarScanner} className="w-full py-3 rounded-xl text-sm font-medium" style={s.btnPrimary}>
-                Abrir camara
+                Abrir cámara
               </button>
             </div>
             {mensaje && (
@@ -391,7 +391,7 @@ function EscanearContenido() {
         {escaneando && (
           <div>
             <p className="text-sm text-center mb-3" style={{ color: 'var(--text-muted)' }}>
-              Apunta la camara al codigo QR
+              Apunta la cámara al código QR
             </p>
             <div id="qr-reader" className="rounded-2xl overflow-hidden mb-4"></div>
             <button onClick={detenerScanner} className="w-full py-3 rounded-xl text-sm" style={s.btnSecondary}>
@@ -453,7 +453,7 @@ function EscanearContenido() {
                   </button>
                 </div>
                 <p className="text-xs mt-2 text-center" style={{ color: 'var(--text-muted)' }}>
-                  {item.unidad || 'unidades'} - Maximo: {item.stock || 0}
+                  {item.unidad || 'unidades'} - Máximo: {item.stock || 0}
                 </p>
               </div>
             )}
@@ -469,7 +469,7 @@ function EscanearContenido() {
             {item._tipo === 'equipo' && item.estado === 'disponible' && (
               <div className="rounded-xl p-3 mb-4" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
                 <p className="text-sm" style={{ color: '#fbbf24' }}>
-                  Se registrara <strong>{item.codigo}</strong> como equipo adquirido en esta OT.
+                  Se registrará <strong>{item.codigo}</strong> como equipo adquirido en esta OT.
                 </p>
               </div>
             )}

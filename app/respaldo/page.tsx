@@ -234,7 +234,7 @@ function RespaldoPageClient() {
 
       window.location.href = data.url
     } catch (error: any) {
-      alert(`No se pudo iniciar sesion con ${provider}: ${String(error?.message || 'Error desconocido')}`)
+      alert(`No se pudo iniciar sesión con ${provider}: ${String(error?.message || 'Error desconocido')}`)
       setConectando('')
     }
   }
@@ -427,7 +427,7 @@ function RespaldoPageClient() {
             </button>
           </div>
           <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
-            Si una cuenta no esta conectada, se abrira su login OAuth para ese usuario y al volver se subira automaticamente.
+            Si una cuenta no está conectada, se abrirá su login OAuth para ese usuario y al volver se subirá automáticamente.
           </p>
         </div>
 

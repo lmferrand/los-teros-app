@@ -10,7 +10,7 @@ export default function Asistente() {
   const [mensajes, setMensajes] = useState<any[]>([
     {
       rol: 'asistente',
-      texto: 'Hola, soy el asistente de Los Teros. Puedo ayudarte con informacion sobre ordenes, inventario, clientes y planificacion. Preguntame lo que necesites.'
+      texto: 'Hola, soy el asistente de Los Teros. Puedo ayudarte con información sobre órdenes, inventario, clientes y planificación. Pregúntame lo que necesites.'
     }
   ])
   const [input, setInput] = useState('')
@@ -40,10 +40,10 @@ export default function Asistente() {
     ])
     const stockBajo = (materiales.data || []).filter((m: any) => (m.stock || 0) < (m.minimo || 0))
     const ctx = `
-ORDENES ACTIVAS (${(ordenes.data || []).length}):
+ÓRDENES ACTIVAS (${(ordenes.data || []).length}):
 ${(ordenes.data || []).map((o: any) => `- ${o.codigo} | ${o.tipo} | ${o.estado} | ${o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : 'sin fecha'} | ${(o.descripcion || '').substring(0, 60)}`).join('\n')}
 MATERIALES CON STOCK BAJO (${stockBajo.length}):
-${stockBajo.map((m: any) => `- ${m.nombre}: ${m.stock} ${m.unidad} (minimo: ${m.minimo})`).join('\n')}
+${stockBajo.map((m: any) => `- ${m.nombre}: ${m.stock} ${m.unidad} (mínimo: ${m.minimo})`).join('\n')}
 EQUIPOS EN CLIENTE:
 ${(equipos.data || []).filter((e: any) => e.estado === 'en_cliente').map((e: any) => `- ${e.codigo} ${e.tipo} ${e.marca}`).join('\n')}
 CLIENTES (${(clientes.data || []).length} registrados):
@@ -83,8 +83,8 @@ ${(clientes.data || []).map((c: any) => c.nombre).join(', ')}
   }
 
   const PREGUNTAS = [
-    'Cuantas ordenes tenemos activas?',
-    'Que materiales estan por debajo del minimo?',
+    '¿Cuántas órdenes tenemos activas?',
+    '¿Qué materiales están por debajo del mínimo?',
     'Que equipos estan en cliente?',
     'Dame un resumen del estado de la empresa',
     'Que trabajos tenemos esta semana?',
@@ -150,7 +150,7 @@ ${(clientes.data || []).map((c: any) => c.nombre).join(', ')}
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder="Pregunta sobre ordenes, inventario, clientes..."
+            placeholder="Pregunta sobre órdenes, inventario, clientes..."
             className="flex-1 rounded-xl px-4 py-3 text-sm outline-none"
             style={s.inputStyle}
             onFocus={e => e.target.style.borderColor = '#7c3aed'}

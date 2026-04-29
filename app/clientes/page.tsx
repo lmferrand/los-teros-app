@@ -473,7 +473,7 @@ export default function Clientes() {
       'Nombre Fiscal': c.nombre_fiscal || '',
       'CIF': c.cif || '',
       'Direccion': c.direccion || '',
-      'Poblacion': c.poblacion || '',
+      'Población': c.poblacion || '',
       'Telefono': c.telefono || '',
       'Movil': c.movil || '',
       'Email': c.email || '',
@@ -565,7 +565,7 @@ export default function Clientes() {
             </label>
           ))}
           <p className="text-xs w-full mt-1" style={{ color: 'var(--text-muted)' }}>
-            Columnas: Nombre Comercial, Nombre Fiscal, CIF, Direccion, Poblacion, Telefono, Movil, Email, Notas
+            Columnas: Nombre Comercial, Nombre Fiscal, CIF, Dirección, Población, Teléfono, Móvil, Email, Notas
           </p>
         </div>
 
@@ -669,7 +669,7 @@ export default function Clientes() {
                 <input value={direccion} onChange={e => setDireccion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Calle Mayor 1" />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Poblacion</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Población</label>
                 <input value={poblacion} onChange={e => setPoblacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Elche" />
               </div>
               <div>
@@ -743,7 +743,7 @@ export default function Clientes() {
                         <table className="min-w-[1150px] w-full text-sm">
                           <thead>
                             <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                              {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Poblacion', 'Telefono', 'Empresa', ''].map(h => (
+                              {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Población', 'Teléfono', 'Empresa', ''].map(h => (
                                 <th key={h} className="text-left px-3 py-2 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                               ))}
                             </tr>
@@ -812,7 +812,7 @@ export default function Clientes() {
                         <input type="checkbox" checked={seleccionados.length === clientes.length && clientes.length > 0}
                           onChange={toggleTodos} className="w-4 h-4" style={{ accentColor: '#7c3aed' }} />
                       </th>
-                      {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Poblacion', 'Telefono', 'Empresa', ''].map(h => (
+                      {['Nombre Comercial', 'Nombre Fiscal', 'CIF', 'Población', 'Teléfono', 'Empresa', ''].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{h}</th>
                       ))}
                     </tr>
@@ -875,7 +875,7 @@ export default function Clientes() {
 
             <div className="flex items-center justify-between flex-wrap gap-3">
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Pagina {pagina + 1} de {totalPaginas} — {clientes.length} de {totalClientes}
+                Página {pagina + 1} de {totalPaginas} — {clientes.length} de {totalClientes}
               </p>
               <div className="flex gap-2">
                 <button onClick={() => setPagina(p => Math.max(0, p - 1))} disabled={pagina === 0}

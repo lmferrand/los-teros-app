@@ -268,6 +268,7 @@ export default function RecordatorioServicioPage() {
   const [tablaServiciosDisponible, setTablaServiciosDisponible] = useState(true)
   const [clientesInactivos, setClientesInactivos] = useState<RankingItem[]>([])
   const [clientesContactados, setClientesContactados] = useState<RankingItem[]>([])
+  const [detallesAbiertos, setDetallesAbiertos] = useState<Record<string, boolean>>({})
   const [totalConHistorial, setTotalConHistorial] = useState(0)
   const [importando, setImportando] = useState(false)
   const [aplicandoImportacion, setAplicandoImportacion] = useState(false)
@@ -488,6 +489,10 @@ export default function RecordatorioServicioPage() {
     contactados.sort((a, b) => b.diasSinServicio - a.diasSinServicio)
     setClientesInactivos(pendientes.slice(0, 30))
     setClientesContactados(contactados.slice(0, 30))
+  }
+
+  function alternarDetalle(id: string) {
+    setDetallesAbiertos((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
   async function calcularFilasInsertables(matched: any[]) {
@@ -1003,87 +1008,106 @@ export default function RecordatorioServicioPage() {
           <div className="rounded-2xl p-5" style={s.cardStyle}>
             <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>No hay datos</p>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              No hay clientes con mas de 1 ano sin servicio registrado.
+              No hay clientes con más de 1 año sin servicio registrado.
             </p>
           </div>
         ) : (
           <>
             <div className="rounded-2xl p-4 mb-4" style={s.cardStyle}>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Top 30 clientes pendientes (mas de 1 ano sin servicio).
+                Top 30 clientes pendientes (más de 1 año sin servicio).
               </p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
-                Clientes {'>'} 1 ano: {totalConHistorial} - Contactados: {clientesContactados.length}
+                Clientes {'>'} 1 año: {totalConHistorial} - Contactados: {clientesContactados.length}
               </p>
             </div>
 
             {clientesInactivos.length === 0 ? (
               <div className="rounded-xl px-4 py-3 mb-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  No hay clientes pendientes de contacto con mas de 1 ano sin servicio.
+                  No hay clientes pendientes de contacto con más de 1 año sin servicio.
                 </p>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 {clientesInactivos.map((c, idx) => (
-                <div
-                  key={c.id}
-                  className="rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
-                  style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
-                >
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                      #{idx + 1} {c.nombre}
-                    </p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {c.diasSinServicio} dias sin servicio - ultima actividad: {c.ultimaFecha.toLocaleDateString('es-ES')}
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
-                      Origen ultimo servicio: {c.ultimoOrigen === 'historial' ? 'Historial servicios' : 'OT completada'} - CIF: {c.cif || '-'}{c.email ? ` - ${c.email}` : ''}
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>
-                      Ultimo servicio: {c.ultimoServicioDescripcion || 'Sin descripcion'}
-                      {c.ultimoServicioDocumento ? ` - ${c.ultimoServicioDocumento}` : ''}
-                      {typeof c.ultimoServicioImporte === 'number' ? ` - ${c.ultimoServicioImporte.toFixed(2)} EUR` : ''}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap justify-end">
-                    <label
-                      className="text-xs px-2 py-1 rounded-lg flex items-center gap-2"
-                      style={{ background: 'rgba(124,58,237,0.12)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.28)' }}
+                  <div
+                    key={c.id}
+                    className="rounded-xl px-4 py-3"
+                    style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => alternarDetalle(`pend-${c.id}`)}
+                      className="w-full flex items-center justify-between gap-3 text-left"
                     >
-                      <input
-                        type="checkbox"
-                        checked={Boolean(c.seguimientoLlamadaOk)}
-                        onChange={(ev) => void actualizarSeguimientoLlamada(c.id, ev.target.checked)}
-                        className="w-3.5 h-3.5"
-                        style={{ accentColor: '#7c3aed' }}
-                      />
-                      Contactado
-                    </label>
-                    {c.telefono && (
-                      <a
-                        href={`tel:${c.telefono}`}
-                        className="text-xs px-2 py-1 rounded-lg"
-                        style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)' }}
-                      >
-                        Llamar
-                      </a>
-                    )}
-                    <Link
-                      href={`/clientes/${c.id}`}
-                      className="text-xs px-2 py-1 rounded-lg"
-                      style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
-                    >
-                      Abrir cliente
-                    </Link>
-                    {c.seguimientoLlamadaAt && (
-                      <span className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>
-                        {new Date(c.seguimientoLlamadaAt).toLocaleDateString('es-ES')}
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                          #{idx + 1} {c.nombre}
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                          Ultima actividad: {c.ultimaFecha.toLocaleDateString('es-ES')}
+                        </p>
+                      </div>
+                      <span className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(6,182,212,0.1)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.25)' }}>
+                        {detallesAbiertos[`pend-${c.id}`] ? 'Ocultar' : 'Ver'}
                       </span>
+                    </button>
+
+                    {detallesAbiertos[`pend-${c.id}`] && (
+                      <div className="mt-3 pt-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderTop: '1px solid var(--border)' }}>
+                        <div>
+                          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                            {c.diasSinServicio} días sin servicio
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
+                            Origen último servicio: {c.ultimoOrigen === 'historial' ? 'Historial servicios' : 'OT completada'} - CIF: {c.cif || '-'}{c.email ? ` - ${c.email}` : ''}
+                          </p>
+                          <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>
+                            Último servicio: {c.ultimoServicioDescripcion || 'Sin descripción'}
+                            {c.ultimoServicioDocumento ? ` - ${c.ultimoServicioDocumento}` : ''}
+                            {typeof c.ultimoServicioImporte === 'number' ? ` - ${c.ultimoServicioImporte.toFixed(2)} EUR` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
+                          <label
+                            className="text-xs px-2 py-1 rounded-lg flex items-center gap-2"
+                            style={{ background: 'rgba(124,58,237,0.12)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.28)' }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(c.seguimientoLlamadaOk)}
+                              onChange={(ev) => void actualizarSeguimientoLlamada(c.id, ev.target.checked)}
+                              className="w-3.5 h-3.5"
+                              style={{ accentColor: '#7c3aed' }}
+                            />
+                            Contactado
+                          </label>
+                          {c.telefono && (
+                            <a
+                              href={`tel:${c.telefono}`}
+                              className="text-xs px-2 py-1 rounded-lg"
+                              style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)' }}
+                            >
+                              Llamar
+                            </a>
+                          )}
+                          <Link
+                            href={`/clientes/${c.id}`}
+                            className="text-xs px-2 py-1 rounded-lg"
+                            style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+                          >
+                            Abrir cliente
+                          </Link>
+                          {c.seguimientoLlamadaAt && (
+                            <span className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>
+                              {new Date(c.seguimientoLlamadaAt).toLocaleDateString('es-ES')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
-                </div>
                 ))}
               </div>
             )}
@@ -1099,51 +1123,70 @@ export default function RecordatorioServicioPage() {
                   {clientesContactados.map((c, idx) => (
                     <div
                       key={`contactado-${c.id}`}
-                      className="rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+                      className="rounded-xl px-4 py-3"
                       style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}
                     >
-                      <div>
-                        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                          #{idx + 1} {c.nombre}
-                        </p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          Contactado: {c.seguimientoLlamadaAt ? new Date(c.seguimientoLlamadaAt).toLocaleDateString('es-ES') : '-'} - Ultimo servicio: {c.ultimaFecha.toLocaleDateString('es-ES')}
-                        </p>
-                        <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
-                          CIF: {c.cif || '-'}{c.email ? ` - ${c.email}` : ''}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap justify-end">
-                        <label
-                          className="text-xs px-2 py-1 rounded-lg flex items-center gap-2"
-                          style={{ background: 'rgba(124,58,237,0.12)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.28)' }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={Boolean(c.seguimientoLlamadaOk)}
-                            onChange={(ev) => void actualizarSeguimientoLlamada(c.id, ev.target.checked)}
-                            className="w-3.5 h-3.5"
-                            style={{ accentColor: '#7c3aed' }}
-                          />
-                          Contactado
-                        </label>
-                        {c.telefono && (
-                          <a
-                            href={`tel:${c.telefono}`}
-                            className="text-xs px-2 py-1 rounded-lg"
-                            style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)' }}
-                          >
-                            Llamar
-                          </a>
-                        )}
-                        <Link
-                          href={`/clientes/${c.id}`}
-                          className="text-xs px-2 py-1 rounded-lg"
-                          style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
-                        >
-                          Abrir cliente
-                        </Link>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => alternarDetalle(`cont-${c.id}`)}
+                        className="w-full flex items-center justify-between gap-3 text-left"
+                      >
+                        <div>
+                          <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                            #{idx + 1} {c.nombre}
+                          </p>
+                          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                            Ultima actividad: {c.ultimaFecha.toLocaleDateString('es-ES')}
+                          </p>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(6,182,212,0.1)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.25)' }}>
+                          {detallesAbiertos[`cont-${c.id}`] ? 'Ocultar' : 'Ver'}
+                        </span>
+                      </button>
+
+                      {detallesAbiertos[`cont-${c.id}`] && (
+                        <div className="mt-3 pt-3 flex items-center justify-between gap-3 flex-wrap" style={{ borderTop: '1px solid var(--border)' }}>
+                          <div>
+                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                              Contactado: {c.seguimientoLlamadaAt ? new Date(c.seguimientoLlamadaAt).toLocaleDateString('es-ES') : '-'}
+                            </p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
+                              CIF: {c.cif || '-'}{c.email ? ` - ${c.email}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap justify-end">
+                            <label
+                              className="text-xs px-2 py-1 rounded-lg flex items-center gap-2"
+                              style={{ background: 'rgba(124,58,237,0.12)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.28)' }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(c.seguimientoLlamadaOk)}
+                                onChange={(ev) => void actualizarSeguimientoLlamada(c.id, ev.target.checked)}
+                                className="w-3.5 h-3.5"
+                                style={{ accentColor: '#7c3aed' }}
+                              />
+                              Contactado
+                            </label>
+                            {c.telefono && (
+                              <a
+                                href={`tel:${c.telefono}`}
+                                className="text-xs px-2 py-1 rounded-lg"
+                                style={{ background: 'rgba(52,211,153,0.12)', color: '#34d399', border: '1px solid rgba(52,211,153,0.3)' }}
+                              >
+                                Llamar
+                              </a>
+                            )}
+                            <Link
+                              href={`/clientes/${c.id}`}
+                              className="text-xs px-2 py-1 rounded-lg"
+                              style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
+                            >
+                              Abrir cliente
+                            </Link>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
