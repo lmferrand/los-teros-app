@@ -309,7 +309,7 @@ export default function Albaranes() {
       const { error } = await (supabase.from('albaranes') as any).update(datos).eq('id', editandoId)
       if (error) {
         if (esErrorColumnasAlbaran(error)) {
-          alert('Faltan columnas nuevas de albaranes en Supabase. Ejecuta la migracion 20260429_albaranes_formulario_firmas.sql')
+          alert('Faltan columnas nuevas de albaranes en Supabase. Ejecuta la migración 20260429_albaranes_formulario_firmas.sql')
           return
         }
         alert('No se pudo guardar el albaran: ' + error.message)
@@ -320,7 +320,7 @@ export default function Albaranes() {
       const { error } = await (supabase.from('albaranes') as any).insert({ ...datos, numero, fotos_urls: [] })
       if (error) {
         if (esErrorColumnasAlbaran(error)) {
-          alert('Faltan columnas nuevas de albaranes en Supabase. Ejecuta la migracion 20260429_albaranes_formulario_firmas.sql')
+          alert('Faltan columnas nuevas de albaranes en Supabase. Ejecuta la migración 20260429_albaranes_formulario_firmas.sql')
           return
         }
         alert('No se pudo crear el albaran: ' + error.message)
@@ -521,7 +521,7 @@ export default function Albaranes() {
         .eq('id', albaranFirmaId)
       if (errUpdate) {
         if (esErrorColumnasAlbaran(errUpdate)) {
-          alert('La base de datos aun no tiene campos de firma. Ejecuta la migracion 20260429_albaranes_formulario_firmas.sql')
+          alert('La base de datos aún no tiene campos de firma. Ejecuta la migración 20260429_albaranes_formulario_firmas.sql')
           return
         }
         alert('Firma guardada en Storage pero no se pudo registrar en el albaran.')
@@ -670,11 +670,11 @@ export default function Albaranes() {
                 <input value={instalacion} onChange={(e) => setInstalacion(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Descripcion del trabajo</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Descripción del trabajo</label>
                 <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required rows={4}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
                   style={s.inputStyle}
-                  placeholder="Descripcion del trabajo realizado..." />
+                  placeholder="Descripción del trabajo realizado..." />
               </div>
               <div className="md:col-span-2">
                 <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Observaciones / recomendaciones</label>
@@ -748,7 +748,7 @@ export default function Albaranes() {
                 </div>
 
                 <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                  <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Descripcion del trabajo</p>
+                  <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Descripción del trabajo</p>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
                     {albDetalle.descripcion || albDetalle.ordenes?.descripcion || '-'}
                   </p>

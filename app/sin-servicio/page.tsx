@@ -508,7 +508,7 @@ export default function RecordatorioServicioPage() {
       if (error) {
         if (esTablaServiciosNoDisponible(error)) {
           setTablaServiciosDisponible(false)
-          throw new Error('Falta la tabla servicios_clientes. Ejecuta la migracion correspondiente.')
+          throw new Error('Falta la tabla servicios_clientes. Ejecuta la migración correspondiente.')
         }
         throw error
       }
@@ -673,7 +673,7 @@ export default function RecordatorioServicioPage() {
           errores: 0,
           advertencias: [
             'Hoja procesada: ' + hojaSeleccionada,
-            visitasTecnicasOmitidas > 0 ? `Visitas tecnicas omitidas: ${visitasTecnicasOmitidas}` : '',
+            visitasTecnicasOmitidas > 0 ? `Visitas técnicas omitidas: ${visitasTecnicasOmitidas}` : '',
           ].filter(Boolean),
           detalleSinCliente: [],
           error: 'No hay filas validas para importar despues del filtrado.',
@@ -755,7 +755,7 @@ export default function RecordatorioServicioPage() {
           errores: 0,
           advertencias: [
             'No hubo coincidencias con clientes existentes.',
-            visitasTecnicasOmitidas > 0 ? `Visitas tecnicas omitidas: ${visitasTecnicasOmitidas}` : '',
+            visitasTecnicasOmitidas > 0 ? `Visitas técnicas omitidas: ${visitasTecnicasOmitidas}` : '',
           ].filter(Boolean),
           detalleSinCliente: sinClienteDetalle,
           error: 'No se pudo vincular ninguna fila con clientes existentes.',
@@ -774,7 +774,7 @@ export default function RecordatorioServicioPage() {
         filasSinCliente: servicios.length - matched.length,
         advertencias: [
           `Hoja procesada: ${hojaSeleccionada}`,
-          visitasTecnicasOmitidas > 0 ? `Visitas tecnicas omitidas: ${visitasTecnicasOmitidas}` : '',
+          visitasTecnicasOmitidas > 0 ? `Visitas técnicas omitidas: ${visitasTecnicasOmitidas}` : '',
         ].filter(Boolean),
         detalleSinCliente: sinClienteDetalle,
         filasParaInsertar: paraInsertar,
@@ -826,7 +826,7 @@ export default function RecordatorioServicioPage() {
         if (error) {
           if (esTablaServiciosNoDisponible(error)) {
             setTablaServiciosDisponible(false)
-            throw new Error('Falta la tabla servicios_clientes. Ejecuta la migracion correspondiente.')
+            throw new Error('Falta la tabla servicios_clientes. Ejecuta la migración correspondiente.')
           }
           errores += bloque.length
         } else {

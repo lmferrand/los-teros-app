@@ -52,7 +52,7 @@ export function OrdenDetalleModal({
                 </span>
               ),
             },
-            { label: 'Duracion', val: <span style={{ color: 'var(--text)' }}>{orden.duracion_horas || 2}h</span> },
+            { label: 'Duración', val: <span style={{ color: 'var(--text)' }}>{orden.duracion_horas || 2}h</span> },
             {
               label: 'Fecha',
               val: (

@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
     return toRedirect(req, '/respaldo', {
       cloud_oauth: 'error',
       provider: 'unknown',
-      mensaje: 'No se pudo validar el estado OAuth. Intentalo de nuevo.',
+      mensaje: 'No se pudo validar el estado OAuth. Inténtalo de nuevo.',
     })
   }
 
@@ -200,4 +200,3 @@ export async function GET(req: NextRequest) {
     })
   }
 }
-

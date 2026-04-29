@@ -311,6 +311,8 @@ export default function Dashboard() {
       perfilData = nuevoPerfil
     }
     setPerfil(perfilData)
+    const rolPerfil = String(perfilData?.rol || '').toLowerCase()
+    const esTecnicoPerfil = rolPerfil === 'tecnico' || rolPerfil === 'almacen'
 
     const [materiales, equipos, vehiculosFlota, perfilesEquipo] = await Promise.all([
       supabase.from('materiales').select('*'),
@@ -346,6 +348,19 @@ export default function Dashboard() {
       const d = new Date(o.created_at)
       return d.getMonth() === mes && d.getFullYear() === anio
     })
+    const ordenesAsignadasUsuario = todasordenes.filter((o) =>
+      (Array.isArray(o.tecnicos_ids) && o.tecnicos_ids.includes(session.user.id)) || o.tecnico_id === session.user.id
+    )
+    const otActivasDashboard = esTecnicoPerfil
+      ? ordenesAsignadasUsuario.filter((o) => o.estado === 'pendiente' || o.estado === 'en_curso')
+      : otActivas
+    const otMesDashboard = esTecnicoPerfil
+      ? ordenesAsignadasUsuario.filter((o) => {
+        if (!o.created_at || o.estado !== 'completada') return false
+        const d = new Date(o.created_at)
+        return d.getMonth() === mes && d.getFullYear() === anio
+      })
+      : otMes
     const stockBajo = todosMateriales.filter(m => (m.stock || 0) < (m.minimo || 0))
     const equiposCampo = todosEquipos.filter(e => e.estado === 'en_cliente')
     const otPendientesAsignacion = todasordenes.filter(
@@ -418,17 +433,16 @@ export default function Dashboard() {
       else if (peor.dias <= 60) vehiculosPorVencer += 1
       else vehiculosAldia += 1
     }
-    const misMisordenes = todasordenes.filter(o =>
-      (o.tecnicos_ids?.includes(session.user.id) || o.tecnico_id === session.user.id) &&
-      (o.estado === 'pendiente' || o.estado === 'en_curso')
-    ).slice(0, 5)
+    const misMisordenes = otActivasDashboard.slice(0, 8)
 
     setStats({
-      otActivas: otActivas.length, otMes: otMes.length,
+      otActivas: otActivasDashboard.length, otMes: otMesDashboard.length,
       stockBajo: stockBajo.length, equiposCampo: equiposCampo.length,
       clientesTeros: countTeros || 0,
       clientesOlipro: countOlipro || 0,
-      otPendientes: todasordenes.filter(o => o.estado === 'pendiente').length,
+      otPendientes: esTecnicoPerfil
+        ? ordenesAsignadasUsuario.filter((o) => o.estado === 'pendiente').length
+        : todasordenes.filter((o) => o.estado === 'pendiente').length,
       vehiculosTotal: todosvehiculos.length,
       vehiculosAldia,
       vehiculosPorVencer,
@@ -481,7 +495,7 @@ export default function Dashboard() {
       }
     }
 
-    // Garantiza cambio diario automatico.
+    // Garantiza cambio diario automático.
     programarSiguienteRefrescodiario()
     // Mantiene el dashboard al día con cambios de OT en jornada.
     intervaloRefresco = window.setInterval(refrescarSiVisible, 15 * 60 * 1000)
@@ -672,9 +686,15 @@ export default function Dashboard() {
       mostrarInsignia: true,
     },
   ]
-  const resumenCards = esTecnico
+  const resumenCards = (esTecnico
     ? resumenCardsBase.filter((card) => card.label !== 'Clientes')
     : resumenCardsBase
+  ).map((card) => {
+    if (!esTecnico) return card
+    if (card.label === 'OT Activas') return { ...card, href: '/ordenes?mias=1' }
+    if (card.label === 'Completadas mes') return { ...card, href: '/ordenes?mias=1&estado=completada' }
+    return card
+  })
 
   const reconocimientoActivo = reconocimientosSemana.length > 0
     ? reconocimientosSemana[reconocimientoSemanaIdx % reconocimientosSemana.length]
@@ -693,7 +713,21 @@ export default function Dashboard() {
     <div className="min-h-screen" style={{ background: bgMain }}>
       <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={{ background: bgCard, borderBottom: `1px solid ${border}` }}>
         <div className="flex items-center gap-3">
-          <Image src="/logo.png" alt="Los Teros S.L" width={96} height={96} className="w-24 h-24 object-contain" style={{ mixBlendMode: tema === 'dark' ? 'screen' : 'normal' }} />
+          <div className="logo-tero-wrap">
+            <Image
+              src="/logo.png"
+              alt="Los Teros S.L"
+              width={96}
+              height={96}
+              className="logo-tero-spin w-24 h-24 object-contain"
+              style={{
+                mixBlendMode: tema === 'dark' ? 'screen' : 'normal',
+                filter: tema === 'dark'
+                  ? 'drop-shadow(0 8px 18px rgba(6,182,212,0.28))'
+                  : 'drop-shadow(0 6px 12px rgba(15,23,42,0.18))',
+              }}
+            />
+          </div>
           <div>
             <h1 className="font-bold text-lg leading-tight" style={{ color: textColor }}>
               Los Teros S.L
@@ -771,27 +805,40 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {misordenes.length > 0 && (
+        {(esTecnico || misordenes.length > 0) && (
           <div className="rounded-xl p-5 mb-6" style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)' }}>
-            <h3 className="font-semibold mb-3 text-sm" style={{ color: '#a78bfa' }}>Mis órdenes pendientes</h3>
-            <div className="flex flex-col gap-2">
-              {misordenes.map(o => (
-                <div key={o.id} className="flex items-center justify-between rounded-lg px-4 py-3" style={{ background: 'rgba(124,58,237,0.1)' }}>
-                  <div>
-                    <span className="font-mono text-xs mr-2" style={{ color: '#06b6d4' }}>{o.codigo}</span>
-                    <span className="text-sm" style={{ color: textColor }}>{o.descripcion?.substring(0, 50) || '\u2014'}</span>
-                  </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                    background: o.estado === 'en_curso' ? 'rgba(234,179,8,0.2)' : 'rgba(124,58,237,0.2)',
-                    color: o.estado === 'en_curso' ? '#fbbf24' : '#a78bfa'
-                  }}>
-                    {o.estado.replace('_', ' ')}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <Link href="/planificacion" className="block mt-3 text-xs hover:opacity-80 transition-opacity" style={{ color: '#06b6d4' }}>
-              Ver todas mis órdenes →
+            <h3 className="font-semibold mb-3 text-sm" style={{ color: '#a78bfa' }}>
+              {esTecnico ? 'Mis órdenes asignadas' : 'Mis órdenes pendientes'}
+            </h3>
+            {misordenes.length === 0 ? (
+              <p className="text-sm" style={{ color: textMuted }}>No tienes órdenes asignadas ahora mismo.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {misordenes.map(o => (
+                  <Link
+                    key={o.id}
+                    href={esTecnico ? `/ordenes?mias=1&open=${o.id}` : `/ordenes?open=${o.id}`}
+                    className="flex items-center justify-between rounded-lg px-4 py-3 transition-all"
+                    style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(167,139,250,0.16)' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(6,182,212,0.42)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(167,139,250,0.16)')}
+                  >
+                    <div className="min-w-0">
+                      <span className="font-mono text-xs mr-2" style={{ color: '#06b6d4' }}>{o.codigo}</span>
+                      <span className="text-sm" style={{ color: textColor }}>{o.descripcion?.substring(0, 58) || '\u2014'}</span>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                      background: o.estado === 'en_curso' ? 'rgba(234,179,8,0.2)' : 'rgba(124,58,237,0.2)',
+                      color: o.estado === 'en_curso' ? '#fbbf24' : '#a78bfa'
+                    }}>
+                      {o.estado.replace('_', ' ')}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+            <Link href={esTecnico ? '/ordenes?mias=1' : '/planificacion'} className="block mt-3 text-xs hover:opacity-80 transition-opacity" style={{ color: '#06b6d4' }}>
+              {esTecnico ? 'Ver todas mis órdenes →' : 'Ver planificación →'}
             </Link>
           </div>
         )}
@@ -853,8 +900,10 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {MODULOS.filter(m => m.siempre || (!esTecnico && m.soloAdmin)).map(m => (
-            <Link key={m.href} href={m.href} className="rounded-xl p-5 block transition-all"
+          {MODULOS.filter(m => m.siempre || (!esTecnico && m.soloAdmin)).map(m => {
+            const hrefModulo = esTecnico && m.href === '/ordenes' ? '/ordenes?mias=1' : m.href
+            return (
+            <Link key={m.href} href={hrefModulo} className="rounded-xl p-5 block transition-all"
               style={{ background: bgCard, border: `1px solid ${border}` }}
               onMouseEnter={e => activarHoverCard(e.currentTarget)}
               onMouseLeave={e => desactivarHoverCard(e.currentTarget)}>
@@ -866,7 +915,7 @@ export default function Dashboard() {
               <h2 className="font-semibold text-sm" style={{ color: textColor }}>{m.titulo}</h2>
               <p className="text-xs mt-1" style={{ color: textMuted }}>{m.desc}</p>
             </Link>
-          ))}
+          )})}
         </div>
         <style jsx global>{`
           @keyframes insigniaFloat {
@@ -892,6 +941,31 @@ export default function Dashboard() {
             }
             32% { opacity: 0; }
             100% { opacity: 0; transform: translate(120%, -120%) rotate(-28deg); }
+          }
+          @keyframes logoTerosSpin3d {
+            0%,
+            95% { transform: rotateX(14deg) rotateY(0deg); }
+            96.1% { transform: rotateX(15.2deg) rotateY(42deg); }
+            97.1% { transform: rotateX(16deg) rotateY(175deg); }
+            98.1% { transform: rotateX(15.4deg) rotateY(308deg); }
+            99% { transform: rotateX(14.8deg) rotateY(348deg); }
+            100% { transform: rotateX(14deg) rotateY(360deg); }
+          }
+          .logo-tero-wrap {
+            perspective: 1000px;
+            transform-style: preserve-3d;
+          }
+          .logo-tero-spin {
+            transform-style: preserve-3d;
+            backface-visibility: visible;
+            animation: logoTerosSpin3d 60s linear infinite;
+            will-change: transform;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .logo-tero-spin {
+              animation: none;
+              transform: rotateX(10deg);
+            }
           }
           .sparkle {
             position: absolute;

@@ -128,7 +128,7 @@ async function getIntegracionUsuario(
 
   if (error) {
     throw new Error(
-      `No se pudo leer integraciones_nube. Ejecuta la migracion SQL 20260427_integraciones_nube_oauth.sql. Detalle: ${error.message}`
+      `No se pudo leer integraciones_nube. Ejecuta la migración SQL 20260427_integraciones_nube_oauth.sql. Detalle: ${error.message}`
     )
   }
 

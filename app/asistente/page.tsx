@@ -77,7 +77,7 @@ ${(clientes.data || []).map((c: any) => c.nombre).join(', ')}
       const data = await res.json()
       setMensajes(prev => [...prev, { rol: 'asistente', texto: data.respuesta || 'No pude procesar tu pregunta.' }])
     } catch {
-      setMensajes(prev => [...prev, { rol: 'asistente', texto: 'Error de conexion. Intentalo de nuevo.' }])
+      setMensajes(prev => [...prev, { rol: 'asistente', texto: 'Error de conexión. Inténtalo de nuevo.' }])
     }
     setCargando(false)
   }

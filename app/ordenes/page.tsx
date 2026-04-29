@@ -47,10 +47,14 @@ export default function Ordenes() {
   const [ordenes, setOrdenes] = useState<any[]>([])
   const [vehiculos, setVehiculos] = useState<any[]>([])
   const [tecnicos, setTecnicos] = useState<any[]>([])
+  const [userId, setUserId] = useState('')
+  const [esTecnicoUsuario, setEsTecnicoUsuario] = useState(false)
   const [loading, setLoading] = useState(true)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroFalta, setFiltroFalta] = useState<'tecnico' | 'fecha' | 'vehiculo' | ''>('')
+  const [soloMias, setSoloMias] = useState(false)
+  const [ordenIdAbrirDesdeUrl, setOrdenIdAbrirDesdeUrl] = useState<string | null>(null)
   const [ordenDetalle, setOrdenDetalle] = useState<any>(null)
   const [editandoId, setEditandoId] = useState<string | null>(null)
   const [subiendo, setSubiendo] = useState(false)
@@ -109,7 +113,18 @@ export default function Ordenes() {
 
   const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) router.push('/login')
+    if (!session) {
+      router.push('/login')
+      return
+    }
+    setUserId(session.user.id)
+    const { data: perfil } = await supabase
+      .from('perfiles')
+      .select('rol')
+      .eq('id', session.user.id)
+      .maybeSingle()
+    const rol = String(perfil?.rol || '').toLowerCase()
+    setEsTecnicoUsuario(rol === 'tecnico' || rol === 'almacen')
   }, [router])
 
   const cargarDatos = useCallback(async () => {
@@ -133,10 +148,22 @@ export default function Ordenes() {
     const params = new URLSearchParams(window.location.search)
     const estadoUrl = String(params.get('estado') || '').toLowerCase()
     const faltaUrl = String(params.get('falta') || '').toLowerCase()
+    const miasUrl = String(params.get('mias') || '').toLowerCase()
+    const openUrl = String(params.get('open') || '').trim()
     const estadosValidos = new Set(['pendiente', 'en_curso', 'completada', 'cancelada'])
     if (estadosValidos.has(estadoUrl)) setFiltroEstado(estadoUrl)
     if (faltaUrl === 'tecnico' || faltaUrl === 'fecha' || faltaUrl === 'vehiculo') setFiltroFalta(faltaUrl)
+    if (miasUrl === '1' || miasUrl === 'true' || miasUrl === 'si') setSoloMias(true)
+    if (openUrl) setOrdenIdAbrirDesdeUrl(openUrl)
   }, [])
+
+  useEffect(() => {
+    if (!ordenIdAbrirDesdeUrl || loading || ordenes.length === 0) return
+    const encontrada = ordenes.find((o: any) => o.id === ordenIdAbrirDesdeUrl)
+    if (!encontrada) return
+    void abrirDetalle(encontrada)
+    setOrdenIdAbrirDesdeUrl(null)
+  }, [ordenIdAbrirDesdeUrl, loading, ordenes])
 
   function extraerPathStorageDesdePublicUrl(url: string, bucket: string) {
     const marcador = `/storage/v1/object/public/${bucket}/`
@@ -825,9 +852,9 @@ export default function Ordenes() {
   }
 
   function getNombreVehiculo(id?: string | null) {
-    if (!id) return 'Sin vehiculo'
+    if (!id) return 'Sin vehículo'
     const v = vehiculos.find((it: any) => it.id === id)
-    if (!v) return 'Sin vehiculo'
+    if (!v) return 'Sin vehículo'
     const etiqueta = [v.marca, v.modelo].filter(Boolean).join(' ').trim()
     return `${v.matricula}${etiqueta ? ` - ${etiqueta}` : ''}`
   }
@@ -1008,7 +1035,12 @@ export default function Ordenes() {
     urgente: '#34d399',
   }
 
-  const ordenesPorEstado = filtroEstado ? ordenes.filter((o) => o.estado === filtroEstado) : ordenes
+  const ordenesBaseUsuario = (soloMias || esTecnicoUsuario) && userId
+    ? ordenes.filter((o) =>
+      (Array.isArray(o.tecnicos_ids) && o.tecnicos_ids.includes(userId)) || o.tecnico_id === userId
+    )
+    : ordenes
+  const ordenesPorEstado = filtroEstado ? ordenesBaseUsuario.filter((o) => o.estado === filtroEstado) : ordenesBaseUsuario
   const ordenesFiltradas = ordenesPorEstado.filter((o) => {
     if (filtroFalta === 'tecnico') return (!Array.isArray(o.tecnicos_ids) || o.tecnicos_ids.length === 0) && !o.tecnico_id
     if (filtroFalta === 'fecha') return !o.fecha_programada
@@ -1245,9 +1277,9 @@ export default function Ordenes() {
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Vehiculo asignado</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Vehículo asignado</label>
                 <select value={vehiculoId} onChange={e => setVehiculoId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
-                  <option value="">Sin vehiculo</option>
+                  <option value="">Sin vehículo</option>
                   {vehiculos.map((v: any) => (
                     <option key={v.id} value={v.id}>
                       {getNombreVehiculo(v.id)}
@@ -1256,7 +1288,7 @@ export default function Ordenes() {
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Conductor del vehiculo</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Conductor del vehículo</label>
                 <select value={tecnicoVehiculoId} onChange={e => setTecnicoVehiculoId(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="">Sin asignar</option>
                   {(tecnicosSeleccionados.length > 0 ? tecnicos.filter((t: any) => tecnicosSeleccionados.includes(t.id)) : tecnicos).map((t: any) => (
@@ -1276,7 +1308,7 @@ export default function Ordenes() {
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Duracion estimada</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Duración estimada</label>
                 <select value={duracionHoras} onChange={e => setDuracionHoras(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle}>
                   <option value="0.5">30 min</option>
                   <option value="1">1 hora</option>
@@ -1295,7 +1327,7 @@ export default function Ordenes() {
                 <label htmlFor="hora-fija" className="text-sm cursor-pointer" style={{ color: 'var(--text-muted)' }}>Hora fija con cliente</label>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Descripcion</label>
+                <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Descripción</label>
                 <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} required rows={3}
                   className="w-full rounded-xl px-3 py-2 text-sm outline-none resize-none"
                   style={s.inputStyle} placeholder="Describe los trabajos a realizar..." />
@@ -1341,9 +1373,9 @@ export default function Ordenes() {
                     { label: 'Grado', val: <span className="text-sm font-medium" style={{ color: PRIORIDAD_COLORS[normalizarGradoIntervencion(ordenDetalle.prioridad)] }}>{textoGradoIntervencion(ordenDetalle.prioridad)}</span> },
                     { label: 'Tipo', val: <span className="text-sm capitalize" style={{ color: 'var(--text)' }}>{ordenDetalle.tipo}</span> },
                     { label: 'Fecha', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.fecha_programada ? new Date(ordenDetalle.fecha_programada).toLocaleDateString('es-ES') : '—'}</span> },
-                    { label: 'Duracion', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.duracion_horas || 2}h</span> },
+                    { label: 'Duración', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{ordenDetalle.duracion_horas || 2}h</span> },
                     { label: 'Hora fija', val: <span className="text-sm font-medium" style={{ color: ordenDetalle.hora_fija ? '#f59e0b' : 'var(--text-muted)' }}>{ordenDetalle.hora_fija ? 'Si' : 'No'}</span> },
-                    { label: 'Vehiculo', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreVehiculo(ordenDetalle.vehiculo_id)}</span> },
+                    { label: 'Vehículo', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreVehiculo(ordenDetalle.vehiculo_id)}</span> },
                     { label: 'Conductor', val: <span className="text-sm" style={{ color: 'var(--text)' }}>{getNombreTecnico(ordenDetalle.tecnico_vehiculo_id)}</span> },
                   ].map((item, i) => (
                     <div key={i} className="rounded-xl p-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
@@ -1358,7 +1390,7 @@ export default function Ordenes() {
                   <p className="text-sm" style={{ color: 'var(--text)' }}>{getNombresTecnicos(ordenDetalle.tecnicos_ids || [])}</p>
                 </div>
                 <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                  <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Vehiculo y conductor</p>
+                  <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Vehículo y conductor</p>
                   <p className="text-sm" style={{ color: 'var(--text)' }}>{getNombreVehiculo(ordenDetalle.vehiculo_id)}</p>
                   <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{getNombreTecnico(ordenDetalle.tecnico_vehiculo_id)}</p>
                 </div>
@@ -1421,7 +1453,7 @@ export default function Ordenes() {
                                     : `${mov.equipos?.codigo || 'Equipo'}${mov.equipos?.tipo ? ` (${mov.equipos.tipo})` : ''}`}
                                 </p>
                                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                                  {new Date(mov.fecha || Date.now()).toLocaleString('es-ES')} - {mov.perfiles?.nombre || 'Tecnico'} - {String(mov.tipo || '').replaceAll('_', ' ')}
+                                  {new Date(mov.fecha || Date.now()).toLocaleString('es-ES')} - {mov.perfiles?.nombre || 'Técnico'} - {String(mov.tipo || '').replaceAll('_', ' ')}
                                 </p>
                                 {mov.observaciones && (
                                   <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{mov.observaciones}</p>
@@ -1603,7 +1635,7 @@ export default function Ordenes() {
                         <div key={inc.id} className="rounded-xl p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                           <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                              {new Date(inc.created_at).toLocaleString('es-ES')} - {inc.perfiles?.nombre || 'Tecnico'}
+                              {new Date(inc.created_at).toLocaleString('es-ES')} - {inc.perfiles?.nombre || 'Técnico'}
                             </p>
                             <div className="flex items-center gap-2">
                               {inc.estado_orden && (
@@ -1732,8 +1764,8 @@ export default function Ordenes() {
                     )}
                     <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{(o.descripcion || '').substring(0, 100)}{(o.descripcion || '').length > 100 ? '...' : ''}</p>
                     <div className="flex gap-4 mt-2 text-xs flex-wrap" style={{ color: 'var(--text-subtle)' }}>
-                      <span>Vehiculo: {getNombreVehiculo(o.vehiculo_id)}</span>
-                      <span>Duracion: {o.duracion_horas || 2}h</span>
+                      <span>Vehículo: {getNombreVehiculo(o.vehiculo_id)}</span>
+                      <span>Duración: {o.duracion_horas || 2}h</span>
                       <span>Fecha: {o.fecha_programada ? new Date(o.fecha_programada).toLocaleDateString('es-ES') : '-'}</span>
                     </div>
                     <div className="mt-2">

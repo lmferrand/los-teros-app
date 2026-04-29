@@ -41,7 +41,7 @@ export function PlanificacionHeader({
           Dashboard
         </Link>
         <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>
-          Planificacion
+          Planificación
         </h1>
       </div>
 

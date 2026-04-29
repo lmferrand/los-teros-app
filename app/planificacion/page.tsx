@@ -596,7 +596,7 @@ export default function Planificacion() {
           })
           if (clienteEncontrado) setPresClienteId(clienteEncontrado.id)
           setMostrarFormPres(true)
-        } catch { alert('No se pudieron extraer los datos. Intentalo de nuevo.') }
+        } catch { alert('No se pudieron extraer los datos. Inténtalo de nuevo.') }
         setEscaneando(false)
       }
       reader.readAsDataURL(file)
@@ -1144,7 +1144,7 @@ export default function Planificacion() {
                   <p className="text-xs font-semibold mb-1" style={{ color: '#34d399' }}>Datos extraidos correctamente</p>
                   <p className="text-xs" style={{ color: '#34d399' }}>Cliente: {datosEscaneados.cliente}</p>
                   <p className="text-xs" style={{ color: '#34d399' }}>Importe: {datosEscaneados.importe} EUR</p>
-                  <p className="text-xs" style={{ color: '#34d399' }}>Numero: {datosEscaneados.numero}</p>
+                  <p className="text-xs" style={{ color: '#34d399' }}>Número: {datosEscaneados.numero}</p>
                 </div>
               )}
             </div>
@@ -1161,7 +1161,7 @@ export default function Planificacion() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Descripcion</label>
+                    <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Descripción</label>
                     <input value={presTitulo} onChange={e => setPresTitulo(e.target.value)} required className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} placeholder="Limpieza campanas..." />
                   </div>
                   <div>
@@ -1169,7 +1169,7 @@ export default function Planificacion() {
                     <input type="number" value={presImporte} onChange={e => setPresImporte(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} min="0" step="0.01" />
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha envio</label>
+                    <label className="text-xs uppercase tracking-wider mb-2 block" style={{ color: 'var(--text-muted)' }}>Fecha envío</label>
                     <input type="date" value={presFecha} onChange={e => setPresFecha(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm outline-none" style={s.inputStyle} />
                   </div>
                   <div>

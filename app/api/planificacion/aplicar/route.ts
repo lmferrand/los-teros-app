@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 
     const cfg = getConfig()
     if (!cfg.url || !cfg.anon) {
-      return NextResponse.json({ error: 'Falta configuracion de Supabase.' }, { status: 500 })
+      return NextResponse.json({ error: 'Falta configuración de Supabase.' }, { status: 500 })
     }
 
     const supabaseUser = createClient(cfg.url, cfg.anon, {
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     })
 
     const { data: authData, error: authError } = await supabaseUser.auth.getUser()
-    if (authError || !authData?.user) return NextResponse.json({ error: 'Sesion invalida.' }, { status: 401 })
+    if (authError || !authData?.user) return NextResponse.json({ error: 'Sesión inválida.' }, { status: 401 })
 
     const { data: perfil, error: perfilError } = await supabaseUser
       .from('perfiles')
@@ -223,4 +223,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
-
