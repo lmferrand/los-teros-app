@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { s } from '@/lib/styles'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
+import { cargarMovimientosOrden, eliminarMovimientoConIntegridad, repararVinculoMovimientosOt } from '@/lib/ordenes-integridad'
 
 function normalizarGradoIntervencion(valor: string | null | undefined) {
   const v = String(valor || '').trim().toLowerCase()
@@ -60,6 +61,10 @@ export default function Ordenes() {
   const [nombreClienteSeleccionado, setNombreClienteSeleccionado] = useState('')
   const [empresaOt, setEmpresaOt] = useState<'teros' | 'olipro'>('teros')
   const [incidenciasOrden, setIncidenciasOrden] = useState<any[]>([])
+  const [movimientosOt, setMovimientosOt] = useState<any[]>([])
+  const [cargandoMovimientosOt, setCargandoMovimientosOt] = useState(false)
+  const [actualizandoEstadoEquipoId, setActualizandoEstadoEquipoId] = useState<string | null>(null)
+  const [eliminandoMovimientoId, setEliminandoMovimientoId] = useState<string | null>(null)
   const [mostrarRegistroIncidencia, setMostrarRegistroIncidencia] = useState(false)
   const [grabandoIncidencia, setGrabandoIncidencia] = useState(false)
   const [audioIncidenciaBlob, setAudioIncidenciaBlob] = useState<Blob | null>(null)
@@ -167,6 +172,7 @@ export default function Ordenes() {
     detenerGrabacionActiva()
     setMostrarRegistroIncidencia(false)
     setIncidenciasOrden([])
+    setMovimientosOt([])
     resetRegistroIncidencia()
     setOrdenDetalle(null)
   }
@@ -224,6 +230,33 @@ export default function Ordenes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (!ordenDetalle?.id) return
+
+    const revisarActualizacionOt = () => {
+      if (typeof window === 'undefined') return
+      const raw = sessionStorage.getItem('ot_actualizada')
+      if (!raw) return
+      try {
+        const data = JSON.parse(raw)
+        if (data?.ordenId !== ordenDetalle.id) return
+        void cargarMovimientosOtDetalle(ordenDetalle)
+        void cargarFotosOrden(ordenDetalle.id).then((fotos) => {
+          setOrdenDetalle((prev: any) => prev && prev.id === ordenDetalle.id ? { ...prev, fotos } : prev)
+        })
+        sessionStorage.removeItem('ot_actualizada')
+      } catch {
+        sessionStorage.removeItem('ot_actualizada')
+      }
+    }
+
+    revisarActualizacionOt()
+    window.addEventListener('focus', revisarActualizacionOt)
+    return () => {
+      window.removeEventListener('focus', revisarActualizacionOt)
+    }
+  }, [ordenDetalle])
+
   async function cargarFotosOrden(ordenId: string) {
     const { data } = await supabase.from('fotos_ordenes').select('*').eq('orden_id', ordenId).order('created_at')
     return data || []
@@ -236,6 +269,23 @@ export default function Ordenes() {
       .eq('orden_id', ordenId)
       .order('created_at', { ascending: false })
     return data || []
+  }
+
+  async function cargarMovimientosOtDetalle(ordenItem: any) {
+    if (!ordenItem?.id) {
+      setMovimientosOt([])
+      return
+    }
+    setCargandoMovimientosOt(true)
+    try {
+      await repararVinculoMovimientosOt(ordenItem.id, ordenItem.codigo || null)
+      const movs = await cargarMovimientosOrden(ordenItem.id, ordenItem.codigo || null)
+      setMovimientosOt(movs)
+    } catch {
+      setMovimientosOt([])
+    } finally {
+      setCargandoMovimientosOt(false)
+    }
   }
 
   async function eliminarFoto(foto: any) {
@@ -263,6 +313,7 @@ export default function Ordenes() {
       cargarFotosOrden(o.id),
       cargarIncidenciasOrden(o.id),
     ])
+    await cargarMovimientosOtDetalle(o)
     resetRegistroIncidencia()
     setMostrarRegistroIncidencia(false)
     setIncidenciasOrden(incidencias)
@@ -302,6 +353,7 @@ export default function Ordenes() {
     setResultadosCliente([])
     detenerGrabacionActiva()
     setIncidenciasOrden([])
+    setMovimientosOt([])
     setMostrarRegistroIncidencia(false)
     resetRegistroIncidencia()
     setMostrarForm(true)
@@ -309,24 +361,46 @@ export default function Ordenes() {
   }
 
   async function subirFoto(e: React.ChangeEvent<HTMLInputElement>, tipoFoto: string) {
-    const file = e.target.files?.[0]
-    if (!file || !ordenDetalle) return
+    const input = e.target
+    const files = Array.from(input.files || [])
+    if (files.length === 0 || !ordenDetalle) return
+
     setSubiendo(true)
+    let subidasOK = 0
+    let errores = 0
     try {
-      let comprimida: Blob = file
-      try { comprimida = await comprimirImagen(file) } catch { }
-      const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}.jpg`
-      const { data, error } = await supabase.storage.from('fotos-ordenes').upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
-      if (error) { alert('Error al subir: ' + error.message); setSubiendo(false); return }
-      if (data) {
+      const archivos = tipoFoto === 'albaran' ? files.slice(0, 1) : files
+      const { data: { session } } = await supabase.auth.getSession()
+
+      for (let i = 0; i < archivos.length; i++) {
+        const file = archivos[i]
+        let comprimida: Blob = file
+        try { comprimida = await comprimirImagen(file) } catch { }
+
+        const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}_${i}.jpg`
+        const { data, error } = await supabase.storage
+          .from('fotos-ordenes')
+          .upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
+
+        if (error || !data) {
+          errores++
+          continue
+        }
+
         const { data: urlData } = supabase.storage.from('fotos-ordenes').getPublicUrl(nombreArchivo)
-        const { data: { session } } = await supabase.auth.getSession()
         const { error: insertError } = await supabase.from('fotos_ordenes').insert({
-          orden_id: ordenDetalle.id, tipo: tipoFoto, url: urlData.publicUrl, subida_por: session?.user?.id
+          orden_id: ordenDetalle.id,
+          tipo: tipoFoto,
+          url: urlData.publicUrl,
+          subida_por: session?.user?.id,
         })
-        if (insertError) { alert('Error al registrar foto: ' + insertError.message); setSubiendo(false); return }
-        const fotos = await cargarFotosOrden(ordenDetalle.id)
-        setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+        if (insertError) {
+          errores++
+          continue
+        }
+
+        subidasOK++
+
         if (tipoFoto === 'albaran') {
           const { count } = await supabase.from('albaranes').select('*', { count: 'exact', head: true })
           const num = String((count || 0) + 1).padStart(4, '0')
@@ -340,12 +414,25 @@ export default function Ordenes() {
             fotos_urls: [urlData.publicUrl],
             observaciones: `Creado automaticamente desde OT ${ordenDetalle.codigo}`,
           })
-          if (!albError) alert('Albaran creado automaticamente en Albaranes.')
-          else alert('Error al crear albaran: ' + albError.message)
+          if (albError) errores++
         }
       }
-    } catch { alert('Error inesperado al subir la foto.') }
-    setSubiendo(false)
+
+      const fotos = await cargarFotosOrden(ordenDetalle.id)
+      setOrdenDetalle((prev: any) => ({ ...prev, fotos }))
+
+      if (tipoFoto === 'albaran' && subidasOK > 0) {
+        alert('Albaran creado automaticamente en Albaranes.')
+      }
+      if (errores > 0) {
+        alert(`Se subieron ${subidasOK} foto(s). ${errores} no se pudieron registrar.`)
+      }
+    } catch {
+      alert('Error inesperado al subir fotos.')
+    } finally {
+      setSubiendo(false)
+      input.value = ''
+    }
   }
 
   async function iniciarGrabacionIncidencia() {
@@ -744,6 +831,80 @@ export default function Ordenes() {
     return tecnicos.find((t: any) => t.id === id)?.nombre || 'Sin asignar'
   }
 
+  const ESTADOS_EQUIPO_OT: Array<{ value: string; label: string; equipoEstado: string; limpiarFechaSalida?: boolean }> = [
+    { value: 'equipo_adquirido', label: 'Equipo adquirido', equipoEstado: 'en_cliente' },
+    { value: 'equipo_sustituto_instalado', label: 'Equipo sustituto instalado', equipoEstado: 'en_cliente' },
+    { value: 'equipo_en_limpieza', label: 'Equipo en limpieza', equipoEstado: 'pendiente_limpieza' },
+    { value: 'equipo_devuelto_almacen', label: 'Equipo devuelto al almacen', equipoEstado: 'disponible', limpiarFechaSalida: true },
+  ]
+
+  function etiquetaEstadoEquipoOt(valor: string | null | undefined) {
+    const estado = String(valor || '').trim()
+    if (!estado) return 'Sin estado'
+    const encontrado = ESTADOS_EQUIPO_OT.find((e) => e.value === estado)
+    if (encontrado) return encontrado.label
+    return estado.replaceAll('_', ' ')
+  }
+
+  async function eliminarMovimientoOt(mov: any) {
+    if (!ordenDetalle?.id || !mov?.id) return
+    const resumen = mov.materiales?.nombre || mov.equipos?.codigo || mov.tipo || 'movimiento'
+    if (!confirm(`Eliminar movimiento: ${resumen}?`)) return
+
+    let devolverMaterialAStock = true
+    if (mov.tipo === 'consumo' && mov.material_id) {
+      devolverMaterialAStock = confirm('Regresar material al inventario? Aceptar = SI, Cancelar = NO.')
+    }
+
+    setEliminandoMovimientoId(mov.id)
+    try {
+      await eliminarMovimientoConIntegridad(mov.id, {
+        devolverMaterialAStock,
+        registrarDevolucion: devolverMaterialAStock,
+        tecnicoId: ordenDetalle.tecnico_id || null,
+        codigoOt: ordenDetalle.codigo || null,
+      })
+      await cargarMovimientosOtDetalle(ordenDetalle)
+    } catch (error: any) {
+      alert(`No se pudo eliminar el movimiento: ${String(error?.message || 'Error desconocido')}`)
+    } finally {
+      setEliminandoMovimientoId(null)
+    }
+  }
+
+  async function cambiarEstadoEquipoEnOt(mov: any, nuevoEstadoOt: string) {
+    if (!mov?.id || !mov?.equipo_id) return
+    const conf = ESTADOS_EQUIPO_OT.find((e) => e.value === nuevoEstadoOt)
+    if (!conf) return
+    setActualizandoEstadoEquipoId(mov.id)
+    try {
+      const { error: errMov } = await supabase
+        .from('movimientos')
+        .update({
+          estado_equipo: conf.value,
+          observaciones: `Estado actualizado desde OT ${ordenDetalle?.codigo || ''}: ${conf.label}`.trim(),
+        })
+        .eq('id', mov.id)
+      if (errMov) throw errMov
+
+      const payloadEquipo: any = { estado: conf.equipoEstado }
+      if (conf.equipoEstado === 'en_cliente') payloadEquipo.fecha_salida = new Date().toISOString()
+      if (conf.limpiarFechaSalida) payloadEquipo.fecha_salida = null
+
+      const { error: errEq } = await supabase
+        .from('equipos')
+        .update(payloadEquipo)
+        .eq('id', mov.equipo_id)
+      if (errEq) throw errEq
+
+      await cargarMovimientosOtDetalle(ordenDetalle)
+    } catch (error: any) {
+      alert(`No se pudo actualizar el estado del equipo: ${String(error?.message || 'Error desconocido')}`)
+    } finally {
+      setActualizandoEstadoEquipoId(null)
+    }
+  }
+
   function getTextoClienteSecundario(c: any) {
     const fiscal = nombreFiscalCliente(c)
     const cif = String(c?.cif || '').trim()
@@ -818,11 +979,10 @@ export default function Ordenes() {
   }
 
   const TIPOS_FOTO = [
-    { key: 'proceso', label: 'Fotos del proceso' },
-    { key: 'equipo_salida', label: 'Equipo al salir' },
-    { key: 'equipo_retorno', label: 'Equipo al retornar' },
-    { key: 'cierre', label: 'Fotos de cierre' },
-    { key: 'albaran', label: 'Albaran' },
+    { key: 'proceso', label: 'Fotos del proceso', multiple: true },
+    { key: 'cierre', label: 'Fotos de cierre', multiple: true },
+    { key: 'ticket_gasto', label: 'Tickets de gasto', multiple: true },
+    { key: 'albaran', label: 'Albaran', multiple: false },
   ]
 
   const ESTADO_COLORS: any = {
@@ -1220,9 +1380,87 @@ export default function Ordenes() {
                   </button>
                 </div>
 
+                <div className="rounded-2xl p-4 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                  <div className="flex items-center justify-between mb-3 gap-2">
+                    <h3 className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Inventario y equipos registrados en OT</h3>
+                    <button
+                      onClick={() => void cargarMovimientosOtDetalle(ordenDetalle)}
+                      className="text-xs px-3 py-1.5 rounded-lg"
+                      style={s.btnSecondary}
+                    >
+                      Actualizar
+                    </button>
+                  </div>
+                  {cargandoMovimientosOt ? (
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cargando movimientos...</p>
+                  ) : movimientosOt.length === 0 ? (
+                    <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>Aun no hay materiales ni equipos registrados en esta OT.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {movimientosOt.map((mov: any) => {
+                        const esMaterial = Boolean(mov.material_id)
+                        const esEquipo = Boolean(mov.equipo_id)
+                        const cantidadTexto = Number(mov.cantidad || 0)
+                        const unidad = mov.materiales?.unidad || 'uds'
+                        return (
+                          <div key={mov.id} className="rounded-xl p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div>
+                                <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                                  {esMaterial
+                                    ? `${mov.materiales?.nombre || 'Material'} - ${cantidadTexto} ${unidad}`
+                                    : `${mov.equipos?.codigo || 'Equipo'}${mov.equipos?.tipo ? ` (${mov.equipos.tipo})` : ''}`}
+                                </p>
+                                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                                  {new Date(mov.fecha || Date.now()).toLocaleString('es-ES')} - {mov.perfiles?.nombre || 'Tecnico'} - {String(mov.tipo || '').replaceAll('_', ' ')}
+                                </p>
+                                {mov.observaciones && (
+                                  <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>{mov.observaciones}</p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => void eliminarMovimientoOt(mov)}
+                                disabled={eliminandoMovimientoId === mov.id}
+                                className="text-xs px-3 py-1.5 rounded-lg disabled:opacity-60"
+                                style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)' }}
+                              >
+                                {eliminandoMovimientoId === mov.id ? 'Eliminando...' : 'Eliminar'}
+                              </button>
+                            </div>
+
+                            {esEquipo && (
+                              <div className="mt-2">
+                                <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: 'var(--text-muted)' }}>
+                                  Estado del equipo en OT
+                                </label>
+                                <select
+                                  value={String(mov.estado_equipo || 'equipo_adquirido')}
+                                  onChange={(e) => void cambiarEstadoEquipoEnOt(mov, e.target.value)}
+                                  disabled={actualizandoEstadoEquipoId === mov.id}
+                                  className="w-full rounded-lg px-2 py-1.5 text-xs outline-none disabled:opacity-60"
+                                  style={s.inputStyle}
+                                >
+                                  {ESTADOS_EQUIPO_OT.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <p className="text-xs mt-1" style={{ color: '#06b6d4' }}>
+                                  Estado actual: {etiquetaEstadoEquipoOt(mov.estado_equipo || 'equipo_adquirido')}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 <div className="mb-4">
                   <h3 className="font-semibold mb-3" style={{ color: 'var(--text)' }}>Fotos</h3>
-                  {subiendo && <p className="text-sm mb-3" style={{ color: '#06b6d4' }}>Subiendo foto...</p>}
+                  {subiendo && <p className="text-sm mb-3" style={{ color: '#06b6d4' }}>Subiendo archivos...</p>}
                   {TIPOS_FOTO.map(tf => {
                     const fotosDelTipo = (ordenDetalle.fotos || []).filter((f: any) => f.tipo === tf.key)
                     return (
@@ -1230,8 +1468,15 @@ export default function Ordenes() {
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{tf.label}</p>
                           <label className="text-xs px-3 py-1 rounded-lg cursor-pointer" style={{ background: 'var(--bg)', color: '#06b6d4', border: '1px solid var(--border)' }}>
-                            + Foto
-                            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => subirFoto(e, tf.key)} />
+                            {tf.multiple ? '+ Fotos' : '+ Foto'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple={Boolean(tf.multiple)}
+                              capture={tf.multiple ? undefined : 'environment'}
+                              className="hidden"
+                              onChange={e => subirFoto(e, tf.key)}
+                            />
                           </label>
                         </div>
                         {fotosDelTipo.length > 0 ? (
@@ -1411,6 +1656,13 @@ export default function Ordenes() {
                     style={{ background: 'rgba(6,182,212,0.12)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)' }}
                   >
                     Registrar incidencia
+                  </button>
+                  <button
+                    onClick={() => router.push(`/albaranes?orden=${ordenDetalle.id}`)}
+                    className="text-sm px-4 py-2 rounded-xl"
+                    style={{ background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.35)' }}
+                  >
+                    Crear albaran
                   </button>
                   <button onClick={() => abrirFormEditar(ordenDetalle)}
                     className="text-sm px-4 py-2 rounded-xl"

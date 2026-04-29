@@ -1,19 +1,17 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { s } from '@/lib/styles'
+import { usePlanificacionData } from '@/app/planificacion/hooks/usePlanificacionData'
+import { PlanificacionTabs } from '@/app/planificacion/components/PlanificacionTabs'
+import { PlanificacionHeader } from '@/app/planificacion/components/PlanificacionHeader'
+import { OrdenDetalleModal } from '@/app/planificacion/components/OrdenDetalleModal'
+import { calcularResultadoOptimizador } from '@/lib/planificacion/ui-utils'
 
 export default function Planificacion() {
-  const [ordenes, setOrdenes] = useState<any[]>([])
-  const [clientes, setClientes] = useState<any[]>([])
-  const [tecnicos, setTecnicos] = useState<any[]>([])
-  const [presupuestos, setPresupuestos] = useState<any[]>([])
-  const [userId, setUserId] = useState<string>('')
-  const [miRol, setMiRol] = useState<string>('')
-  const [loading, setLoading] = useState(true)
+  const { ordenes, clientes, tecnicos, presupuestos, userId, miRol, loading, esAdminOOficina, refresh } = usePlanificacionData()
   const [mesActual, setMesActual] = useState(new Date())
   const [ordenSeleccionada, setOrdenSeleccionada] = useState<any>(null)
   const [vistaActiva, setVistaActiva] = useState<'calendario' | 'mis_ordenes' | 'presupuestos' | 'rutas'>('calendario')
@@ -44,29 +42,6 @@ export default function Planificacion() {
   const [presEstado, setPresEstado] = useState('enviado')
   const [presFecha, setPresFecha] = useState('')
   const [presObs, setPresObs] = useState('')
-
-  const cargarDatos = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) { router.push('/login'); return }
-    setUserId(session.user.id)
-
-    const { data: perfilUsuario } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
-    if (perfilUsuario) setMiRol(perfilUsuario.rol)
-
-    const [ords, clis, tecs, pres] = await Promise.all([
-      supabase.from('ordenes').select('*, clientes(id, nombre, nombre_comercial, nombre_fiscal, cif, poblacion, direccion)').neq('estado', 'cancelada'),
-      supabase.from('clientes').select('*'),
-      supabase.from('perfiles').select('*'),
-      supabase.from('presupuestos').select('*, clientes(nombre)').order('created_at', { ascending: false }),
-    ])
-    if (ords.data) setOrdenes(ords.data)
-    if (clis.data) setClientes(clis.data)
-    if (tecs.data) setTecnicos(tecs.data)
-    if (pres.data) setPresupuestos(pres.data)
-    setLoading(false)
-  }, [router])
-
-  useEffect(() => { void cargarDatos() }, [cargarDatos])
 
   function nombreComercialCliente(c: any) {
     return String(c?.nombre_comercial || c?.nombre || '').trim()
@@ -561,10 +536,6 @@ export default function Planificacion() {
     return []
   }
 
-  function obtenerClienteOt(ot: any) {
-    return getClienteOt(ot)
-  }
-
   function duracionOtMin(ot: any) {
     return Math.max(15, Number(ot.duracion_horas || 2) * 60)
   }
@@ -576,437 +547,17 @@ export default function Planificacion() {
     return fechaOt.getHours() * 60 + fechaOt.getMinutes()
   }
 
-  function calcularTrasladoBase(otsTecnico: any[]) {
-    if (otsTecnico.length <= 1) return 0
-    let zonaActual = 'elche'
-    let traslado = 0
-    const ordenBase = [...otsTecnico].sort((a, b) => {
-      const fa = new Date(a.fecha_programada || 0).getTime()
-      const fb = new Date(b.fecha_programada || 0).getTime()
-      return fa - fb
-    })
-    for (const ot of ordenBase) {
-      const clienteOt = obtenerClienteOt(ot)
-      const zonaOt = detectarZona(clienteOt?.direccion || '')
-      traslado += calcularTiempoEntreZonas(zonaActual, zonaOt)
-      zonaActual = zonaOt
-    }
-    traslado += calcularTiempoEntreZonas(zonaActual, 'elche')
-    return traslado
-  }
-
-  function optimizarRutaTecnico(otsDelDia: any[], tecnicoId: string) {
-    const INICIO = 6 * 60
-    const FIN = 15 * 60
-    const otsTecnico = otsDelDia.filter((o) => obtenerTecnicosOt(o).includes(tecnicoId))
-    const otsConHora = otsTecnico
-      .filter((o) => o.hora_fija && o.fecha_programada)
-      .sort((a, b) => new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime())
-
-    const pendientesFlexibles = otsTecnico
-      .filter((o) => !o.hora_fija)
-      .sort((a, b) => prioridadPeso(b.prioridad || '2') - prioridadPeso(a.prioridad || '2'))
-
-    const ruta: any[] = []
-    const advertencias: string[] = []
-    let horaActual = INICIO
-    let zonaActual = 'elche'
-    let totalTraslado = 0
-    let totalEspera = 0
-    let totalTrabajo = 0
-
-    function elegirSiguienteOt(hastaMin: number | null) {
-      let mejorIndice = -1
-      let mejorPuntaje = Number.POSITIVE_INFINITY
-
-      for (let i = 0; i < pendientesFlexibles.length; i++) {
-        const ot = pendientesFlexibles[i]
-        const clienteOt = obtenerClienteOt(ot)
-        const zonaOt = detectarZona(clienteOt?.direccion || '')
-        const traslado = calcularTiempoEntreZonas(zonaActual, zonaOt)
-        const duracion = duracionOtMin(ot)
-        const inicioTentativo = horaActual + traslado
-        const finTentativo = inicioTentativo + duracion
-        if (hastaMin !== null && finTentativo > hastaMin) continue
-
-        const penalizaJornada = finTentativo > FIN ? (finTentativo - FIN) * 1.8 : 0
-        const bonusPrioridad = prioridadPeso(ot.prioridad || '2')
-        const puntaje = traslado * 1.5 + penalizaJornada - bonusPrioridad
-
-        if (puntaje < mejorPuntaje) {
-          mejorPuntaje = puntaje
-          mejorIndice = i
-        }
-      }
-
-      return mejorIndice
-    }
-
-    function insertarFlexibles(hastaMin: number | null) {
-      while (pendientesFlexibles.length > 0) {
-        const idx = elegirSiguienteOt(hastaMin)
-        if (idx < 0) break
-
-        const [ot] = pendientesFlexibles.splice(idx, 1)
-        const clienteOt = obtenerClienteOt(ot)
-        const zonaOt = detectarZona(clienteOt?.direccion || '')
-        const traslado = calcularTiempoEntreZonas(zonaActual, zonaOt)
-        const inicio = horaActual + traslado
-        const duracion = duracionOtMin(ot)
-        const fin = inicio + duracion
-
-        totalTraslado += traslado
-        totalTrabajo += duracion
-        ruta.push({
-          ot,
-          horaInicio: inicio,
-          horaFin: fin,
-          zona: zonaOt,
-          horaFija: false,
-          traslado,
-          fueraDeJornada: fin > FIN,
-          cliente: clienteOt,
-        })
-        horaActual = fin
-        zonaActual = zonaOt
-      }
-    }
-
-    for (const otFija of otsConHora) {
-      const horaFija = horaOtMin(otFija)
-      if (horaFija === null) continue
-
-      insertarFlexibles(horaFija)
-
-      const clienteOt = obtenerClienteOt(otFija)
-      const zonaOt = detectarZona(clienteOt?.direccion || '')
-      const traslado = calcularTiempoEntreZonas(zonaActual, zonaOt)
-      const llegada = horaActual + traslado
-      const inicio = Math.max(horaFija, llegada)
-      const espera = Math.max(0, horaFija - llegada)
-      const duracion = duracionOtMin(otFija)
-      const fin = inicio + duracion
-
-      totalTraslado += traslado
-      totalEspera += espera
-      totalTrabajo += duracion
-
-      if (llegada > horaFija) {
-        advertencias.push(`Conflicto de hora fija en ${otFija.codigo}: llegada ${formatHora(llegada)}.`)
-      }
-
-      ruta.push({
-        ot: otFija,
-        horaInicio: inicio,
-        horaFin: fin,
-        zona: zonaOt,
-        horaFija: true,
-        traslado,
-        fueraDeJornada: fin > FIN,
-        cliente: clienteOt,
-      })
-      horaActual = fin
-      zonaActual = zonaOt
-    }
-
-    insertarFlexibles(null)
-
-    const trasladoRegreso = ruta.length > 0 ? calcularTiempoEntreZonas(zonaActual, 'elche') : 0
-    totalTraslado += trasladoRegreso
-    const horaFinalConRegreso = horaActual + trasladoRegreso
-    const extraMin = Math.max(0, horaFinalConRegreso - FIN)
-    const horasTotales = Number((totalTrabajo / 60).toFixed(1))
-    const utilizacion = Math.min(100, Math.round((totalTrabajo / (FIN - INICIO)) * 100))
-    const trasladoBase = calcularTrasladoBase(otsTecnico)
-    const ahorroTrasladoMin = Math.max(0, trasladoBase - totalTraslado)
-
-    return {
-      ruta,
-      horasTotales,
-      cabeEnJornada: horaFinalConRegreso <= FIN,
-      horaFinal: horaFinalConRegreso,
-      horaFinalTrabajo: horaActual,
-      zonaFinal: zonaActual,
-      trasladoTotalMin: totalTraslado,
-      esperaTotalMin: totalEspera,
-      trabajoTotalMin: totalTrabajo,
-      extraMin,
-      utilizacionPct: utilizacion,
-      ahorroTrasladoMin,
-      zonasVisitadas: Array.from(new Set(ruta.map((r: any) => r.zona).filter(Boolean))),
-      advertencias,
-    }
-  }
-
-  function sugerirAsignaciones(otsSinAsignar: any[], resultadosBase: any[]) {
-    if (!otsSinAsignar.length || !resultadosBase.length) return []
-
-    const estadoTecnicos = resultadosBase.map((res: any) => ({
-      tecnicoId: res.tecnico.id,
-      tecnicoNombre: res.tecnico.nombre,
-      horaActual: res.horaFinalTrabajo || (6 * 60),
-      zonaActual: res.zonaFinal || 'elche',
-      extraActual: res.extraMin || 0,
-    }))
-
-    const sugerencias: any[] = []
-
-    const pendientes = [...otsSinAsignar].sort((a, b) => {
-      const p = prioridadPeso(b.prioridad || '2') - prioridadPeso(a.prioridad || '2')
-      if (p !== 0) return p
-      return duracionOtMin(b) - duracionOtMin(a)
-    })
-
-    for (const ot of pendientes) {
-      const clienteOt = obtenerClienteOt(ot)
-      const zonaOt = detectarZona(clienteOt?.direccion || '')
-      const duracion = duracionOtMin(ot)
-
-      let mejor: any = null
-      for (const st of estadoTecnicos) {
-        const traslado = calcularTiempoEntreZonas(st.zonaActual, zonaOt)
-        const inicio = st.horaActual + traslado
-        const finTrabajo = inicio + duracion
-        const regreso = calcularTiempoEntreZonas(zonaOt, 'elche')
-        const extra = Math.max(0, finTrabajo + regreso - 15 * 60)
-        const coste = traslado + extra * 2.2 + st.extraActual * 0.5
-        if (!mejor || coste < mejor.coste) {
-          mejor = { st, traslado, inicio, finTrabajo, extra, coste }
-        }
-      }
-
-      if (!mejor) continue
-      sugerencias.push({
-        ot,
-        tecnicoId: mejor.st.tecnicoId,
-        tecnicoNombre: mejor.st.tecnicoNombre,
-        horaInicio: mejor.inicio,
-        horaFin: mejor.finTrabajo,
-        trasladoMin: mejor.traslado,
-        extraMin: mejor.extra,
-      })
-
-      mejor.st.horaActual = mejor.finTrabajo
-      mejor.st.zonaActual = zonaOt
-      mejor.st.extraActual = mejor.extra
-    }
-
-    return sugerencias
-  }
-
-  function fechaKeyLocal(d: Date) {
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${y}-${m}-${day}`
-  }
-
-  function obtenerRangoOptimizacion(periodo: 'dia' | 'semana' | 'mes', fechaBaseIso: string) {
-    const { inicio, fin, etiqueta } = calcularRangoMapa(periodo, fechaBaseIso)
-    const dias: string[] = []
-    const cursor = new Date(inicio)
-    cursor.setHours(12, 0, 0, 0)
-    while (cursor <= fin) {
-      dias.push(fechaKeyLocal(cursor))
-      cursor.setDate(cursor.getDate() + 1)
-    }
-    return { inicio, fin, etiqueta, dias }
-  }
-
-  function filtrarOtsActivasEnRango(inicio: Date, fin: Date) {
-    return ordenes.filter((o) => {
-      if (!o.fecha_programada) return false
-      const f = new Date(o.fecha_programada)
-      if (Number.isNaN(f.getTime())) return false
-      return (o.estado === 'pendiente' || o.estado === 'en_curso') && f >= inicio && f <= fin
-    })
-  }
-
-  function resumenDiaOptimizacion(fechaIso: string, otsDia: any[]) {
-    if (!otsDia.length) return null
-    const tecnicosDelDia = tecnicos.filter((t) => otsDia.some((o) => obtenerTecnicosOt(o).includes(t.id)))
-    const resultados = tecnicosDelDia.map((t) => ({ tecnico: t, ...optimizarRutaTecnico(otsDia, t.id) }))
-    const otsSinAsignar = otsDia.filter((o) => (!o.tecnicos_ids || o.tecnicos_ids.length === 0) && !o.tecnico_id)
-    const sugerencias = sugerirAsignaciones(otsSinAsignar, resultados)
-    const totalTraslado = resultados.reduce((acc: number, r: any) => acc + Number(r.trasladoTotalMin || 0), 0)
-    const totalAhorro = resultados.reduce((acc: number, r: any) => acc + Number(r.ahorroTrasladoMin || 0), 0)
-    const totalExtra = resultados.reduce((acc: number, r: any) => acc + Number(r.extraMin || 0), 0)
-    const zonas = resultados.flatMap((r: any) => r.zonasVisitadas || [])
-    const contador = new Map<string, number>()
-    for (const z of zonas) contador.set(z, (contador.get(z) || 0) + 1)
-    const zonasDominantes = Array.from(contador.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([zona]) => ZONAS[zona]?.nombre || zona)
-
-    return {
-      fecha: fechaIso,
-      resultados,
-      otsSinAsignar,
-      sugerencias,
-      totalOTs: otsDia.length,
-      totalTraslado,
-      totalAhorro,
-      totalExtra,
-      zonasDominantes,
-    }
-  }
-
-  function construirEstadoTecnicosPeriodo(resumenDias: any[]) {
-    const estado = new Map<string, any>()
-    for (const dia of resumenDias) {
-      for (const res of dia.resultados || []) {
-        const key = `${dia.fecha}__${res.tecnico.id}`
-        estado.set(key, {
-          tecnicoId: res.tecnico.id,
-          tecnicoNombre: res.tecnico.nombre,
-          cargaMin: Number(res.trabajoTotalMin || 0) + Number(res.trasladoTotalMin || 0),
-          horaFinalTrabajo: Number(res.horaFinalTrabajo || 6 * 60),
-          zonas: (res.zonasVisitadas || []).length > 0 ? res.zonasVisitadas : ['elche'],
-          fijas: (res.ruta || []).filter((p: any) => p.horaFija).length,
-        })
-      }
-    }
-    return estado
-  }
-
-  function generarOpcionesFlexiblesPeriodo(otsPeriodo: any[], resumenDias: any[], diasPeriodo: string[]) {
-    const estadoTecnicos = construirEstadoTecnicosPeriodo(resumenDias)
-    const flexibles = otsPeriodo
-      .filter((o) => !o.hora_fija && obtenerTecnicosOt(o).length > 0)
-      .sort((a, b) => prioridadPeso(b.prioridad || '2') - prioridadPeso(a.prioridad || '2'))
-
-    const opciones: any[] = []
-
-    for (const ot of flexibles) {
-      const techIds = obtenerTecnicosOt(ot)
-      if (!techIds.length) continue
-      const clienteOt = obtenerClienteOt(ot)
-      const zonaOt = detectarZona(clienteOt?.direccion || '')
-      const fechaOriginal = ot.fecha_programada ? fechaKeyLocal(new Date(ot.fecha_programada)) : diasPeriodo[0]
-      const duracion = duracionOtMin(ot)
-      const candidatas: any[] = []
-
-      for (const tecnicoId of techIds) {
-        for (const dia of diasPeriodo) {
-          const key = `${dia}__${tecnicoId}`
-          const st = estadoTecnicos.get(key) || {
-            tecnicoId,
-            tecnicoNombre: tecnicos.find((t) => t.id === tecnicoId)?.nombre || 'Tecnico',
-            cargaMin: 0,
-            horaFinalTrabajo: 6 * 60,
-            zonas: ['elche'],
-            fijas: 0,
-          }
-
-          const zonasRef = [...(st.zonas || []), 'elche']
-          const trasladoEstimado = zonasRef
-            .map((z: string) => calcularTiempoEntreZonas(z, zonaOt))
-            .reduce((min: number, v: number) => Math.min(min, v), Number.POSITIVE_INFINITY)
-
-          const cargaProyectada = st.cargaMin + trasladoEstimado + duracion
-          const extraMin = Math.max(0, cargaProyectada - (9 * 60))
-          const movePenalty = dia === fechaOriginal ? 0 : 8
-          const fixedPenalty = st.fijas > 0 ? 6 : 0
-          const score = trasladoEstimado * 1.25 + extraMin * 2.3 + movePenalty + fixedPenalty + st.cargaMin * 0.08
-
-          const inicioEstimado = Math.max(6 * 60, Math.min(14 * 60, Math.round((Math.max(st.horaFinalTrabajo, 6 * 60) + trasladoEstimado) / 30) * 30))
-          const finEstimado = inicioEstimado + duracion
-
-          candidatas.push({
-            tecnicoId: st.tecnicoId,
-            tecnicoNombre: st.tecnicoNombre,
-            fecha: dia,
-            score,
-            trasladoEstimado,
-            extraMin,
-            inicioEstimado,
-            finEstimado,
-            esDiaOriginal: dia === fechaOriginal,
-          })
-        }
-      }
-
-      const mejores = candidatas
-        .sort((a, b) => a.score - b.score)
-        .filter((op, idx, arr) => idx === arr.findIndex((x) => x.fecha === op.fecha && x.tecnicoId === op.tecnicoId))
-        .slice(0, 3)
-
-      if (mejores.length === 0) continue
-      opciones.push({
-        ot,
-        cliente: clienteOt,
-        zona: zonaOt,
-        fechaOriginal,
-        opciones: mejores,
-      })
-    }
-
-    return opciones
-      .sort((a, b) => {
-        const sa = Number(a.opciones?.[0]?.score || 0)
-        const sb = Number(b.opciones?.[0]?.score || 0)
-        return sa - sb
-      })
-      .slice(0, 40)
-  }
-
   function calcularRutas() {
     setCalculando(true)
     try {
-      const rango = obtenerRangoOptimizacion(periodoRuta, fechaRuta)
-      const otsPeriodo = filtrarOtsActivasEnRango(rango.inicio, rango.fin)
-
-      if (otsPeriodo.length === 0) {
-        setResultadoRuta({ vacio: true, periodo: periodoRuta, etiquetaPeriodo: rango.etiqueta })
-        return
-      }
-
-      if (periodoRuta === 'dia') {
-        const resumenDia = resumenDiaOptimizacion(fechaRuta, otsPeriodo)
-        if (!resumenDia) {
-          setResultadoRuta({ vacio: true, periodo: 'dia', etiquetaPeriodo: rango.etiqueta })
-          return
-        }
-        setResultadoRuta({
-          periodo: 'dia',
-          etiquetaPeriodo: rango.etiqueta,
-          ...resumenDia,
-        })
-        return
-      }
-
-      const resumenDias = rango.dias
-        .map((dia) => {
-          const otsDia = otsPeriodo.filter((o) => {
-            if (!o.fecha_programada) return false
-            return fechaKeyLocal(new Date(o.fecha_programada)) === dia
-          })
-          return resumenDiaOptimizacion(dia, otsDia)
-        })
-        .filter(Boolean) as any[]
-
-      if (resumenDias.length === 0) {
-        setResultadoRuta({ vacio: true, periodo: periodoRuta, etiquetaPeriodo: rango.etiqueta })
-        return
-      }
-
-      const totalOTs = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalOTs || 0), 0)
-      const totalTraslado = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalTraslado || 0), 0)
-      const totalAhorro = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalAhorro || 0), 0)
-      const totalExtra = resumenDias.reduce((acc: number, d: any) => acc + Number(d.totalExtra || 0), 0)
-      const opcionesFlexibles = generarOpcionesFlexiblesPeriodo(otsPeriodo, resumenDias, rango.dias)
-
-      setResultadoRuta({
-        periodo: periodoRuta,
-        etiquetaPeriodo: rango.etiqueta,
-        resumenDias,
-        opcionesFlexibles,
-        totalOTs,
-        totalTraslado,
-        totalAhorro,
-        totalExtra,
+      const resultado = calcularResultadoOptimizador({
+        periodoRuta,
+        fechaRuta,
+        ordenes,
+        tecnicos,
+        resolveClient: getClienteOt,
       })
+      setResultadoRuta(resultado)
     } finally {
       setCalculando(false)
     }
@@ -1125,8 +676,6 @@ export default function Planificacion() {
   const presAceptados = presupuestos.filter(p => p.estado === 'aceptado').length
   const presPendientes = presupuestos.filter(p => p.estado === 'pendiente').length
 
-  const esAdminOOficina = miRol === 'gerente' || miRol === 'oficina'
-
   async function generarNumeroPres() {
     const { count } = await supabase.from('presupuestos').select('*', { count: 'exact', head: true })
     const num = String((count || 0) + 1).padStart(4, '0')
@@ -1157,31 +706,39 @@ export default function Planificacion() {
       const { error } = await supabase.from('presupuestos').insert({ ...datos, numero })
       if (error) { alert('Error: ' + error.message); return }
     }
-    setMostrarFormPres(false); setEditandoPres(null); setDatosEscaneados(null); cargarDatos()
+    setMostrarFormPres(false)
+    setEditandoPres(null)
+    setDatosEscaneados(null)
+    void refresh()
   }
 
   async function cambiarEstadoPres(id: string, nuevoEstado: string) {
     await supabase.from('presupuestos').update({ estado: nuevoEstado }).eq('id', id)
     if (nuevoEstado === 'aceptado') {
-      const pres = presupuestos.find(p => p.id === id)
+      const pres = presupuestos.find((p) => p.id === id)
       if (pres) {
         const { error } = await supabase.from('ordenes').insert({
           codigo: `OT-${pres.numero || id.slice(0, 6).toUpperCase()}`,
-          tipo: 'otro', cliente_id: pres.cliente_id || null, estado: 'pendiente', prioridad: '2',
+          tipo: 'otro',
+          cliente_id: pres.cliente_id || null,
+          estado: 'pendiente',
+          prioridad: '2',
           descripcion: pres.titulo || 'Trabajo pendiente de agendar',
           observaciones: `Creado desde presupuesto ${pres.numero || ''} aceptado. Importe: ${(pres.importe || 0).toFixed(2)} EUR`,
-          duracion_horas: 2, hora_fija: false, tecnicos_ids: [],
+          duracion_horas: 2,
+          hora_fija: false,
+          tecnicos_ids: [],
         })
         if (!error) alert('Presupuesto aceptado. Se ha creado una OT en borrador en el calendario.')
       }
     }
-    cargarDatos()
+    void refresh()
   }
 
   async function eliminarPres(id: string) {
     if (!confirm('Eliminar este presupuesto?')) return
     await supabase.from('presupuestos').delete().eq('id', id)
-    cargarDatos()
+    void refresh()
   }
 
   async function compartirRutaDiaria() {
@@ -1329,7 +886,7 @@ export default function Planificacion() {
           ? `Aplicados ${applied} cambios con ${failed} incidencias. Revisa las OT afectadas.`
           : `Aplicados ${applied} cambios de planificacion.`
       )
-      await cargarDatos()
+      await refresh()
     } catch (error: any) {
       setErrorSugerenciaPlan(error?.message || 'Error inesperado al aplicar cambios.')
     }
@@ -1395,81 +952,40 @@ export default function Planificacion() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
-      <div className="px-6 py-4 flex items-center justify-between flex-wrap gap-3" style={s.headerStyle}>
-        <div className="flex items-center gap-4">
-          <Link href="/dashboard" className="text-sm transition-colors" style={{ color: 'var(--text-muted)' }}
-            onMouseEnter={e => e.currentTarget.style.color = '#06b6d4'}
-            onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>Dashboard</Link>
-          <h1 className="font-bold text-lg" style={{ color: 'var(--text)' }}>Planificacion</h1>
-        </div>
-        {vistaActiva === 'calendario' && (
-          <div className="flex items-center gap-3">
-            <button onClick={mesAnterior} className="text-sm px-3 py-2 rounded-xl" style={s.btnSecondary}>Anterior</button>
-            <span className="font-mono font-bold text-sm min-w-40 text-center" style={{ color: 'var(--text)' }}>{tituloMes}</span>
-            <button onClick={mesSiguiente} className="text-sm px-3 py-2 rounded-xl" style={s.btnSecondary}>Siguiente</button>
-          </div>
-        )}
-        {vistaActiva === 'presupuestos' && esAdminOOficina && (
-          <button onClick={() => abrirFormPres()} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
-            + Nuevo presupuesto
-          </button>
-        )}
-      </div>
+      <PlanificacionHeader
+        vistaActiva={vistaActiva}
+        tituloMes={tituloMes}
+        esAdminOOficina={esAdminOOficina}
+        onMesAnterior={mesAnterior}
+        onMesSiguiente={mesSiguiente}
+        onNuevoPresupuesto={() => abrirFormPres()}
+        btnPrimary={s.btnPrimary}
+        btnSecondary={s.btnSecondary}
+        headerStyle={s.headerStyle}
+      />
 
       <div className="p-6 max-w-6xl mx-auto">
-        <div className="flex gap-2 mb-6 flex-wrap">
-          {TABS.map((tab: any) => (
-            <button key={tab.key} onClick={() => setVistaActiva(tab.key as any)}
-              className="px-4 py-2 rounded-xl text-sm font-medium transition-all"
-              style={vistaActiva === tab.key ? s.btnPrimary : s.btnSecondary}>
-              {tab.label}
-              {tab.badge && tab.badge > 0 ? (
-                <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full" style={{ background: '#7c3aed', color: 'white' }}>{tab.badge}</span>
-              ) : null}
-            </button>
-          ))}
-        </div>
+        <PlanificacionTabs
+          tabs={TABS}
+          vistaActiva={vistaActiva}
+          onCambiarVista={(key) => setVistaActiva(key as typeof vistaActiva)}
+          btnPrimary={s.btnPrimary}
+          btnSecondary={s.btnSecondary}
+        />
 
-        {ordenSeleccionada && (
-          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)' }}>
-            <div className="w-full md:max-w-lg rounded-t-2xl md:rounded-2xl overflow-y-auto" style={{ ...s.cardStyle, maxHeight: '92vh' }}>
-              <div className="sticky top-0 px-6 py-4 flex items-start justify-between rounded-t-2xl" style={s.headerStyle}>
-                <div>
-                  <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{ordenSeleccionada.codigo}</span>
-                  <h2 className="font-bold text-lg mt-1" style={{ color: 'var(--text)' }}>{getNombreClienteOt(ordenSeleccionada)}</h2>
-                </div>
-                <button onClick={() => setOrdenSeleccionada(null)} className="w-8 h-8 rounded-lg flex items-center justify-center mt-1"
-                  style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}>X</button>
-              </div>
-              <div className="p-6 pb-16">
-                {[
-                  { label: 'Tipo', val: <span className="text-white capitalize">{ordenSeleccionada.tipo}</span> },
-                  { label: 'Estado', val: <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: ESTADOS_OT[ordenSeleccionada.estado]?.bg, color: ESTADOS_OT[ordenSeleccionada.estado]?.color }}>{ordenSeleccionada.estado.replace('_', ' ')}</span> },
-                  { label: 'Duracion', val: <span style={{ color: 'var(--text)' }}>{ordenSeleccionada.duracion_horas || 2}h</span> },
-                  { label: 'Fecha', val: <span className="text-xs" style={{ color: 'var(--text)' }}>{new Date(ordenSeleccionada.fecha_programada).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span> },
-                  { label: 'Trabajadores', val: <span className="text-xs" style={{ color: 'var(--text)' }}>{getNombresTecnicos(ordenSeleccionada.tecnicos_ids || [])}</span> },
-                ].map((item, i) => (
-                  <div key={i} className="flex justify-between items-center py-2" style={{ borderBottom: '1px solid var(--border)' }}>
-                    <span style={{ color: 'var(--text-muted)' }} className="text-sm">{item.label}</span>
-                    {item.val}
-                  </div>
-                ))}
-                {ordenSeleccionada.descripcion && (
-                  <div className="mt-4">
-                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Trabajos</p>
-                    <p className="text-sm rounded-xl p-3 leading-relaxed" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>{ordenSeleccionada.descripcion}</p>
-                  </div>
-                )}
-                <div className="flex gap-3 mt-5">
-                  <button onClick={() => { router.push('/ordenes'); setOrdenSeleccionada(null) }}
-                    className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>Ver en OT</button>
-                  <button onClick={() => setOrdenSeleccionada(null)}
-                    className="text-sm px-4 py-2 rounded-xl" style={s.btnSecondary}>Cerrar</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <OrdenDetalleModal
+          orden={ordenSeleccionada}
+          estadosOt={ESTADOS_OT}
+          getNombreClienteOt={getNombreClienteOt}
+          getNombresTecnicos={getNombresTecnicos}
+          btnPrimary={s.btnPrimary}
+          btnSecondary={s.btnSecondary}
+          onClose={() => setOrdenSeleccionada(null)}
+          onVerEnOt={() => {
+            router.push('/ordenes')
+            setOrdenSeleccionada(null)
+          }}
+        />
 
         {vistaActiva === 'calendario' && (
           <>

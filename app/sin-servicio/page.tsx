@@ -59,6 +59,8 @@ type ImportPreview = {
   filasParaInsertar: any[]
 }
 
+const UMBRAL_DIAS_RECORDATORIO = 365
+
 function esTablaServiciosNoDisponible(error: any) {
   const txt = String(error?.message || '').toLowerCase()
   return txt.includes('servicios_clientes') && (txt.includes('does not exist') || txt.includes('relation'))
@@ -104,6 +106,32 @@ function normalizarCif(valor: string) {
     .replace(/\s+/g, '')
     .replace(/-/g, '')
     .trim()
+}
+
+function normalizarTextoPlano(valor: string) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function esVisitaTecnica(valor: string) {
+  const norm = normalizarTextoPlano(valor)
+  if (!norm) return false
+  if (norm.includes('visita tecnica')) return true
+  const compacto = norm.replace(/\s+/g, '')
+  if (compacto.includes('visitatecnica')) return true
+  return /\bvisita(s)?\b.*\btecnic[ao]s?\b|\btecnic[ao]s?\b.*\bvisita(s)?\b/.test(norm)
+}
+
+function esVisitaTecnicaOt(ot: any) {
+  const tipo = String(ot?.tipo || '')
+  const descripcion = String(ot?.descripcion || '')
+  const observaciones = String(ot?.observaciones || '')
+  return esVisitaTecnica(`${tipo} ${descripcion} ${observaciones}`)
 }
 
 function variantesNombreCliente(valor: string) {
@@ -324,6 +352,7 @@ export default function RecordatorioServicioPage() {
 
       for (const ot of ordenes) {
         if (!ot?.cliente_id) continue
+        if (esVisitaTecnicaOt(ot)) continue
         const fecha =
           fechaSegura(ot.fecha_cierre) ||
           fechaSegura(ot.fecha_programada) ||
@@ -345,6 +374,7 @@ export default function RecordatorioServicioPage() {
       if (!serviciosError) {
         for (const srv of servicios) {
           if (!srv?.cliente_id || !srv?.fecha_servicio) continue
+          if (esVisitaTecnica(String(srv?.descripcion || ''))) continue
           const fecha = fechaSegura(`${srv.fecha_servicio}T12:00:00`)
           if (!fecha) continue
           const previa = ultimaActividadPorCliente.get(srv.cliente_id)
@@ -408,10 +438,11 @@ export default function RecordatorioServicioPage() {
         }
       }
 
-      const pendientes = rankingNormalizado.filter((c) => !c.seguimientoLlamadaOk)
-      const contactados = rankingNormalizado.filter((c) => c.seguimientoLlamadaOk)
+      const rankingRecordatorio = rankingNormalizado.filter((c) => c.diasSinServicio > UMBRAL_DIAS_RECORDATORIO)
+      const pendientes = rankingRecordatorio.filter((c) => !c.seguimientoLlamadaOk)
+      const contactados = rankingRecordatorio.filter((c) => c.seguimientoLlamadaOk)
 
-      setTotalConHistorial(rankingNormalizado.length)
+      setTotalConHistorial(rankingRecordatorio.length)
       setClientesInactivos(pendientes.slice(0, 30))
       setClientesContactados(contactados.slice(0, 30))
     } catch (error: any) {
@@ -427,7 +458,7 @@ export default function RecordatorioServicioPage() {
 
   async function actualizarSeguimientoLlamada(clienteId: string, valor: boolean) {
     if (valor) {
-      const ok = confirm('¿Has llamado al cliente para ofrecerle el servicio?')
+      const ok = confirm('Has contactado al cliente para ofrecerle el servicio?')
       if (!ok) return
     }
 
@@ -440,7 +471,7 @@ export default function RecordatorioServicioPage() {
       .eq('id', clienteId)
 
     if (error) {
-      alert(`No se pudo guardar el seguimiento de llamada: ${error.message}`)
+      alert(`No se pudo guardar el seguimiento de contacto: ${error.message}`)
       return
     }
 
@@ -449,10 +480,10 @@ export default function RecordatorioServicioPage() {
     if (!target) return
     const actualizado = { ...target, seguimientoLlamadaOk: valor, seguimientoLlamadaAt: ahoraIso }
     const resto = all.filter((c) => c.id !== clienteId)
-    const pendientes = resto.filter((c) => !c.seguimientoLlamadaOk)
-    const contactados = resto.filter((c) => c.seguimientoLlamadaOk)
+    const pendientes = resto.filter((c) => !c.seguimientoLlamadaOk && c.diasSinServicio > UMBRAL_DIAS_RECORDATORIO)
+    const contactados = resto.filter((c) => c.seguimientoLlamadaOk && c.diasSinServicio > UMBRAL_DIAS_RECORDATORIO)
     if (actualizado.seguimientoLlamadaOk) contactados.push(actualizado)
-    else pendientes.push(actualizado)
+    else if (actualizado.diasSinServicio > UMBRAL_DIAS_RECORDATORIO) pendientes.push(actualizado)
     pendientes.sort((a, b) => b.diasSinServicio - a.diasSinServicio)
     contactados.sort((a, b) => b.diasSinServicio - a.diasSinServicio)
     setClientesInactivos(pendientes.slice(0, 30))
@@ -598,6 +629,7 @@ export default function RecordatorioServicioPage() {
       }
 
       const servicios: ServicioParseado[] = []
+      let visitasTecnicasOmitidas = 0
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i] || []
         const clienteNombre = String(row[idxCliente] || '').trim()
@@ -610,6 +642,10 @@ export default function RecordatorioServicioPage() {
         const filaVacia = !clienteNombre && !cif && !numeroDocumento && !descripcion
         if (filaVacia) continue
         if (!clienteNombre || !fechaServicio) continue
+        if (esVisitaTecnica(descripcion)) {
+          visitasTecnicasOmitidas += 1
+          continue
+        }
 
         servicios.push({
           clienteNombre,
@@ -630,7 +666,10 @@ export default function RecordatorioServicioPage() {
           duplicados: 0,
           sinCliente: 0,
           errores: 0,
-          advertencias: ['Hoja procesada: ' + hojaSeleccionada],
+          advertencias: [
+            'Hoja procesada: ' + hojaSeleccionada,
+            visitasTecnicasOmitidas > 0 ? `Visitas tecnicas omitidas: ${visitasTecnicasOmitidas}` : '',
+          ].filter(Boolean),
           detalleSinCliente: [],
           error: 'No hay filas validas para importar despues del filtrado.',
         })
@@ -709,7 +748,10 @@ export default function RecordatorioServicioPage() {
           duplicados: 0,
           sinCliente: servicios.length,
           errores: 0,
-          advertencias: ['No hubo coincidencias con clientes existentes.'],
+          advertencias: [
+            'No hubo coincidencias con clientes existentes.',
+            visitasTecnicasOmitidas > 0 ? `Visitas tecnicas omitidas: ${visitasTecnicasOmitidas}` : '',
+          ].filter(Boolean),
           detalleSinCliente: sinClienteDetalle,
           error: 'No se pudo vincular ninguna fila con clientes existentes.',
         })
@@ -725,7 +767,10 @@ export default function RecordatorioServicioPage() {
         filasPendientesInsercion: paraInsertar.length,
         duplicadosDetectados: duplicados,
         filasSinCliente: servicios.length - matched.length,
-        advertencias: [`Hoja procesada: ${hojaSeleccionada}`],
+        advertencias: [
+          `Hoja procesada: ${hojaSeleccionada}`,
+          visitasTecnicasOmitidas > 0 ? `Visitas tecnicas omitidas: ${visitasTecnicasOmitidas}` : '',
+        ].filter(Boolean),
         detalleSinCliente: sinClienteDetalle,
         filasParaInsertar: paraInsertar,
       })
@@ -958,24 +1003,24 @@ export default function RecordatorioServicioPage() {
           <div className="rounded-2xl p-5" style={s.cardStyle}>
             <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>No hay datos</p>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              No hay clientes con servicios completados en historial.
+              No hay clientes con mas de 1 ano sin servicio registrado.
             </p>
           </div>
         ) : (
           <>
             <div className="rounded-2xl p-4 mb-4" style={s.cardStyle}>
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                Top 30 clientes pendientes de llamada (mas tiempo sin servicio).
+                Top 30 clientes pendientes (mas de 1 ano sin servicio).
               </p>
               <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
-                Clientes con historial: {totalConHistorial} - Contactados: {clientesContactados.length}
+                Clientes {'>'} 1 ano: {totalConHistorial} - Contactados: {clientesContactados.length}
               </p>
             </div>
 
             {clientesInactivos.length === 0 ? (
               <div className="rounded-xl px-4 py-3 mb-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  No hay clientes pendientes de llamada en este momento.
+                  No hay clientes pendientes de contacto con mas de 1 ano sin servicio.
                 </p>
               </div>
             ) : (
@@ -1014,7 +1059,7 @@ export default function RecordatorioServicioPage() {
                         className="w-3.5 h-3.5"
                         style={{ accentColor: '#7c3aed' }}
                       />
-                      Llamado
+                      Contactado
                     </label>
                     {c.telefono && (
                       <a
@@ -1062,7 +1107,7 @@ export default function RecordatorioServicioPage() {
                           #{idx + 1} {c.nombre}
                         </p>
                         <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                          Llamado: {c.seguimientoLlamadaAt ? new Date(c.seguimientoLlamadaAt).toLocaleDateString('es-ES') : '-'} - Ultimo servicio: {c.ultimaFecha.toLocaleDateString('es-ES')}
+                          Contactado: {c.seguimientoLlamadaAt ? new Date(c.seguimientoLlamadaAt).toLocaleDateString('es-ES') : '-'} - Ultimo servicio: {c.ultimaFecha.toLocaleDateString('es-ES')}
                         </p>
                         <p className="text-xs mt-1" style={{ color: 'var(--text-subtle)' }}>
                           CIF: {c.cif || '-'}{c.email ? ` - ${c.email}` : ''}
@@ -1080,7 +1125,7 @@ export default function RecordatorioServicioPage() {
                             className="w-3.5 h-3.5"
                             style={{ accentColor: '#7c3aed' }}
                           />
-                          Llamado
+                          Contactado
                         </label>
                         {c.telefono && (
                           <a

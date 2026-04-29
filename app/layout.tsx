@@ -8,9 +8,34 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://los-teros-app.vercel.app";
+
 export const metadata: Metadata = {
-  title: "Los Teros S.L® - Gestión Operativa",
-  description: "App de gestión para Los Teros S.L",
+  metadataBase: new URL(siteUrl),
+  title: "Los Teros S.L - Gestion Operativa",
+  description: "App de gestion operativa para Los Teros S.L",
+  openGraph: {
+    title: "Los Teros S.L - Gestion Operativa",
+    description: "App de gestion operativa para Los Teros S.L",
+    url: siteUrl,
+    siteName: "Los Teros S.L",
+    images: [
+      {
+        url: "/logo.png",
+        width: 1200,
+        height: 1200,
+        alt: "Logo Los Teros S.L",
+      },
+    ],
+    locale: "es_ES",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Los Teros S.L - Gestion Operativa",
+    description: "App de gestion operativa para Los Teros S.L",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({

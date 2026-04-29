@@ -263,7 +263,7 @@ function EscanearContenido() {
 
         const etiquetaOt = getEtiquetaOrden(codigoOrden, ordenReferenciaId)
         setMensaje(
-          `OK - ${item.codigo} registrado como salida al cliente${
+          `OK - ${item.codigo} registrado como equipo adquirido${
             ordenReferenciaId ? ` (OT ${etiquetaOt})` : ' (sin OT)'
           }.`
         )
@@ -469,7 +469,7 @@ function EscanearContenido() {
             {item._tipo === 'equipo' && item.estado === 'disponible' && (
               <div className="rounded-xl p-3 mb-4" style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)' }}>
                 <p className="text-sm" style={{ color: '#fbbf24' }}>
-                  Se registrara la salida de <strong>{item.codigo}</strong> al cliente.
+                  Se registrara <strong>{item.codigo}</strong> como equipo adquirido en esta OT.
                 </p>
               </div>
             )}
@@ -489,7 +489,7 @@ function EscanearContenido() {
                 className="flex-1 py-3 rounded-xl text-sm font-medium disabled:opacity-50"
                 style={s.btnPrimary}
               >
-                {guardando ? 'Registrando...' : item._tipo === 'material' ? 'Confirmar salida' : 'Registrar equipo'}
+                {guardando ? 'Registrando...' : item._tipo === 'material' ? 'Confirmar salida' : 'Registrar equipo adquirido'}
               </button>
               <button
                 onClick={() => {

@@ -14,6 +14,34 @@ function diasRestantes(fecha: string | null | undefined) {
   return Math.floor((limite.getTime() - Date.now()) / 86400000)
 }
 
+const UMBRAL_DIAS_RECORDATORIO = 365
+
+function normalizarTextoPlano(valor: string) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function esVisitaTecnica(valor: string) {
+  const norm = normalizarTextoPlano(valor)
+  if (!norm) return false
+  if (norm.includes('visita tecnica')) return true
+  const compacto = norm.replace(/\s+/g, '')
+  if (compacto.includes('visitatecnica')) return true
+  return /\bvisita(s)?\b.*\btecnic[ao]s?\b|\btecnic[ao]s?\b.*\bvisita(s)?\b/.test(norm)
+}
+
+function esVisitaTecnicaOt(ot: any) {
+  const tipo = String(ot?.tipo || '')
+  const descripcion = String(ot?.descripcion || '')
+  const observaciones = String(ot?.observaciones || '')
+  return esVisitaTecnica(`${tipo} ${descripcion} ${observaciones}`)
+}
+
 async function traerTodoPaginado<T>(fetchPage: (from: number, to: number) => any, pageSize = 1000) {
   const out: T[] = []
   for (let from = 0; ; from += pageSize) {
@@ -264,6 +292,7 @@ export default function Dashboard() {
     frase: 'Trabajo seguro, equipo seguro. Revisad EPI y entorno antes de empezar.',
   })
   const [reconocimientosSemana, setReconocimientosSemana] = useState<ReconocimientoSemana[]>([])
+  const [reconocimientoSemanaIdx, setReconocimientoSemanaIdx] = useState(0)
   const router = useRouter()
   const { tema, toggleTema } = useTheme()
 
@@ -333,6 +362,7 @@ export default function Dashboard() {
     const actividadPorCliente = new Map<string, Date>()
     for (const ot of todasOrdenes) {
       if (!ot?.cliente_id || ot?.estado !== 'completada') continue
+      if (esVisitaTecnicaOt(ot)) continue
       const fechaRef = ot.fecha_cierre || ot.fecha_programada || ot.created_at
       if (!fechaRef) continue
       const fecha = new Date(fechaRef)
@@ -344,6 +374,7 @@ export default function Dashboard() {
     }
     for (const srv of serviciosData || []) {
       if (!srv?.cliente_id || !srv?.fecha_servicio) continue
+      if (esVisitaTecnica(String(srv?.descripcion || ''))) continue
       const fecha = new Date(`${srv.fecha_servicio}T12:00:00`)
       if (Number.isNaN(fecha.getTime())) continue
       const previa = actividadPorCliente.get(srv.cliente_id)
@@ -359,9 +390,11 @@ export default function Dashboard() {
     }
 
     let maxDiasSinServicio = 0
+    let clientesMasDeUnAnoSinServicio = 0
     for (const fecha of actividadValida.values()) {
       const dias = Math.floor((Date.now() - fecha.getTime()) / 86400000)
       if (dias > maxDiasSinServicio) maxDiasSinServicio = dias
+      if (dias > UMBRAL_DIAS_RECORDATORIO) clientesMasDeUnAnoSinServicio += 1
     }
 
     let vehiculosAlDia = 0
@@ -403,7 +436,7 @@ export default function Dashboard() {
       otSinTecnico,
       otSinFecha,
       otSinVehiculo,
-      clientesSinServicio: Math.min(30, actividadValida.size || 0),
+      clientesSinServicio: clientesMasDeUnAnoSinServicio,
       maxDiasSinServicio,
     })
     setMisOrdenes(misMisOrdenes)
@@ -426,8 +459,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    let timeoutMedianoche: ReturnType<typeof setTimeout> | null = null
-    let intervaloRefresco: ReturnType<typeof setInterval> | null = null
+    let timeoutMedianoche: number | null = null
+    let intervaloRefresco: number | null = null
 
     const programarSiguienteRefrescoDiario = () => {
       const ahora = new Date()
@@ -436,7 +469,7 @@ export default function Dashboard() {
       siguienteMedianoche.setHours(24, 0, 5, 0)
       const ms = Math.max(1000, siguienteMedianoche.getTime() - ahora.getTime())
 
-      timeoutMedianoche = setTimeout(() => {
+      timeoutMedianoche = window.setTimeout(() => {
         void cargarDatos()
         programarSiguienteRefrescoDiario()
       }, ms)
@@ -451,15 +484,29 @@ export default function Dashboard() {
     // Garantiza cambio diario automatico.
     programarSiguienteRefrescoDiario()
     // Mantiene el dashboard al dia con cambios de OT en jornada.
-    intervaloRefresco = setInterval(refrescarSiVisible, 15 * 60 * 1000)
+    intervaloRefresco = window.setInterval(refrescarSiVisible, 15 * 60 * 1000)
     document.addEventListener('visibilitychange', refrescarSiVisible)
 
     return () => {
-      if (timeoutMedianoche) window.clearTimeout(timeoutMedianoche)
-      if (intervaloRefresco) window.clearInterval(intervaloRefresco)
+      if (timeoutMedianoche !== null) window.clearTimeout(timeoutMedianoche)
+      if (intervaloRefresco !== null) window.clearInterval(intervaloRefresco)
       document.removeEventListener('visibilitychange', refrescarSiVisible)
     }
   }, [cargarDatos])
+
+  useEffect(() => {
+    setReconocimientoSemanaIdx(0)
+    if (typeof window === 'undefined') return
+    if (reconocimientosSemana.length <= 1) return
+
+    const intervalId = window.setInterval(() => {
+      setReconocimientoSemanaIdx((prev) => (prev + 1) % reconocimientosSemana.length)
+    }, 6200)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [reconocimientosSemana])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -476,8 +523,7 @@ export default function Dashboard() {
   const MODULOS: Array<{ href: string; icono?: string; iconoImg?: string; titulo: string; desc: string; siempre?: boolean; soloAdmin?: boolean }> = [
     { href: '/ordenes', icono: '📋', titulo: 'Ordenes', desc: 'Crear y gestionar', siempre: true },
     { href: '/planificacion', icono: '📅', titulo: 'Planificacion', desc: 'Calendario y rutas', siempre: true },
-    { href: '/inventario', icono: '📦', titulo: 'Inventario', desc: 'Stock y materiales', siempre: true },
-    { href: '/equipos', icono: '⚙️', titulo: 'Equipos', desc: 'Turbinas y motores', siempre: true },
+    { href: '/inventario', icono: '📦', titulo: 'Inventario y equipos', desc: 'Materiales y equipos', siempre: true },
     { href: '/flota', icono: '🚚', titulo: 'Flota de vehiculos', desc: 'ITV, seguros y documentos', siempre: true },
     { href: '/albaranes', icono: '🧾', titulo: 'Albaranes', desc: 'Con fotos y firma', siempre: true },
     { href: '/asistente', iconoImg: '/assistant-ia-teros-clean.png', titulo: 'Asistente IA', desc: 'Pregunta a la IA', siempre: true },
@@ -545,7 +591,7 @@ export default function Dashboard() {
     if (estado === 'critical') {
       return {
         icono: '🚨',
-        texto: 'Revisar',
+        texto: 'REVISAR',
         color: '#ef4444',
         fondo: tema === 'dark' ? 'rgba(239,68,68,0.14)' : 'rgba(239,68,68,0.1)',
         borde: tema === 'dark' ? 'rgba(239,68,68,0.35)' : 'rgba(239,68,68,0.25)',
@@ -554,7 +600,7 @@ export default function Dashboard() {
     if (estado === 'warning') {
       return {
         icono: '⚠',
-        texto: 'Bien',
+        texto: 'BIEN',
         color: '#f59e0b',
         fondo: tema === 'dark' ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.1)',
         borde: tema === 'dark' ? 'rgba(245,158,11,0.35)' : 'rgba(245,158,11,0.25)',
@@ -562,10 +608,36 @@ export default function Dashboard() {
     }
     return {
       icono: '🏅',
-      texto: '¡Bravo!',
+      texto: 'BRAVO',
       color: '#06b6d4',
       fondo: tema === 'dark' ? 'rgba(6,182,212,0.14)' : 'rgba(6,182,212,0.1)',
       borde: tema === 'dark' ? 'rgba(6,182,212,0.32)' : 'rgba(6,182,212,0.25)',
+    }
+  }
+
+  function logoInsigniaEstado(estado: EstadoSemaforo) {
+    // Mantiene compatibilidad con la insignia semaforo existente.
+    const legacy = insigniaEstado(estado)
+    void legacy
+
+    if (estado === 'critical') {
+      return {
+        src: '/badge-alerta.png',
+        alt: 'Revisar',
+        glow: 'rgba(239,68,68,0.42)',
+      }
+    }
+    if (estado === 'warning') {
+      return {
+        src: '/badge-bien.png',
+        alt: 'Bien',
+        glow: 'rgba(245,158,11,0.40)',
+      }
+    }
+    return {
+      src: '/badge-bravo.png',
+      alt: 'Bravo',
+      glow: 'rgba(6,182,212,0.40)',
     }
   }
 
@@ -581,8 +653,8 @@ export default function Dashboard() {
     { label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, href: '/ordenes', estado: 'ok' },
     { label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', href: '/ordenes?estado=completada', estado: 'ok' },
     { label: 'Clientes', valor: totalClientes, sub: `Teros ${stats.clientesTeros} - Olipro ${stats.clientesOlipro}`, href: '/clientes', estado: 'ok' },
-    { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', href: '/inventario', estado: estadoStock, mostrarInsignia: true },
-    { label: 'Equipos en campo', valor: stats.equiposCampo, sub: 'en cliente', href: '/equipos', estado: stats.equiposCampo > 0 ? 'warning' : 'ok' },
+    { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales criticos', href: '/inventario?tab=materiales', estado: estadoStock, mostrarInsignia: true },
+    { label: 'Equipos en campo', valor: stats.equiposCampo, sub: 'en cliente', href: '/inventario?tab=equipos', estado: stats.equiposCampo > 0 ? 'warning' : 'ok' },
     {
       label: 'Flota al dia',
       valor: stats.vehiculosAlDia,
@@ -594,12 +666,16 @@ export default function Dashboard() {
     {
       label: 'Recordatorio servicio',
       valor: stats.clientesSinServicio,
-      sub: `max ${stats.maxDiasSinServicio} dias - ver ranking`,
+      sub: `>1 ano sin servicio - max ${stats.maxDiasSinServicio} dias`,
       href: '/sin-servicio',
       estado: estadoRecordatorio,
       mostrarInsignia: true,
     },
   ]
+
+  const reconocimientoActivo = reconocimientosSemana.length > 0
+    ? reconocimientosSemana[reconocimientoSemanaIdx % reconocimientosSemana.length]
+    : null
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: bgMain }}>
@@ -640,7 +716,7 @@ export default function Dashboard() {
       </div>
 
       <div className="p-6 max-w-6xl mx-auto">
-        <div className="mb-8">
+        <div className="mb-4">
           <h2 className="font-semibold text-xl mb-1" style={{ color: textColor }}>
             Hola, {perfil?.nombre?.split(' ')[0] || 'bienvenido'} 👋
           </h2>
@@ -649,7 +725,26 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {reconocimientoActivo && (
+          <div
+            className="mb-6 rounded-xl px-4 py-3 overflow-hidden"
+            style={{ background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.28)' }}
+          >
+            <div
+              key={`${reconocimientoActivo.id}-${reconocimientoSemanaIdx}`}
+              className="flex items-center gap-2 min-w-0"
+              style={{ animation: 'reconBannerSlide 6.1s ease-in-out' }}
+            >
+              <span className="text-sm shrink-0" style={{ color: '#c4b5fd' }}>{reconocimientoActivo.insignia}</span>
+              <p className="text-sm whitespace-nowrap text-ellipsis overflow-hidden" style={{ color: textColor }}>
+                <span className="font-semibold" style={{ color: '#a78bfa' }}>{reconocimientoActivo.titulo}:</span>{' '}
+                {reconocimientoActivo.detalle}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 mb-6">
           <div className="rounded-xl p-4" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
             <div className="flex items-center justify-between gap-2 mb-2">
               <p className="text-xs uppercase tracking-wider" style={{ color: '#06b6d4' }}>{recordatorioPrl.titulo}</p>
@@ -659,23 +754,6 @@ export default function Dashboard() {
             </div>
             <p className="text-sm font-semibold mb-2" style={{ color: textColor }}>Foco de hoy: {recordatorioPrl.foco}</p>
             <p className="text-sm leading-relaxed" style={{ color: textMuted }}>{recordatorioPrl.frase}</p>
-          </div>
-
-          <div className="rounded-xl p-4" style={{ background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.28)' }}>
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <p className="text-xs uppercase tracking-wider" style={{ color: '#a78bfa' }}>Reconocimientos de la semana</p>
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ color: '#a78bfa', background: 'rgba(124,58,237,0.18)', border: '1px solid rgba(124,58,237,0.28)' }}>
-                Equipo
-              </span>
-            </div>
-            <div className="flex flex-col gap-2">
-              {reconocimientosSemana.map((r) => (
-                <div key={r.id} className="rounded-lg px-3 py-2" style={{ background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.22)' }}>
-                  <p className="text-xs font-semibold mb-1" style={{ color: '#c4b5fd' }}>{r.insignia} {r.titulo}</p>
-                  <p className="text-sm leading-relaxed" style={{ color: textColor }}>{r.detalle}</p>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -722,7 +800,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
           {resumenCards.map((s, i) => {
             const semaforo = estilosSemaforo(s.estado)
-            const insignia = insigniaEstado(s.estado)
+            const insigniaLogo = logoInsigniaEstado(s.estado)
             return (
             <Link
               key={i}
@@ -739,29 +817,18 @@ export default function Dashboard() {
                   className="pointer-events-none absolute -top-3 -right-3 z-10"
                   style={{
                     animation: `insigniaFloat 3.4s ease-in-out ${i * 0.08}s infinite`,
-                    filter: 'drop-shadow(0 7px 16px rgba(0,0,0,0.32))',
+                    filter: `drop-shadow(0 7px 16px rgba(0,0,0,0.32)) drop-shadow(0 0 14px ${insigniaLogo.glow})`,
                   }}
                   aria-hidden
                 >
-                  <div
-                    className="relative w-[54px] h-[54px] rounded-full flex flex-col items-center justify-center overflow-hidden"
-                    style={{
-                      background: `radial-gradient(circle at 28% 24%, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.22) 24%, ${insignia.fondo} 56%, rgba(0,0,0,0.10) 100%)`,
-                      border: `1px solid ${insignia.borde}`,
-                      boxShadow: `inset 0 1px 0 rgba(255,255,255,0.48), inset 0 -7px 12px rgba(0,0,0,0.16), 0 0 0 1px ${insignia.borde}, 0 8px 18px rgba(0,0,0,0.24)`,
-                    }}
-                  >
-                    <span
-                      className="absolute left-[11px] top-[10px] w-[10px] h-[6px] rounded-full"
-                      style={{ background: 'rgba(255,255,255,0.55)', filter: 'blur(0.2px)' }}
+                  <div className="relative w-[56px] h-[56px]">
+                    <Image
+                      src={insigniaLogo.src}
+                      alt={insigniaLogo.alt}
+                      fill
+                      sizes="56px"
+                      className="object-contain"
                     />
-                    {s.estado === 'ok' && (
-                      <span className="absolute inset-0 pointer-events-none">
-                        <span className="sparkle" />
-                      </span>
-                    )}
-                    <span className="text-sm leading-none mb-0.5">{insignia.icono}</span>
-                    <span className="text-[8px] font-bold leading-none tracking-wide" style={{ color: insignia.color }}>{insignia.texto}</span>
                   </div>
                 </div>
               )}
@@ -792,6 +859,12 @@ export default function Dashboard() {
             0% { transform: translateY(0px) rotate(-2deg) scale(1); }
             50% { transform: translateY(-4px) rotate(2deg) scale(1.01); }
             100% { transform: translateY(0px) rotate(-2deg) scale(1); }
+          }
+          @keyframes reconBannerSlide {
+            0% { opacity: 0; transform: translateX(34px); }
+            12% { opacity: 1; transform: translateX(0); }
+            82% { opacity: 1; transform: translateX(0); }
+            100% { opacity: 0; transform: translateX(-34px); }
           }
           @keyframes insigniaSparkle {
             0% {

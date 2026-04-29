@@ -287,7 +287,18 @@ export async function registrarSalidaEquipoOt(params: {
 
   if (!rpcError) {
     const fila = (Array.isArray(rpcData) ? rpcData[0] : rpcData) as RpcSalidaRow | undefined
-    return { movimientoId: fila?.movimiento_id || null }
+    const movimientoId = fila?.movimiento_id || null
+    if (movimientoId) {
+      await supabase
+        .from('movimientos')
+        .update({ estado_equipo: 'equipo_adquirido' })
+        .eq('id', movimientoId)
+    }
+    await supabase
+      .from('equipos')
+      .update({ estado: 'en_cliente', fecha_salida: new Date().toISOString() })
+      .eq('id', params.equipoId)
+    return { movimientoId }
   }
 
   if (!esFuncionRpcNoDisponible(rpcError)) throw rpcError
@@ -321,7 +332,7 @@ export async function registrarSalidaEquipoOt(params: {
       orden_id: params.ordenId,
       tecnico_id: params.tecnicoId,
       cantidad: 1,
-      estado_equipo: 'en_cliente',
+      estado_equipo: 'equipo_adquirido',
       observaciones: params.observaciones,
       fecha: new Date().toISOString(),
     })

@@ -21,6 +21,19 @@ export type Database = {
           fotos_urls: string[] | null
           observaciones: string | null
           firmado: boolean | null
+          razon_social: string | null
+          cif: string | null
+          domicilio: string | null
+          localidad: string | null
+          provincia: string | null
+          telefono: string | null
+          email: string | null
+          responsable: string | null
+          instalacion: string | null
+          firma_empleado_url: string | null
+          firma_cliente_url: string | null
+          firmado_empleado_at: string | null
+          firmado_cliente_at: string | null
           created_at: string | null
         }
         Insert: {
@@ -34,6 +47,19 @@ export type Database = {
           fotos_urls?: string[] | null
           observaciones?: string | null
           firmado?: boolean | null
+          razon_social?: string | null
+          cif?: string | null
+          domicilio?: string | null
+          localidad?: string | null
+          provincia?: string | null
+          telefono?: string | null
+          email?: string | null
+          responsable?: string | null
+          instalacion?: string | null
+          firma_empleado_url?: string | null
+          firma_cliente_url?: string | null
+          firmado_empleado_at?: string | null
+          firmado_cliente_at?: string | null
           created_at?: string | null
         }
         Update: {
@@ -47,6 +73,19 @@ export type Database = {
           fotos_urls?: string[] | null
           observaciones?: string | null
           firmado?: boolean | null
+          razon_social?: string | null
+          cif?: string | null
+          domicilio?: string | null
+          localidad?: string | null
+          provincia?: string | null
+          telefono?: string | null
+          email?: string | null
+          responsable?: string | null
+          instalacion?: string | null
+          firma_empleado_url?: string | null
+          firma_cliente_url?: string | null
+          firmado_empleado_at?: string | null
+          firmado_cliente_at?: string | null
           created_at?: string | null
         }
         Relationships: [
