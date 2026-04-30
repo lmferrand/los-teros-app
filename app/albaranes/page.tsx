@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { s } from '@/lib/styles'
 import AppHeader from '@/app/components/AppHeader'
+import { compressImageForUpload } from '@/lib/image-compression'
 
 type RolFirma = 'empleado' | 'cliente'
 
@@ -342,8 +343,16 @@ export default function Albaranes() {
       const nuevas: string[] = []
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
-        const nombreArchivo = `${albaranId}/${Date.now()}_${i}_${file.name}`
-        const { data, error } = await supabase.storage.from('fotos-albaranes').upload(nombreArchivo, file)
+        const imagenLista = await compressImageForUpload(file, {
+          maxWidth: 1700,
+          maxHeight: 1700,
+          targetBytes: 320 * 1024,
+          outputType: 'image/webp',
+        })
+        const nombreArchivo = `${albaranId}/${Date.now()}_${i}.${imagenLista.extension}`
+        const { data, error } = await supabase.storage.from('fotos-albaranes').upload(nombreArchivo, imagenLista.blob, {
+          contentType: imagenLista.contentType,
+        })
         if (error || !data) continue
         const { data: urlData } = supabase.storage.from('fotos-albaranes').getPublicUrl(nombreArchivo)
         nuevas.push(urlData.publicUrl)
@@ -492,9 +501,16 @@ export default function Albaranes() {
     try {
       const dataUrl = canvas.toDataURL('image/png')
       const blob = await fetch(dataUrl).then((r) => r.blob())
-      const path = `${albaranFirmaId}/firmas/${rolFirmaModal}_${Date.now()}.png`
-      const { data, error } = await supabase.storage.from('fotos-albaranes').upload(path, blob, {
-        contentType: 'image/png',
+      const fileFirma = new File([blob], `firma_${rolFirmaModal}.png`, { type: 'image/png' })
+      const firmaLista = await compressImageForUpload(fileFirma, {
+        maxWidth: 1200,
+        maxHeight: 500,
+        targetBytes: 160 * 1024,
+        outputType: 'image/webp',
+      })
+      const path = `${albaranFirmaId}/firmas/${rolFirmaModal}_${Date.now()}.${firmaLista.extension}`
+      const { data, error } = await supabase.storage.from('fotos-albaranes').upload(path, firmaLista.blob, {
+        contentType: firmaLista.contentType,
       })
       if (error || !data) {
         alert('No se pudo guardar la firma.')

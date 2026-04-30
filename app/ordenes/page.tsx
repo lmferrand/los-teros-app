@@ -6,7 +6,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { s } from '@/lib/styles'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
-import { cargarMovimientosOrden, eliminarMovimientoConIntegridad, repararVinculoMovimientosOt } from '@/lib/ordenes-integridad'
+import { compressImageForUpload } from '@/lib/image-compression'
+import {
+  cargarMovimientosOrden,
+  eliminarMovimientoConIntegridad,
+  registrarConsumoMaterialOt,
+  registrarSalidaEquipoOt,
+  repararVinculoMovimientosOt,
+} from '@/lib/ordenes-integridad'
 
 function normalizarGradoIntervencion(valor: string | null | undefined) {
   const v = String(valor || '').trim().toLowerCase()
@@ -50,6 +57,7 @@ export default function Ordenes() {
   const [userId, setUserId] = useState('')
   const [esTecnicoUsuario, setEsTecnicoUsuario] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(false)
   const [mostrarForm, setMostrarForm] = useState(false)
   const [filtroEstado, setFiltroEstado] = useState('')
   const [filtroFalta, setFiltroFalta] = useState<'tecnico' | 'fecha' | 'vehiculo' | ''>('')
@@ -68,6 +76,15 @@ export default function Ordenes() {
   const [incidenciasOrden, setIncidenciasOrden] = useState<any[]>([])
   const [movimientosOt, setMovimientosOt] = useState<any[]>([])
   const [cargandoMovimientosOt, setCargandoMovimientosOt] = useState(false)
+  const [cargandoCatalogoOtManual, setCargandoCatalogoOtManual] = useState(false)
+  const [materialesOtManual, setMaterialesOtManual] = useState<any[]>([])
+  const [equiposOtManual, setEquiposOtManual] = useState<any[]>([])
+  const [tipoAltaManualOt, setTipoAltaManualOt] = useState<'material' | 'equipo'>('material')
+  const [materialManualOtId, setMaterialManualOtId] = useState('')
+  const [equipoManualOtId, setEquipoManualOtId] = useState('')
+  const [cantidadManualOt, setCantidadManualOt] = useState('1')
+  const [registrandoManualOt, setRegistrandoManualOt] = useState(false)
+  const [mensajeManualOt, setMensajeManualOt] = useState('')
   const [actualizandoEstadoEquipoId, setActualizandoEstadoEquipoId] = useState<string | null>(null)
   const [eliminandoMovimientoId, setEliminandoMovimientoId] = useState<string | null>(null)
   const [mostrarRegistroIncidencia, setMostrarRegistroIncidencia] = useState(false)
@@ -127,16 +144,33 @@ export default function Ordenes() {
     setEsTecnicoUsuario(rol === 'tecnico' || rol === 'almacen')
   }, [router])
 
-  const cargarDatos = useCallback(async () => {
-    const [ords, tecs, vehs] = await Promise.all([
-      supabase.from('ordenes').select('*, clientes(*)').order('created_at', { ascending: false }),
-      supabase.from('perfiles').select('*').order('nombre'),
-      supabase.from('vehiculos_flota').select('id, matricula, alias, marca, modelo, activo').eq('activo', true).order('matricula'),
-    ])
-    if (ords.data) setOrdenes(ords.data)
-    if (tecs.data) setTecnicos(tecs.data)
-    if (vehs.data) setVehiculos(vehs.data)
-    setLoading(false)
+  const cargarDatos = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent)
+    if (!silent) setLoading(true)
+    setCargandoCatalogos(true)
+    try {
+      const ords = await supabase
+        .from('ordenes')
+        .select('*, clientes(*)')
+        .order('created_at', { ascending: false })
+      if (ords.data) setOrdenes(ords.data)
+      if (!silent) setLoading(false)
+
+      // Segunda fase: catálogos (no bloquea la lista de OT).
+      const [tecs, vehs] = await Promise.all([
+        supabase.from('perfiles').select('*').order('nombre'),
+        supabase
+          .from('vehiculos_flota')
+          .select('id, matricula, alias, marca, modelo, activo')
+          .eq('activo', true)
+          .order('matricula'),
+      ])
+      if (tecs.data) setTecnicos(tecs.data)
+      if (vehs.data) setVehiculos(vehs.data)
+    } finally {
+      setCargandoCatalogos(false)
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -201,6 +235,9 @@ export default function Ordenes() {
     setMostrarRegistroIncidencia(false)
     setIncidenciasOrden([])
     setMovimientosOt([])
+    setMensajeManualOt('')
+    setCantidadManualOt('1')
+    setTipoAltaManualOt('material')
     resetRegistroIncidencia()
     setOrdenDetalle(null)
   }
@@ -253,6 +290,24 @@ export default function Ordenes() {
     if (tecnicosSeleccionados.includes(tecnicoVehiculoId)) return
     setTecnicoVehiculoId('')
   }, [tecnicoVehiculoId, tecnicosSeleccionados])
+
+  useEffect(() => {
+    if (materialesOtManual.length === 0) {
+      setMaterialManualOtId('')
+      return
+    }
+    if (materialesOtManual.some((m: any) => m.id === materialManualOtId)) return
+    setMaterialManualOtId(materialesOtManual[0].id)
+  }, [materialManualOtId, materialesOtManual])
+
+  useEffect(() => {
+    if (equiposOtManual.length === 0) {
+      setEquipoManualOtId('')
+      return
+    }
+    if (equiposOtManual.some((e: any) => e.id === equipoManualOtId)) return
+    setEquipoManualOtId(equiposOtManual[0].id)
+  }, [equipoManualOtId, equiposOtManual])
 
   useEffect(() => {
     return () => {
@@ -321,6 +376,157 @@ export default function Ordenes() {
     }
   }
 
+  async function cargarCatalogosOtManual() {
+    setCargandoCatalogoOtManual(true)
+    try {
+      const [resMateriales, resEquipos] = await Promise.all([
+        supabase
+          .from('materiales')
+          .select('id, nombre, unidad, stock')
+          .order('nombre')
+          .limit(500),
+        supabase
+          .from('equipos')
+          .select('id, codigo, tipo, estado')
+          .eq('estado', 'disponible')
+          .order('codigo')
+          .limit(500),
+      ])
+
+      const materiales = resMateriales.data || []
+      const equipos = resEquipos.data || []
+      setMaterialesOtManual(materiales)
+      setEquiposOtManual(equipos)
+
+      if (!materialManualOtId && materiales.length > 0) {
+        setMaterialManualOtId(materiales[0].id)
+      }
+      if (!equipoManualOtId && equipos.length > 0) {
+        setEquipoManualOtId(equipos[0].id)
+      }
+    } finally {
+      setCargandoCatalogoOtManual(false)
+    }
+  }
+
+  async function forzarVinculoMovimientoOt(movimientoId: string | null, ordenVinculadaId: string | null) {
+    if (!movimientoId || !ordenVinculadaId) return
+
+    const { data: mov } = await supabase
+      .from('movimientos')
+      .select('id, observaciones')
+      .eq('id', movimientoId)
+      .single()
+
+    const observacionesActuales = String(mov?.observaciones || '').trim()
+    const marcadorOt = `[id:${ordenVinculadaId}]`
+    const observaciones = observacionesActuales.includes(marcadorOt)
+      ? observacionesActuales
+      : `${observacionesActuales}${observacionesActuales ? ' ' : ''}${marcadorOt}`
+
+    await supabase
+      .from('movimientos')
+      .update({ orden_id: ordenVinculadaId, observaciones })
+      .eq('id', movimientoId)
+  }
+
+  function getMensajeErrorRegistroManual(error: unknown) {
+    if (error && typeof error === 'object' && 'message' in error) {
+      const msg = String((error as { message?: string }).message || '').trim()
+      if (msg) return msg
+    }
+    return 'No se pudo registrar el movimiento manual.'
+  }
+
+  async function registrarMovimientoManualOt() {
+    if (!ordenDetalle?.id) return
+    if (!userId) {
+      alert('No se pudo identificar el tecnico logueado. Recarga la pagina.')
+      return
+    }
+
+    setRegistrandoManualOt(true)
+    setMensajeManualOt('')
+    try {
+      if (tipoAltaManualOt === 'material') {
+        if (!materialManualOtId) {
+          alert('Selecciona un material.')
+          setRegistrandoManualOt(false)
+          return
+        }
+        const cantidad = Number.parseFloat(cantidadManualOt || '0')
+        if (!Number.isFinite(cantidad) || cantidad <= 0) {
+          alert('La cantidad debe ser mayor que 0.')
+          setRegistrandoManualOt(false)
+          return
+        }
+
+        const material = materialesOtManual.find((m: any) => m.id === materialManualOtId)
+        if (!material) {
+          alert('No se encontro el material seleccionado.')
+          setRegistrandoManualOt(false)
+          return
+        }
+
+        if (Number(material.stock || 0) < cantidad) {
+          alert(`Stock insuficiente. Solo hay ${material.stock || 0} ${material.unidad || 'uds'}.`)
+          setRegistrandoManualOt(false)
+          return
+        }
+
+        const observaciones = `Consumo manual desde OT ${ordenDetalle.codigo || ''} [id:${ordenDetalle.id}]`.trim()
+        const { stockActual, movimientoId } = await registrarConsumoMaterialOt({
+          materialId: material.id,
+          cantidad,
+          tecnicoId: userId,
+          ordenId: ordenDetalle.id,
+          observaciones,
+        })
+        await forzarVinculoMovimientoOt(movimientoId, ordenDetalle.id)
+
+        sessionStorage.setItem('ot_actualizada', JSON.stringify({ ordenId: ordenDetalle.id, ts: Date.now() }))
+        setMensajeManualOt(
+          `Material registrado: ${material.nombre} - ${cantidad} ${material.unidad || 'uds'}. Stock actual: ${stockActual}.`
+        )
+        setCantidadManualOt('1')
+      } else {
+        if (!equipoManualOtId) {
+          alert('Selecciona un equipo.')
+          setRegistrandoManualOt(false)
+          return
+        }
+
+        const equipo = equiposOtManual.find((e: any) => e.id === equipoManualOtId)
+        if (!equipo) {
+          alert('No se encontro el equipo seleccionado.')
+          setRegistrandoManualOt(false)
+          return
+        }
+
+        const observaciones = `Salida manual desde OT ${ordenDetalle.codigo || ''} [id:${ordenDetalle.id}]`.trim()
+        const { movimientoId } = await registrarSalidaEquipoOt({
+          equipoId: equipo.id,
+          tecnicoId: userId,
+          ordenId: ordenDetalle.id,
+          observaciones,
+        })
+        await forzarVinculoMovimientoOt(movimientoId, ordenDetalle.id)
+
+        sessionStorage.setItem('ot_actualizada', JSON.stringify({ ordenId: ordenDetalle.id, ts: Date.now() }))
+        setMensajeManualOt(`Equipo registrado: ${equipo.codigo} como equipo adquirido.`)
+      }
+
+      await Promise.all([
+        cargarMovimientosOtDetalle(ordenDetalle),
+        cargarCatalogosOtManual(),
+      ])
+    } catch (error) {
+      alert(getMensajeErrorRegistroManual(error))
+    } finally {
+      setRegistrandoManualOt(false)
+    }
+  }
+
   async function eliminarFoto(foto: any) {
     if (!confirm('Eliminar esta foto?')) return
     await supabase.from('fotos_ordenes').delete().eq('id', foto.id)
@@ -346,9 +552,15 @@ export default function Ordenes() {
       cargarFotosOrden(o.id),
       cargarIncidenciasOrden(o.id),
     ])
-    await cargarMovimientosOtDetalle(o)
+    await Promise.all([
+      cargarMovimientosOtDetalle(o),
+      cargarCatalogosOtManual(),
+    ])
     resetRegistroIncidencia()
     setMostrarRegistroIncidencia(false)
+    setTipoAltaManualOt('material')
+    setCantidadManualOt('1')
+    setMensajeManualOt('')
     setIncidenciasOrden(incidencias)
     setOrdenDetalle({ ...o, fotos })
   }
@@ -407,13 +619,17 @@ export default function Ordenes() {
 
       for (let i = 0; i < archivos.length; i++) {
         const file = archivos[i]
-        let comprimida: Blob = file
-        try { comprimida = await comprimirImagen(file) } catch { }
+        const imagenLista = await compressImageForUpload(file, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          targetBytes: 320 * 1024,
+          outputType: 'image/webp',
+        })
 
-        const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}_${i}.jpg`
+        const nombreArchivo = `orden_${ordenDetalle.id}/${tipoFoto}/${Date.now()}_${i}.${imagenLista.extension}`
         const { data, error } = await supabase.storage
           .from('fotos-ordenes')
-          .upload(nombreArchivo, comprimida, { contentType: 'image/jpeg' })
+          .upload(nombreArchivo, imagenLista.blob, { contentType: imagenLista.contentType })
 
         if (error || !data) {
           errores++
@@ -555,10 +771,15 @@ export default function Ordenes() {
 
       let fotoUrl: string | null = null
       if (fotoIncidenciaFile) {
-        const extFoto = (fotoIncidenciaFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
-        const pathFoto = `orden_${ordenDetalle.id}/incidencias/foto_${Date.now()}.${extFoto}`
-        const upFoto = await supabase.storage.from('fotos-ordenes').upload(pathFoto, fotoIncidenciaFile, {
-          contentType: fotoIncidenciaFile.type || 'image/jpeg',
+        const imagenIncidencia = await compressImageForUpload(fotoIncidenciaFile, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          targetBytes: 280 * 1024,
+          outputType: 'image/webp',
+        })
+        const pathFoto = `orden_${ordenDetalle.id}/incidencias/foto_${Date.now()}.${imagenIncidencia.extension}`
+        const upFoto = await supabase.storage.from('fotos-ordenes').upload(pathFoto, imagenIncidencia.blob, {
+          contentType: imagenIncidencia.contentType,
           upsert: false,
         })
         if (upFoto.error) throw upFoto.error
@@ -611,24 +832,6 @@ export default function Ordenes() {
     }
   }
 
-  async function comprimirImagen(file: File, maxWidth = 1200, calidad = 0.75): Promise<Blob> {
-    return new Promise((resolve) => {
-      const img = new Image()
-      const url = URL.createObjectURL(file)
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        let width = img.width; let height = img.height
-        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth }
-        canvas.width = width; canvas.height = height
-        const ctx = canvas.getContext('2d')
-        ctx?.drawImage(img, 0, 0, width, height)
-        canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', calidad)
-        URL.revokeObjectURL(url)
-      }
-      img.src = url
-    })
-  }
-
   function toggleTecnico(id: string) {
     setTecnicosSeleccionados(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id])
   }
@@ -642,9 +845,8 @@ export default function Ordenes() {
 
   async function guardarOrden(e: React.FormEvent) {
     e.preventDefault()
-    if (!clienteId) { alert('Selecciona un cliente'); return }
     const datos = {
-      tipo, cliente_id: clienteId, tecnico_id: tecnicosSeleccionados[0] || null,
+      tipo, cliente_id: clienteId || null, tecnico_id: tecnicosSeleccionados[0] || null,
       tecnicos_ids: tecnicosSeleccionados,
       vehiculo_id: vehiculoId || null,
       tecnico_vehiculo_id: tecnicoVehiculoId || null,
@@ -685,7 +887,7 @@ export default function Ordenes() {
     setDescripcion(''); setObservaciones(''); setClienteId(''); setTecnicosSeleccionados([])
     setVehiculoId(''); setTecnicoVehiculoId('')
     setBusquedaCliente(''); setNombreClienteSeleccionado(''); setResultadosCliente([])
-    cargarDatos()
+    void cargarDatos({ silent: true })
   }
 
   async function cambiarEstado(id: string, nuevoEstado: string) {
@@ -712,7 +914,7 @@ export default function Ordenes() {
       return
     }
     await sincronizarServicioHistorialDesdeOt(id, nuevoEstado)
-    cargarDatos()
+    void cargarDatos({ silent: true })
     if (ordenDetalle?.id === id) {
       setOrdenDetalle((prev: any) => ({
         ...prev,
@@ -843,7 +1045,7 @@ export default function Ordenes() {
     setIncidenciasOrden([])
     setMostrarRegistroIncidencia(false)
     resetRegistroIncidencia()
-    cargarDatos()
+    void cargarDatos({ silent: true })
   }
 
   function getNombresTecnicos(ids: string[]) {
@@ -1008,7 +1210,7 @@ export default function Ordenes() {
     setMostrarEditarClienteOt(false)
     setNombreClienteSeleccionado(payload.nombre)
     setBusquedaCliente(payload.nombre)
-    await cargarDatos()
+    await cargarDatos({ silent: true })
   }
 
   const TIPOS_FOTO = [
@@ -1146,6 +1348,11 @@ export default function Ordenes() {
             <option value="completada">Completada</option>
             <option value="cancelada">Cancelada</option>
           </select>
+          {cargandoCatalogos && (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              Actualizando tecnicos y vehiculos...
+            </span>
+          )}
           <button onClick={abrirFormNuevo} className="text-sm px-4 py-2 rounded-xl font-medium" style={s.btnPrimary}>
             + Nueva OT
           </button>
@@ -1354,7 +1561,7 @@ export default function Ordenes() {
         {ordenDetalle && (
           <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" style={{ background: 'rgba(0,0,0,0.8)' }}>
             <div className="w-full md:max-w-2xl rounded-t-2xl md:rounded-2xl overflow-y-auto" style={{ ...s.cardStyle, maxHeight: '92vh' }}>
-              <div className="sticky top-0 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={s.headerStyle}>
+              <div className="sticky top-0 z-30 px-6 py-4 flex items-center justify-between rounded-t-2xl" style={s.headerStyle}>
                 <div>
                   <h2 className="font-bold text-lg" style={{ color: 'var(--text)' }}>{nombreComercialCliente(ordenDetalle.clientes) || ordenDetalle.clientes?.nombre || '—'}</h2>
                   <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Trabajador asignado: {getNombresTecnicos(ordenDetalle.tecnicos_ids || [])}</p>
@@ -1430,8 +1637,116 @@ export default function Ordenes() {
                     </div>
                   </div>
                   <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-                    Escanea material o equipo y quedara registrado aqui dentro de esta OT.
+                    Escanea por QR o registra manualmente material y equipos dentro de esta OT.
                   </p>
+                  <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+                    <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                      <p className="text-xs uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        Registrar manual (sin QR)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void cargarCatalogosOtManual()}
+                        className="text-[11px] px-2 py-1 rounded-lg"
+                        style={s.btnSecondary}
+                      >
+                        Recargar listas
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setTipoAltaManualOt('material')}
+                        className="text-xs px-3 py-1.5 rounded-lg"
+                        style={tipoAltaManualOt === 'material' ? s.btnPrimary : s.btnSecondary}
+                      >
+                        Material
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTipoAltaManualOt('equipo')}
+                        className="text-xs px-3 py-1.5 rounded-lg"
+                        style={tipoAltaManualOt === 'equipo' ? s.btnPrimary : s.btnSecondary}
+                      >
+                        Equipo
+                      </button>
+                      {cargandoCatalogoOtManual && (
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          Cargando...
+                        </span>
+                      )}
+                    </div>
+
+                    {tipoAltaManualOt === 'material' ? (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-[1fr_140px] gap-2 mb-2">
+                          <select
+                            value={materialManualOtId}
+                            onChange={(e) => setMaterialManualOtId(e.target.value)}
+                            className="w-full rounded-lg px-2 py-2 text-xs outline-none"
+                            style={s.inputStyle}
+                          >
+                            {materialesOtManual.length === 0 && <option value="">Sin materiales disponibles</option>}
+                            {materialesOtManual.map((m: any) => (
+                              <option key={m.id} value={m.id}>
+                                {m.nombre} - Stock: {Number(m.stock || 0)} {m.unidad || 'uds'}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="number"
+                            min="0.01"
+                            step="0.01"
+                            value={cantidadManualOt}
+                            onChange={(e) => setCantidadManualOt(e.target.value)}
+                            className="w-full rounded-lg px-2 py-2 text-xs outline-none"
+                            style={s.inputStyle}
+                            placeholder="Cantidad"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mb-2">
+                        <select
+                          value={equipoManualOtId}
+                          onChange={(e) => setEquipoManualOtId(e.target.value)}
+                          className="w-full rounded-lg px-2 py-2 text-xs outline-none"
+                          style={s.inputStyle}
+                        >
+                          {equiposOtManual.length === 0 && <option value="">Sin equipos disponibles</option>}
+                          {equiposOtManual.map((eq: any) => (
+                            <option key={eq.id} value={eq.id}>
+                              {eq.codigo}{eq.tipo ? ` (${eq.tipo})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => void registrarMovimientoManualOt()}
+                        disabled={
+                          registrandoManualOt ||
+                          (tipoAltaManualOt === 'material' ? !materialManualOtId : !equipoManualOtId)
+                        }
+                        className="text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-60"
+                        style={{ background: 'linear-gradient(135deg, #2563eb, #06b6d4)', color: 'white' }}
+                      >
+                        {registrandoManualOt
+                          ? 'Registrando...'
+                          : tipoAltaManualOt === 'material'
+                            ? 'Registrar consumo'
+                            : 'Registrar equipo'}
+                      </button>
+                      {mensajeManualOt && (
+                        <p className="text-xs" style={{ color: '#34d399' }}>
+                          {mensajeManualOt}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                   {cargandoMovimientosOt ? (
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Cargando movimientos...</p>
                   ) : movimientosOt.length === 0 ? (

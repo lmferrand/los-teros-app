@@ -12,8 +12,9 @@ export type PlanificacionDataState = {
   userId: string
   miRol: string
   loading: boolean
+  loadingSecundario: boolean
   esAdminOOficina: boolean
-  refresh: () => Promise<void>
+  refresh: (opts?: { silent?: boolean }) => Promise<void>
 }
 
 export function usePlanificacionData(): PlanificacionDataState {
@@ -24,9 +25,13 @@ export function usePlanificacionData(): PlanificacionDataState {
   const [userId, setUserId] = useState<string>('')
   const [miRol, setMiRol] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [loadingSecundario, setLoadingSecundario] = useState(false)
   const router = useRouter()
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent)
+    if (!silent) setLoading(true)
+    setLoadingSecundario(true)
     try {
       const {
         data: { session },
@@ -47,21 +52,34 @@ export function usePlanificacionData(): PlanificacionDataState {
 
       if (perfilUsuario) setMiRol(perfilUsuario.rol)
 
-      const [ords, clis, tecs, pres] = await Promise.all([
+      // Fase 1: datos críticos para render principal.
+      const [ords, tecs] = await Promise.all([
         supabase
           .from('ordenes')
           .select('*, clientes(id, nombre, nombre_comercial, nombre_fiscal, cif, poblacion, direccion)')
           .neq('estado', 'cancelada'),
-        supabase.from('clientes').select('*'),
-        supabase.from('perfiles').select('*'),
-        supabase.from('presupuestos').select('*, clientes(nombre)').order('created_at', { ascending: false }),
+        supabase.from('perfiles').select('id, nombre, rol'),
       ])
 
       if (ords.data) setOrdenes(ords.data)
-      if (clis.data) setClientes(clis.data)
       if (tecs.data) setTecnicos(tecs.data)
+      if (!silent) setLoading(false)
+
+      // Fase 2: catálogos secundarios.
+      const [clis, pres] = await Promise.all([
+        supabase
+          .from('clientes')
+          .select('id, nombre, nombre_comercial, nombre_fiscal, cif, poblacion, direccion, telefono, movil, email, empresa, tipo_cliente'),
+        supabase
+          .from('presupuestos')
+          .select('*, clientes(nombre, nombre_comercial)')
+          .order('created_at', { ascending: false }),
+      ])
+
+      if (clis.data) setClientes(clis.data)
       if (pres.data) setPresupuestos(pres.data)
     } finally {
+      setLoadingSecundario(false)
       setLoading(false)
     }
   }, [router])
@@ -78,6 +96,7 @@ export function usePlanificacionData(): PlanificacionDataState {
     userId,
     miRol,
     loading,
+    loadingSecundario,
     esAdminOOficina: miRol === 'gerente' || miRol === 'oficina',
     refresh,
   }

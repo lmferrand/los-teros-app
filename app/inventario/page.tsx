@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import AppHeader from '@/app/components/AppHeader'
+import { compressImageForUpload } from '@/lib/image-compression'
 
 type VistaInventario = 'materiales' | 'equipos'
 type QrModalData = {
@@ -141,8 +142,16 @@ export default function Inventario() {
     const file = e.target.files?.[0]
     if (!file) return
     setSubiendo(true)
-    const nombreArchivo = `materiales/${Date.now()}-${file.name}`
-    const { data, error } = await supabase.storage.from('fotos-materiales').upload(nombreArchivo, file)
+    const imagenLista = await compressImageForUpload(file, {
+      maxWidth: 1400,
+      maxHeight: 1400,
+      targetBytes: 220 * 1024,
+      outputType: 'image/webp',
+    })
+    const nombreArchivo = `materiales/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${imagenLista.extension}`
+    const { data, error } = await supabase.storage.from('fotos-materiales').upload(nombreArchivo, imagenLista.blob, {
+      contentType: imagenLista.contentType,
+    })
     if (!error && data) {
       const { data: urlData } = supabase.storage.from('fotos-materiales').getPublicUrl(nombreArchivo)
       setFotoUrl(urlData.publicUrl)

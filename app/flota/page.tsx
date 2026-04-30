@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/app/components/AppHeader'
 import { s } from '@/lib/styles'
+import { compressImageForUpload } from '@/lib/image-compression'
 
 const ROLES_EDICION = ['gerente', 'oficina', 'supervisor']
 
@@ -443,8 +444,24 @@ export default function FlotaPage() {
     setSubiendoDoc(true)
     try {
       const nombreSeguro = file.name.replace(/\s+/g, '-')
-      const path = `vehiculo_${vehiculoDetalle.id}/${Date.now()}-${nombreSeguro}`
-      const { data: up, error: errUp } = await supabase.storage.from('vehiculos-documentos').upload(path, file)
+      const esImagen = String(file.type || '').startsWith('image/')
+      const subidaLista = esImagen
+        ? await compressImageForUpload(file, {
+          maxWidth: 1800,
+          maxHeight: 1800,
+          targetBytes: 420 * 1024,
+          outputType: 'image/webp',
+        })
+        : null
+      const extensionDoc = subidaLista?.extension || (nombreSeguro.split('.').pop() || 'bin').toLowerCase()
+      const path = `vehiculo_${vehiculoDetalle.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extensionDoc}`
+      const { data: up, error: errUp } = await supabase.storage.from('vehiculos-documentos').upload(
+        path,
+        subidaLista?.blob || file,
+        esImagen
+          ? { contentType: subidaLista?.contentType || 'image/webp' }
+          : undefined
+      )
       if (errUp || !up) throw errUp || new Error('No se pudo subir el archivo')
 
       const { data: urlData } = supabase.storage.from('vehiculos-documentos').getPublicUrl(path)

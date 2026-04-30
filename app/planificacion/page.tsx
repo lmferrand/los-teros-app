@@ -11,7 +11,7 @@ import { OrdenDetalleModal } from '@/app/planificacion/components/OrdenDetalleMo
 import { calcularResultadoOptimizador } from '@/lib/planificacion/ui-utils'
 
 export default function Planificacion() {
-  const { ordenes, clientes, tecnicos, presupuestos, userId, miRol, loading, esAdminOOficina, refresh } = usePlanificacionData()
+  const { ordenes, clientes, tecnicos, presupuestos, userId, miRol, loading, loadingSecundario, esAdminOOficina, refresh } = usePlanificacionData()
   const [mesActual, setMesActual] = useState(new Date())
   const [ordenSeleccionada, setOrdenSeleccionada] = useState<any>(null)
   const [vistaActiva, setVistaActiva] = useState<'calendario' | 'mis_ordenes' | 'presupuestos' | 'rutas'>('calendario')
@@ -709,7 +709,7 @@ export default function Planificacion() {
     setMostrarFormPres(false)
     setEditandoPres(null)
     setDatosEscaneados(null)
-    void refresh()
+    void refresh({ silent: true })
   }
 
   async function cambiarEstadoPres(id: string, nuevoEstado: string) {
@@ -732,13 +732,13 @@ export default function Planificacion() {
         if (!error) alert('Presupuesto aceptado. Se ha creado una OT en borrador en el calendario.')
       }
     }
-    void refresh()
+    void refresh({ silent: true })
   }
 
   async function eliminarPres(id: string) {
     if (!confirm('Eliminar este presupuesto?')) return
     await supabase.from('presupuestos').delete().eq('id', id)
-    void refresh()
+    void refresh({ silent: true })
   }
 
   async function compartirRutaDiaria() {
@@ -886,7 +886,7 @@ export default function Planificacion() {
           ? `Aplicados ${applied} cambios con ${failed} incidencias. Revisa las OT afectadas.`
           : `Aplicados ${applied} cambios de planificación.`
       )
-      await refresh()
+      await refresh({ silent: true })
     } catch (error: any) {
       setErrorSugerenciaPlan(error?.message || 'Error inesperado al aplicar cambios.')
     }
@@ -972,6 +972,11 @@ export default function Planificacion() {
           btnPrimary={s.btnPrimary}
           btnSecondary={s.btnSecondary}
         />
+        {loadingSecundario && (
+          <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+            Actualizando clientes y presupuestos...
+          </p>
+        )}
 
         <OrdenDetalleModal
           orden={ordenSeleccionada}
@@ -1375,7 +1380,7 @@ export default function Planificacion() {
                         <div
                           key={`${rutaMapaActiva.id}-parada-${idx}-${ot?.id || 'x'}`}
                           className="rounded-xl px-3 py-3"
-                          style={{ border: '1px solid var(--border)', background: 'var(--card)' }}
+                          style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}
                         >
                           <div className="flex items-center justify-between gap-2 mb-1">
                             <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'rgba(6,182,212,0.15)', color: '#06b6d4' }}>
@@ -1503,7 +1508,7 @@ export default function Planificacion() {
                     <p className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>Rutas sugeridas por trabajador</p>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                       {(sugerenciaPlan.suggestedRoutes || []).map((ruta: any) => (
-                        <div key={`${ruta.workerId}-${ruta.date}`} className="rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--card)' }}>
+                        <div key={`${ruta.workerId}-${ruta.date}`} className="rounded-xl p-3" style={{ border: '1px solid var(--border)', background: 'var(--bg-card)' }}>
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{ruta.workerName}</p>
                             <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{ruta.date}</p>
@@ -1572,7 +1577,7 @@ export default function Planificacion() {
                           const checked = cambiosSeleccionadosSugerencia.includes(idx)
                           return (
                             <label key={`change-${idx}`} className="flex items-start gap-3 rounded-lg px-3 py-2"
-                              style={{ background: 'var(--card)', border: '1px solid var(--border)', opacity: isWarning ? 0.75 : 1 }}>
+                              style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', opacity: isWarning ? 0.75 : 1 }}>
                               <input
                                 type="checkbox"
                                 disabled={isWarning}

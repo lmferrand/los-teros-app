@@ -3,7 +3,7 @@
 import { useTheme } from '@/lib/useTheme'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 
@@ -15,6 +15,7 @@ function diasRestantes(fecha: string | null | undefined) {
 }
 
 const UMBRAL_DIAS_RECORDATORIO = 365
+const DASHBOARD_CACHE_KEY = 'dashboard_cache_v1'
 
 function normalizarTextoPlano(valor: string) {
   return String(valor || '')
@@ -40,6 +41,39 @@ function esVisitaTecnicaOt(ot: any) {
   const descripcion = String(ot?.descripcion || '')
   const observaciones = String(ot?.observaciones || '')
   return esVisitaTecnica(`${tipo} ${descripcion} ${observaciones}`)
+}
+
+function clienteOt(ot: any) {
+  if (Array.isArray(ot?.clientes)) return ot.clientes[0] || null
+  return ot?.clientes || null
+}
+
+function nombreClienteOt(ot: any) {
+  const c = clienteOt(ot)
+  return String(c?.nombre_comercial || c?.nombre || '').trim() || 'Sin cliente'
+}
+
+function poblacionClienteOt(ot: any) {
+  const c = clienteOt(ot)
+  return String(c?.poblacion || '').trim() || 'Sin localidad'
+}
+
+function etiquetaTareaOt(ot: any) {
+  const tipo = String(ot?.tipo || '').trim()
+  return tipo ? `${tipo.charAt(0).toUpperCase()}${tipo.slice(1)}` : 'Sin tipo'
+}
+
+function fechaHoraOt(ot: any) {
+  if (!ot?.fecha_programada) return 'Sin fecha programada'
+  const d = new Date(ot.fecha_programada)
+  if (Number.isNaN(d.getTime())) return 'Sin fecha programada'
+  return d.toLocaleString('es-ES', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 async function traerTodoPaginado<T>(fetchPage: (from: number, to: number) => any, pageSize = 1000) {
@@ -169,7 +203,11 @@ function crearRecordatorioPrl(ordenes: any[]): PrlRecordatorio {
   }
 }
 
-function crearReconocimientosSemana(ordenes: any[], perfiles: Array<{ id: string; nombre: string | null }>): ReconocimientoSemana[] {
+function crearReconocimientosSemana(
+  ordenes: any[],
+  perfiles: Array<{ id: string; nombre: string | null }>,
+  contactosOficinaSemana: number
+): ReconocimientoSemana[] {
   const now = new Date()
   const ini = inicioSemana(now)
   const fin = finSemana(now)
@@ -261,6 +299,22 @@ function crearReconocimientosSemana(ordenes: any[], perfiles: Array<{ id: string
     })
   }
 
+  if (contactosOficinaSemana >= 10) {
+    reconocimientos.push({
+      id: 'oficina-contactos',
+      insignia: '\u{1F4DE}',
+      titulo: 'Oficina en acción',
+      detalle: `Esta semana oficina ha contactado con ${contactosOficinaSemana} cliente(s). Excelente empuje comercial.`,
+    })
+  } else if (contactosOficinaSemana > 0) {
+    reconocimientos.push({
+      id: 'oficina-contactos-avance',
+      insignia: '\u{1F4DE}',
+      titulo: 'Seguimiento comercial',
+      detalle: `Esta semana oficina ha contactado con ${contactosOficinaSemana} cliente(s). Buen ritmo de seguimiento.`,
+    })
+  }
+
   if (reconocimientos.length === 0) {
     reconocimientos.push({
       id: 'inicio-semana',
@@ -292,11 +346,37 @@ export default function Dashboard() {
     frase: 'Trabajo seguro, equipo seguro. Revisad EPI y entorno antes de empezar.',
   })
   const [reconocimientosSemana, setReconocimientosSemana] = useState<ReconocimientoSemana[]>([])
-  const [reconocimientoSemanaIdx, setReconocimientoSemanaIdx] = useState(0)
+  const ultimaCargaRef = useRef(0)
+  const cargandoRef = useRef(false)
   const router = useRouter()
   const { tema, toggleTema } = useTheme()
 
-  const cargarDatos = useCallback(async () => {
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = localStorage.getItem(DASHBOARD_CACHE_KEY)
+      if (!raw) return
+      const cache = JSON.parse(raw)
+      const ts = Number(cache?.ts || 0)
+      if (!ts || Date.now() - ts > 12 * 60 * 60 * 1000) return
+      if (cache?.stats) setStats(cache.stats)
+      if (Array.isArray(cache?.misordenes)) setMisordenes(cache.misordenes)
+      if (Array.isArray(cache?.alertas)) setAlertas(cache.alertas)
+      if (cache?.recordatorioPrl) setRecordatorioPrl(cache.recordatorioPrl)
+      if (Array.isArray(cache?.reconocimientosSemana)) setReconocimientosSemana(cache.reconocimientosSemana)
+      setLoading(false)
+    } catch {
+      // Cache inválida: ignorar.
+    }
+  }, [])
+
+  const cargarDatos = useCallback(async (opts?: { force?: boolean }) => {
+    const now = Date.now()
+    const force = Boolean(opts?.force)
+    if (!force && now - ultimaCargaRef.current < 25_000) return
+    if (cargandoRef.current) return
+    cargandoRef.current = true
+    try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
     setUser(session.user)
@@ -314,103 +394,85 @@ export default function Dashboard() {
     const rolPerfil = String(perfilData?.rol || '').toLowerCase()
     const esTecnicoPerfil = rolPerfil === 'tecnico' || rolPerfil === 'almacen'
 
-    const [materiales, equipos, vehiculosFlota, perfilesEquipo] = await Promise.all([
-      supabase.from('materiales').select('*'),
-      supabase.from('equipos').select('*'),
+    const hoy = new Date()
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+    const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1)
+    const inicioSemanaActual = inicioSemana(hoy)
+    const finSemanaActual = finSemana(hoy)
+
+    const filtroAsignado = `tecnico_id.eq.${session.user.id},tecnicos_ids.cs.{"${session.user.id}"}`
+
+    const qPendientes = supabase
+      .from('ordenes')
+      .select('id, codigo, tipo, cliente_id, tecnico_id, tecnicos_ids, fecha_programada, created_at, estado, prioridad, descripcion, observaciones, vehiculo_id, clientes(id, nombre, nombre_comercial, poblacion)')
+      .in('estado', ['pendiente', 'en_curso'])
+      .order('fecha_programada', { ascending: true, nullsFirst: false })
+
+    const qCompletadasSemana = supabase
+      .from('ordenes')
+      .select('id, cliente_id, tipo, descripcion, observaciones, tecnico_id, tecnicos_ids, fecha_cierre, fecha_programada, created_at, estado')
+      .eq('estado', 'completada')
+      .gte('fecha_cierre', inicioSemanaActual.toISOString())
+      .lt('fecha_cierre', finSemanaActual.toISOString())
+
+    const qOtMesCount = supabase
+      .from('ordenes')
+      .select('id', { count: 'exact', head: true })
+      .eq('estado', 'completada')
+      .gte('fecha_cierre', inicioMes.toISOString())
+      .lt('fecha_cierre', finMes.toISOString())
+
+    const qOtPendientesCount = supabase
+      .from('ordenes')
+      .select('id', { count: 'exact', head: true })
+      .eq('estado', 'pendiente')
+
+    const qContactosOficinaSemana = (supabase.from('clientes') as any)
+      .select('id', { count: 'exact', head: true })
+      .eq('seguimiento_llamada_ok', true)
+      .gte('seguimiento_llamada_at', inicioSemanaActual.toISOString())
+      .lt('seguimiento_llamada_at', finSemanaActual.toISOString())
+
+    if (esTecnicoPerfil) {
+      qPendientes.or(filtroAsignado)
+      qCompletadasSemana.or(filtroAsignado)
+      qOtMesCount.or(filtroAsignado)
+      qOtPendientesCount.or(filtroAsignado)
+    }
+
+    const [materiales, equipos, vehiculosFlota, perfilesEquipo, ordenesPendientesRes, ordenesCompletadasSemanaRes, otMesCountRes, otPendientesCountRes, contactosOficinaSemanaRes] = await Promise.all([
+      supabase.from('materiales').select('id, nombre, stock, minimo, unidad'),
+      supabase.from('equipos').select('id, codigo, estado, fecha_salida'),
       supabase.from('vehiculos_flota').select('id, matricula, proxima_itv, vencimiento_itc, vencimiento_seguro, vencimiento_impuesto, activo').eq('activo', true),
       supabase.from('perfiles').select('id, nombre'),
+      qPendientes,
+      qCompletadasSemana,
+      qOtMesCount,
+      qOtPendientesCount,
+      qContactosOficinaSemana,
     ])
-
-    const [todasordenes, serviciosData, clientesIdsData] = await Promise.all([
-      traerTodoPaginado<any>((from, to) =>
-        supabase.from('ordenes').select('*').range(from, to)
-      ),
-      traerTodoPaginado<any>((from, to) =>
-        supabase.from('servicios_clientes').select('cliente_id, fecha_servicio').not('cliente_id', 'is', null).range(from, to)
-      ).catch(() => []),
-      traerTodoPaginado<any>((from, to) =>
-        supabase.from('clientes').select('id').range(from, to)
-      ),
-    ])
+    const ordenesPendientes = ordenesPendientesRes.data || []
+    const ordenesCompletadasSemana = ordenesCompletadasSemanaRes.data || []
+    const ordenesContexto = [...ordenesPendientes, ...ordenesCompletadasSemana]
+    const contactosOficinaSemana = Number(contactosOficinaSemanaRes?.count || 0)
 
     const { count: countTeros } = await (supabase.from('clientes') as any).select('*', { count: 'exact', head: true }).eq('empresa', 'teros')
     const { count: countOlipro } = await (supabase.from('clientes') as any).select('*', { count: 'exact', head: true }).eq('empresa', 'olipro')
 
-    const hoy = new Date()
-    const mes = hoy.getMonth()
-    const anio = hoy.getFullYear()
     const todosMateriales = materiales.data || []
     const todosEquipos = equipos.data || []
     const todosvehiculos = vehiculosFlota.data || []
-    const otActivas = todasordenes.filter(o => o.estado === 'pendiente' || o.estado === 'en_curso')
-    const otMes = todasordenes.filter(o => {
-      if (!o.created_at || o.estado !== 'completada') return false
-      const d = new Date(o.created_at)
-      return d.getMonth() === mes && d.getFullYear() === anio
-    })
-    const ordenesAsignadasUsuario = todasordenes.filter((o) =>
-      (Array.isArray(o.tecnicos_ids) && o.tecnicos_ids.includes(session.user.id)) || o.tecnico_id === session.user.id
-    )
-    const otActivasDashboard = esTecnicoPerfil
-      ? ordenesAsignadasUsuario.filter((o) => o.estado === 'pendiente' || o.estado === 'en_curso')
-      : otActivas
-    const otMesDashboard = esTecnicoPerfil
-      ? ordenesAsignadasUsuario.filter((o) => {
-        if (!o.created_at || o.estado !== 'completada') return false
-        const d = new Date(o.created_at)
-        return d.getMonth() === mes && d.getFullYear() === anio
-      })
-      : otMes
+    const otActivasDashboard = ordenesPendientes
+    const otMesDashboardCount = Number(otMesCountRes.count || 0)
     const stockBajo = todosMateriales.filter(m => (m.stock || 0) < (m.minimo || 0))
     const equiposCampo = todosEquipos.filter(e => e.estado === 'en_cliente')
-    const otPendientesAsignacion = todasordenes.filter(
-      (o) => o.estado === 'pendiente' || o.estado === 'en_curso'
-    )
-    const otSintecnico = otPendientesAsignacion.filter(
+    const otSintecnico = esTecnicoPerfil ? 0 : ordenesPendientes.filter(
       (o) =>
         (!Array.isArray(o.tecnicos_ids) || o.tecnicos_ids.length === 0) &&
         !o.tecnico_id
     ).length
-    const otSinFecha = otPendientesAsignacion.filter((o) => !o.fecha_programada).length
-    const otSinVehiculo = otPendientesAsignacion.filter((o) => !o.vehiculo_id).length
-
-    const actividadPorCliente = new Map<string, Date>()
-    for (const ot of todasordenes) {
-      if (!ot?.cliente_id || ot?.estado !== 'completada') continue
-      if (esVisitaTecnicaOt(ot)) continue
-      const fechaRef = ot.fecha_cierre || ot.fecha_programada || ot.created_at
-      if (!fechaRef) continue
-      const fecha = new Date(fechaRef)
-      if (Number.isNaN(fecha.getTime())) continue
-      const previa = actividadPorCliente.get(ot.cliente_id)
-      if (!previa || fecha.getTime() > previa.getTime()) {
-        actividadPorCliente.set(ot.cliente_id, fecha)
-      }
-    }
-    for (const srv of serviciosData || []) {
-      if (!srv?.cliente_id || !srv?.fecha_servicio) continue
-      if (esVisitaTecnica(String(srv?.descripcion || ''))) continue
-      const fecha = new Date(`${srv.fecha_servicio}T12:00:00`)
-      if (Number.isNaN(fecha.getTime())) continue
-      const previa = actividadPorCliente.get(srv.cliente_id)
-      if (!previa || fecha.getTime() > previa.getTime()) {
-        actividadPorCliente.set(srv.cliente_id, fecha)
-      }
-    }
-    const idsClientesValidos = new Set((clientesIdsData || []).map((c: any) => String(c.id)))
-    const actividadValida = new Map<string, Date>()
-    for (const [clienteId, fecha] of actividadPorCliente.entries()) {
-      if (!idsClientesValidos.has(String(clienteId))) continue
-      actividadValida.set(clienteId, fecha)
-    }
-
-    let maxDiasSinServicio = 0
-    let clientesMasDeUnAnoSinServicio = 0
-    for (const fecha of actividadValida.values()) {
-      const dias = Math.floor((Date.now() - fecha.getTime()) / 86400000)
-      if (dias > maxDiasSinServicio) maxDiasSinServicio = dias
-      if (dias > UMBRAL_DIAS_RECORDATORIO) clientesMasDeUnAnoSinServicio += 1
-    }
+    const otSinFecha = esTecnicoPerfil ? 0 : ordenesPendientes.filter((o) => !o.fecha_programada).length
+    const otSinVehiculo = esTecnicoPerfil ? 0 : ordenesPendientes.filter((o) => !o.vehiculo_id).length
 
     let vehiculosAldia = 0
     let vehiculosPorVencer = 0
@@ -433,16 +495,23 @@ export default function Dashboard() {
       else if (peor.dias <= 60) vehiculosPorVencer += 1
       else vehiculosAldia += 1
     }
-    const misMisordenes = otActivasDashboard.slice(0, 8)
+    const misMisordenes = [...otActivasDashboard]
+      .sort((a, b) => {
+        const tsA = a?.fecha_programada ? new Date(a.fecha_programada).getTime() : Number.POSITIVE_INFINITY
+        const tsB = b?.fecha_programada ? new Date(b.fecha_programada).getTime() : Number.POSITIVE_INFINITY
+        if (tsA !== tsB) return tsA - tsB
+        const creA = a?.created_at ? new Date(a.created_at).getTime() : Number.POSITIVE_INFINITY
+        const creB = b?.created_at ? new Date(b.created_at).getTime() : Number.POSITIVE_INFINITY
+        return creA - creB
+      })
+      .slice(0, 8)
 
-    setStats({
-      otActivas: otActivasDashboard.length, otMes: otMesDashboard.length,
+    setStats((prev) => ({
+      otActivas: otActivasDashboard.length, otMes: otMesDashboardCount,
       stockBajo: stockBajo.length, equiposCampo: equiposCampo.length,
       clientesTeros: countTeros || 0,
       clientesOlipro: countOlipro || 0,
-      otPendientes: esTecnicoPerfil
-        ? ordenesAsignadasUsuario.filter((o) => o.estado === 'pendiente').length
-        : todasordenes.filter((o) => o.estado === 'pendiente').length,
+      otPendientes: Number(otPendientesCountRes.count || 0),
       vehiculosTotal: todosvehiculos.length,
       vehiculosAldia,
       vehiculosPorVencer,
@@ -450,12 +519,14 @@ export default function Dashboard() {
       otSintecnico,
       otSinFecha,
       otSinVehiculo,
-      clientesSinServicio: clientesMasDeUnAnoSinServicio,
-      maxDiasSinServicio,
-    })
+      clientesSinServicio: prev.clientesSinServicio,
+      maxDiasSinServicio: prev.maxDiasSinServicio,
+    }))
     setMisordenes(misMisordenes)
-    setRecordatorioPrl(crearRecordatorioPrl(todasordenes))
-    setReconocimientosSemana(crearReconocimientosSemana(todasordenes, perfilesEquipo.data || []))
+    setRecordatorioPrl(crearRecordatorioPrl(ordenesContexto))
+    setReconocimientosSemana(
+      crearReconocimientosSemana(ordenesContexto, perfilesEquipo.data || [], contactosOficinaSemana)
+    )
 
     const nuevasAlertas: { tipo: string; texto: string }[] = []
     stockBajo.forEach(m => nuevasAlertas.push({ tipo: 'warning', texto: `Stock bajo: ${m.nombre} (${m.stock || 0} ${m.unidad || ''})` }))
@@ -467,9 +538,152 @@ export default function Dashboard() {
     })
     setAlertas(nuevasAlertas)
     setLoading(false)
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(
+          DASHBOARD_CACHE_KEY,
+          JSON.stringify({
+            ts: Date.now(),
+            stats: {
+              otActivas: otActivasDashboard.length,
+              otMes: otMesDashboardCount,
+              stockBajo: stockBajo.length,
+              equiposCampo: equiposCampo.length,
+              clientesTeros: countTeros || 0,
+              clientesOlipro: countOlipro || 0,
+              otPendientes: Number(otPendientesCountRes.count || 0),
+              vehiculosTotal: todosvehiculos.length,
+              vehiculosAldia,
+              vehiculosPorVencer,
+              vehiculosVencidos,
+              otSintecnico,
+              otSinFecha,
+              otSinVehiculo,
+              clientesSinServicio: 0,
+              maxDiasSinServicio: 0,
+            },
+            misordenes: misMisordenes,
+            alertas: nuevasAlertas,
+            recordatorioPrl: crearRecordatorioPrl(ordenesContexto),
+            reconocimientosSemana: crearReconocimientosSemana(
+              ordenesContexto,
+              perfilesEquipo.data || [],
+              contactosOficinaSemana
+            ),
+          })
+        )
+      } catch {
+        // Sin persistencia disponible.
+      }
+    }
+
+    // Segunda fase (no bloqueante): historial global de servicios para recordatorios.
+    void (async () => {
+      const [serviciosData, ordenesCompletadasHistorial] = await Promise.all([
+        traerTodoPaginado<any>((from, to) =>
+          supabase
+            .from('servicios_clientes')
+            .select('cliente_id, fecha_servicio, descripcion')
+            .not('cliente_id', 'is', null)
+            .range(from, to)
+        ).catch(() => []),
+        traerTodoPaginado<any>((from, to) =>
+          supabase
+            .from('ordenes')
+            .select('cliente_id, tipo, descripcion, observaciones, fecha_cierre, fecha_programada, created_at')
+            .eq('estado', 'completada')
+            .not('cliente_id', 'is', null)
+            .range(from, to)
+        ).catch(() => []),
+      ])
+
+      const actividadPorCliente = new Map<string, Date>()
+      for (const ot of ordenesCompletadasHistorial || []) {
+        if (!ot?.cliente_id) continue
+        if (esVisitaTecnicaOt(ot)) continue
+        const fechaRef = ot.fecha_cierre || ot.fecha_programada || ot.created_at
+        if (!fechaRef) continue
+        const fecha = new Date(fechaRef)
+        if (Number.isNaN(fecha.getTime())) continue
+        const previa = actividadPorCliente.get(ot.cliente_id)
+        if (!previa || fecha.getTime() > previa.getTime()) {
+          actividadPorCliente.set(ot.cliente_id, fecha)
+        }
+      }
+      for (const srv of serviciosData || []) {
+        if (!srv?.cliente_id || !srv?.fecha_servicio) continue
+        if (esVisitaTecnica(String(srv?.descripcion || ''))) continue
+        const fecha = new Date(`${srv.fecha_servicio}T12:00:00`)
+        if (Number.isNaN(fecha.getTime())) continue
+        const previa = actividadPorCliente.get(srv.cliente_id)
+        if (!previa || fecha.getTime() > previa.getTime()) {
+          actividadPorCliente.set(srv.cliente_id, fecha)
+        }
+      }
+
+      let maxDiasSinServicio = 0
+      let clientesMasDeUnAnoSinServicio = 0
+      for (const fecha of actividadPorCliente.values()) {
+        const dias = Math.floor((Date.now() - fecha.getTime()) / 86400000)
+        if (dias > maxDiasSinServicio) maxDiasSinServicio = dias
+        if (dias > UMBRAL_DIAS_RECORDATORIO) clientesMasDeUnAnoSinServicio += 1
+      }
+
+      setStats((prev) => ({
+        ...prev,
+        clientesSinServicio: clientesMasDeUnAnoSinServicio,
+        maxDiasSinServicio,
+      }))
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem(DASHBOARD_CACHE_KEY)
+          const cache = raw ? JSON.parse(raw) : {}
+          localStorage.setItem(
+            DASHBOARD_CACHE_KEY,
+            JSON.stringify({
+              ...cache,
+              ts: Date.now(),
+              stats: {
+                ...(cache?.stats || {}),
+                clientesSinServicio: clientesMasDeUnAnoSinServicio,
+                maxDiasSinServicio,
+              },
+            })
+          )
+        } catch {
+          // Sin persistencia disponible.
+        }
+      }
+    })()
+    } finally {
+      ultimaCargaRef.current = Date.now()
+      cargandoRef.current = false
+    }
   }, [router])
 
-  useEffect(() => { void cargarDatos() }, [cargarDatos])
+  useEffect(() => { void cargarDatos({ force: true }) }, [cargarDatos])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const rutas = [
+      '/ordenes',
+      '/planificacion',
+      '/inventario',
+      '/clientes',
+      '/movimientos',
+      '/flota',
+      '/sin-servicio',
+      '/trabajadores',
+    ]
+    const prefetchRutas = () => {
+      for (const ruta of rutas) {
+        router.prefetch(ruta)
+      }
+    }
+
+    const timeout = globalThis.setTimeout(prefetchRutas, 1200)
+    return () => globalThis.clearTimeout(timeout)
+  }, [router])
   useEffect(() => {
     if (typeof window === 'undefined') return
 
@@ -484,7 +698,7 @@ export default function Dashboard() {
       const ms = Math.max(1000, siguienteMedianoche.getTime() - ahora.getTime())
 
       timeoutMedianoche = window.setTimeout(() => {
-        void cargarDatos()
+        void cargarDatos({ force: true })
         programarSiguienteRefrescodiario()
       }, ms)
     }
@@ -507,20 +721,6 @@ export default function Dashboard() {
       document.removeEventListener('visibilitychange', refrescarSiVisible)
     }
   }, [cargarDatos])
-
-  useEffect(() => {
-    setReconocimientoSemanaIdx(0)
-    if (typeof window === 'undefined') return
-    if (reconocimientosSemana.length <= 1) return
-
-    const intervalId = window.setInterval(() => {
-      setReconocimientoSemanaIdx((prev) => (prev + 1) % reconocimientosSemana.length)
-    }, 6200)
-
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [reconocimientosSemana])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -696,9 +896,15 @@ export default function Dashboard() {
     return card
   })
 
-  const reconocimientoActivo = reconocimientosSemana.length > 0
-    ? reconocimientosSemana[reconocimientoSemanaIdx % reconocimientosSemana.length]
-    : null
+  const reconocimientosCarruselBase = reconocimientosSemana.length > 0
+    ? reconocimientosSemana
+    : [{
+      id: 'inicio-semana-fallback',
+      insignia: '\u{1F31F}',
+      titulo: 'Semana en marcha',
+      detalle: 'Cada trabajo seguro y bien cerrado suma. Esta semana vais a por un gran resultado.',
+    }]
+  const reconocimientosCarrusel = [...reconocimientosCarruselBase, ...reconocimientosCarruselBase]
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: bgMain }}>
@@ -762,25 +968,6 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {reconocimientoActivo && (
-          <div
-            className="mb-6 rounded-xl px-4 py-3 overflow-hidden"
-            style={{ background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.28)' }}
-          >
-            <div
-              key={`${reconocimientoActivo.id}-${reconocimientoSemanaIdx}`}
-              className="flex items-center gap-2 min-w-0"
-              style={{ animation: 'reconBannerSlide 6.1s ease-in-out' }}
-            >
-              <span className="text-sm shrink-0" style={{ color: '#c4b5fd' }}>{reconocimientoActivo.insignia}</span>
-              <p className="text-sm whitespace-nowrap text-ellipsis overflow-hidden" style={{ color: textColor }}>
-                <span className="font-semibold" style={{ color: '#a78bfa' }}>{reconocimientoActivo.titulo}:</span>{' '}
-                {reconocimientoActivo.detalle}
-              </p>
-            </div>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 gap-4 mb-6">
           <div className="rounded-xl overflow-visible relative" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
             <div className="absolute left-1 md:left-2 -top-10 md:-top-14 w-[118px] md:w-[170px] h-[calc(100%+40px)] md:h-[calc(100%+56px)] overflow-hidden pointer-events-none">
@@ -795,9 +982,34 @@ export default function Dashboard() {
             </div>
             <div className="pl-[120px] md:pl-[176px] pr-3 py-2.5 min-h-[94px] md:min-h-[108px] flex items-center">
               <div className="min-w-0">
-                <span className="inline-flex text-[11px] px-2 py-0.5 rounded-full mb-1.5" style={{ color: '#06b6d4', background: 'rgba(6,182,212,0.14)', border: '1px solid rgba(6,182,212,0.28)' }}>
-                  PRL
-                </span>
+                <div
+                  className="mb-2 rounded-lg px-2 py-1.5 overflow-hidden"
+                  style={{
+                    background: tema === 'dark' ? 'rgba(6,182,212,0.17)' : 'rgba(6,182,212,0.12)',
+                    border: '1px solid rgba(6,182,212,0.36)',
+                    boxShadow: tema === 'dark'
+                      ? 'inset 0 0 0 1px rgba(103,232,249,0.10), 0 8px 18px rgba(6,182,212,0.15)'
+                      : 'inset 0 0 0 1px rgba(103,232,249,0.08), 0 8px 16px rgba(6,182,212,0.12)',
+                  }}
+                >
+                  <div className="teros-recon-marquee" aria-live="polite">
+                    {reconocimientosCarrusel.map((r, idx) => (
+                      <div
+                        key={`${r.id}-${idx}`}
+                        className="teros-recon-item text-xs md:text-sm"
+                        style={{
+                          color: textColor,
+                          background: tema === 'dark' ? 'rgba(8,47,73,0.24)' : 'rgba(255,255,255,0.52)',
+                          border: '1px solid rgba(6,182,212,0.25)',
+                        }}
+                      >
+                        <span className="mr-1" style={{ color: '#67e8f9' }}>{r.insignia}</span>
+                        <span className="font-semibold" style={{ color: '#22d3ee' }}>{r.titulo}:</span>{' '}
+                        <span>{r.detalle}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <p className="text-sm font-semibold mb-1.5" style={{ color: textColor }}>Foco de hoy: {recordatorioPrl.foco}</p>
                 <p className="text-xs md:text-sm leading-relaxed" style={{ color: textMuted }}>{recordatorioPrl.frase}</p>
               </div>
@@ -808,7 +1020,7 @@ export default function Dashboard() {
         {(esTecnico || misordenes.length > 0) && (
           <div className="rounded-xl p-5 mb-6" style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)' }}>
             <h3 className="font-semibold mb-3 text-sm" style={{ color: '#a78bfa' }}>
-              {esTecnico ? 'Mis órdenes asignadas' : 'Mis órdenes pendientes'}
+              {esTecnico ? 'MIS ÓRDENES ASIGNADAS' : 'MIS ÓRDENES PENDIENTES'}
             </h3>
             {misordenes.length === 0 ? (
               <p className="text-sm" style={{ color: textMuted }}>No tienes órdenes asignadas ahora mismo.</p>
@@ -818,28 +1030,32 @@ export default function Dashboard() {
                   <Link
                     key={o.id}
                     href={esTecnico ? `/ordenes?mias=1&open=${o.id}` : `/ordenes?open=${o.id}`}
-                    className="flex items-center justify-between rounded-lg px-4 py-3 transition-all"
+                    className="block rounded-lg px-4 py-3 transition-all"
+                    data-base-border="rgba(167,139,250,0.16)"
                     style={{ background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(167,139,250,0.16)' }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'rgba(6,182,212,0.42)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(167,139,250,0.16)')}
+                    onMouseEnter={e => activarHoverCard(e.currentTarget)}
+                    onMouseLeave={e => desactivarHoverCard(e.currentTarget)}
                   >
                     <div className="min-w-0">
-                      <span className="font-mono text-xs mr-2" style={{ color: '#06b6d4' }}>{o.codigo}</span>
-                      <span className="text-sm" style={{ color: textColor }}>{o.descripcion?.substring(0, 58) || '\u2014'}</span>
+                      <p className="text-sm font-semibold truncate" style={{ color: textColor }}>
+                        {nombreClienteOt(o)}
+                      </p>
+                      <p className="text-xs mt-0.5 truncate" style={{ color: textMuted }}>
+                        {etiquetaTareaOt(o)}: {o.descripcion?.substring(0, 72) || 'Sin descripción'}
+                      </p>
+                      <p className="text-xs mt-0.5 truncate" style={{ color: textMuted }}>
+                        {poblacionClienteOt(o)}
+                      </p>
                     </div>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{
-                      background: o.estado === 'en_curso' ? 'rgba(234,179,8,0.2)' : 'rgba(124,58,237,0.2)',
-                      color: o.estado === 'en_curso' ? '#fbbf24' : '#a78bfa'
-                    }}>
-                      {o.estado.replace('_', ' ')}
-                    </span>
                   </Link>
                 ))}
               </div>
             )}
-            <Link href={esTecnico ? '/ordenes?mias=1' : '/planificacion'} className="block mt-3 text-xs hover:opacity-80 transition-opacity" style={{ color: '#06b6d4' }}>
-              {esTecnico ? 'Ver todas mis órdenes →' : 'Ver planificación →'}
-            </Link>
+            {esTecnico && (
+              <Link href="/ordenes?mias=1" className="block mt-3 text-xs hover:opacity-80 transition-opacity" style={{ color: '#06b6d4' }}>
+                Ver todas mis órdenes →
+              </Link>
+            )}
           </div>
         )}
 
@@ -923,11 +1139,9 @@ export default function Dashboard() {
             50% { transform: translateY(-4px) rotate(2deg) scale(1.01); }
             100% { transform: translateY(0px) rotate(-2deg) scale(1); }
           }
-          @keyframes reconBannerSlide {
-            0% { opacity: 0; transform: translateX(34px); }
-            12% { opacity: 1; transform: translateX(0); }
-            82% { opacity: 1; transform: translateX(0); }
-            100% { opacity: 0; transform: translateX(-34px); }
+          @keyframes terosReconLoop {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
           }
           @keyframes insigniaSparkle {
             0% {
@@ -983,6 +1197,21 @@ export default function Dashboard() {
             );
             filter: blur(0.35px);
             animation: insigniaSparkle 3.2s ease-in-out infinite;
+          }
+          .teros-recon-marquee {
+            display: inline-flex;
+            gap: 0.6rem;
+            width: max-content;
+            white-space: nowrap;
+            animation: terosReconLoop 28s linear infinite;
+            will-change: transform;
+          }
+          .teros-recon-item {
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            border-radius: 9999px;
+            padding: 0.3rem 0.72rem;
           }
         `}</style>
       </div>

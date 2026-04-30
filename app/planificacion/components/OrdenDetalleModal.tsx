@@ -27,8 +27,8 @@ export function OrdenDetalleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)' }}>
-      <div className="w-full md:max-w-lg rounded-t-2xl md:rounded-2xl overflow-y-auto" style={{ maxHeight: '92vh', background: 'var(--card)', border: '1px solid var(--border)' }}>
-        <div className="sticky top-0 px-6 py-4 flex items-start justify-between rounded-t-2xl" style={{ background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
+      <div className="w-full md:max-w-lg rounded-t-2xl md:rounded-2xl overflow-y-auto" style={{ maxHeight: '92vh', background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        <div className="sticky top-0 px-6 py-4 flex items-start justify-between rounded-t-2xl" style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
           <div>
             <span className="font-mono text-sm" style={{ color: '#06b6d4' }}>{orden.codigo}</span>
             <h2 className="font-bold text-lg mt-1" style={{ color: 'var(--text)' }}>{getNombreClienteOt(orden)}</h2>
