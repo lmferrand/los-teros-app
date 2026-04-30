@@ -328,6 +328,8 @@ function crearReconocimientosSemana(
 }
 
 export default function Dashboard() {
+  const IMAGEN_RECORDATORIO_NUEVA = '/operario_recordatorios_jornada.webp'
+  const IMAGEN_RECORDATORIO_FALLBACK = '/operario_teros_web_optimizado.png'
   const [user, setUser] = useState<any>(null)
   const [perfil, setPerfil] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -345,6 +347,7 @@ export default function Dashboard() {
     foco: 'Prevención diaria',
     frase: 'Trabajo seguro, equipo seguro. Revisad EPI y entorno antes de empezar.',
   })
+  const [imagenRecordatorioSrc, setImagenRecordatorioSrc] = useState(IMAGEN_RECORDATORIO_NUEVA)
   const [reconocimientosSemana, setReconocimientosSemana] = useState<ReconocimientoSemana[]>([])
   const ultimaCargaRef = useRef(0)
   const cargandoRef = useRef(false)
@@ -970,14 +973,19 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-4 mb-6">
           <div className="rounded-xl overflow-visible relative" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
-            <div className="absolute left-1 md:left-2 -top-10 md:-top-14 w-[118px] md:w-[170px] h-[calc(100%+40px)] md:h-[calc(100%+56px)] overflow-hidden pointer-events-none">
+            <div className="absolute left-1 md:left-2 bottom-0 w-[118px] md:w-[170px] h-[118px] md:h-[156px] overflow-hidden pointer-events-none">
               <Image
-                src="/operario_teros_web_optimizado.png"
+                src={imagenRecordatorioSrc}
                 alt="Recordatorio para tu jornada"
-                width={170}
-                height={300}
-                className="w-full h-auto object-contain object-top"
+                fill
+                sizes="(min-width: 768px) 170px, 118px"
+                className="object-cover object-top"
                 priority
+                onError={() => {
+                  if (imagenRecordatorioSrc !== IMAGEN_RECORDATORIO_FALLBACK) {
+                    setImagenRecordatorioSrc(IMAGEN_RECORDATORIO_FALLBACK)
+                  }
+                }}
               />
             </div>
             <div className="pl-[120px] md:pl-[176px] pr-3 py-2.5 min-h-[94px] md:min-h-[108px] flex items-center">
