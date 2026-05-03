@@ -63,19 +63,6 @@ function etiquetaTareaOt(ot: any) {
   return tipo ? `${tipo.charAt(0).toUpperCase()}${tipo.slice(1)}` : 'Sin tipo'
 }
 
-function fechaHoraOt(ot: any) {
-  if (!ot?.fecha_programada) return 'Sin fecha programada'
-  const d = new Date(ot.fecha_programada)
-  if (Number.isNaN(d.getTime())) return 'Sin fecha programada'
-  return d.toLocaleString('es-ES', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 async function traerTodoPaginado<T>(fetchPage: (from: number, to: number) => any, pageSize = 1000) {
   const out: T[] = []
   for (let from = 0; ; from += pageSize) {
@@ -328,7 +315,7 @@ function crearReconocimientosSemana(
 }
 
 export default function Dashboard() {
-  const IMAGEN_RECORDATORIO_NUEVA = '/operario_teros_web_optimizado.png'
+  const IMAGEN_RECORDATORIO_NUEVA = '/operario_recordatorios_fijo.webp'
   const IMAGEN_RECORDATORIO_FALLBACK = '/operario_recordatorios_jornada.webp'
   const [user, setUser] = useState<any>(null)
   const [perfil, setPerfil] = useState<any>(null)
@@ -972,8 +959,8 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 mb-6">
-          <div className="rounded-xl overflow-visible relative" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
-            <div className="absolute left-1 md:left-2 bottom-0 w-[118px] md:w-[170px] h-[144px] md:h-[196px] overflow-hidden pointer-events-none">
+          <div className="rounded-xl overflow-hidden relative" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
+            <div className="absolute left-1 md:left-2 bottom-0 w-[118px] md:w-[170px] h-[124px] md:h-[176px] overflow-hidden pointer-events-none">
               <Image
                 src={imagenRecordatorioSrc}
                 alt="Recordatorio para tu jornada"

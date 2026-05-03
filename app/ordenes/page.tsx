@@ -191,13 +191,15 @@ export default function Ordenes() {
     if (openUrl) setOrdenIdAbrirDesdeUrl(openUrl)
   }, [])
 
+  // Intencional: este efecto solo atiende la query inicial `open=` y no debe
+  // re-dispararse por la recreacion de handlers locales en cada render.
   useEffect(() => {
     if (!ordenIdAbrirDesdeUrl || loading || ordenes.length === 0) return
     const encontrada = ordenes.find((o: any) => o.id === ordenIdAbrirDesdeUrl)
     if (!encontrada) return
     void abrirDetalle(encontrada)
     setOrdenIdAbrirDesdeUrl(null)
-  }, [ordenIdAbrirDesdeUrl, loading, ordenes])
+  }, [ordenIdAbrirDesdeUrl, loading, ordenes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function extraerPathStorageDesdePublicUrl(url: string, bucket: string) {
     const marcador = `/storage/v1/object/public/${bucket}/`

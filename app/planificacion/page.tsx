@@ -11,7 +11,7 @@ import { OrdenDetalleModal } from '@/app/planificacion/components/OrdenDetalleMo
 import { calcularResultadoOptimizador } from '@/lib/planificacion/ui-utils'
 
 export default function Planificacion() {
-  const { ordenes, clientes, tecnicos, presupuestos, userId, miRol, loading, loadingSecundario, esAdminOOficina, refresh } = usePlanificacionData()
+  const { ordenes, clientes, tecnicos, presupuestos, userId, loading, loadingSecundario, esAdminOOficina, refresh } = usePlanificacionData()
   const [mesActual, setMesActual] = useState(new Date())
   const [ordenSeleccionada, setOrdenSeleccionada] = useState<any>(null)
   const [vistaActiva, setVistaActiva] = useState<'calendario' | 'mis_ordenes' | 'presupuestos' | 'rutas'>('calendario')
