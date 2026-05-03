@@ -328,8 +328,8 @@ function crearReconocimientosSemana(
 }
 
 export default function Dashboard() {
-  const IMAGEN_RECORDATORIO_NUEVA = '/operario_recordatorios_jornada.webp'
-  const IMAGEN_RECORDATORIO_FALLBACK = '/operario_teros_web_optimizado.png'
+  const IMAGEN_RECORDATORIO_NUEVA = '/operario_teros_web_optimizado.png'
+  const IMAGEN_RECORDATORIO_FALLBACK = '/operario_recordatorios_jornada.webp'
   const [user, setUser] = useState<any>(null)
   const [perfil, setPerfil] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -1226,5 +1226,4 @@ export default function Dashboard() {
     </div>
   )
 }
-
 
