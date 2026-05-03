@@ -973,13 +973,13 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-4 mb-6">
           <div className="rounded-xl overflow-visible relative" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
-            <div className="absolute left-1 md:left-2 bottom-0 w-[118px] md:w-[170px] h-[118px] md:h-[156px] overflow-hidden pointer-events-none">
+            <div className="absolute left-1 md:left-2 bottom-0 w-[118px] md:w-[170px] h-[144px] md:h-[196px] overflow-hidden pointer-events-none">
               <Image
                 src={imagenRecordatorioSrc}
                 alt="Recordatorio para tu jornada"
                 fill
                 sizes="(min-width: 768px) 170px, 118px"
-                className="object-cover object-top"
+                className="object-contain object-bottom"
                 priority
                 onError={() => {
                   if (imagenRecordatorioSrc !== IMAGEN_RECORDATORIO_FALLBACK) {
@@ -1226,4 +1226,3 @@ export default function Dashboard() {
     </div>
   )
 }
-
