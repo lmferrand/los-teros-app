@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import AppHeader from '@/app/components/AppHeader'
 import { s } from '@/lib/styles'
 import { supabase } from '@/lib/supabase'
-
-const ROLES_PERMITIDOS = new Set(['gerente', 'oficina', 'supervisor'])
+import { hasModuleAccess } from '@/lib/module-permissions'
 type ProveedorNube = 'dropbox' | 'google_drive'
 
 type ResultadoSubida = {
@@ -40,7 +39,7 @@ function RespaldoPageClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const puedeGestionar = ROLES_PERMITIDOS.has(String(perfil?.rol || ''))
+  const puedeGestionar = hasModuleAccess(perfil, 'respaldo')
 
   const cloudOauth = searchParams.get('cloud_oauth')
   const providerQuery = searchParams.get('provider')
@@ -82,7 +81,11 @@ function RespaldoPageClient() {
         return
       }
 
-      const { data: p } = await supabase.from('perfiles').select('id, nombre, rol').eq('id', session.user.id).single()
+      const { data: p } = await supabase
+        .from('perfiles')
+        .select('id, nombre, rol, permisos_modulos')
+        .eq('id', session.user.id)
+        .single()
       setPerfil(p || null)
     } finally {
       setLoading(false)
@@ -308,7 +311,7 @@ function RespaldoPageClient() {
         {!puedeGestionar && (
           <div className="rounded-2xl p-4 mb-4" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)' }}>
             <p className="text-sm" style={{ color: '#f87171' }}>
-              Tu rol no permite generar respaldos globales. Solicita permisos de gerente/oficina/supervisor.
+              Tu usuario no tiene acceso al módulo de respaldo. Pide activarlo en Trabajadores.
             </p>
           </div>
         )}

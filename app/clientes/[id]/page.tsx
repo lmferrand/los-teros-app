@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { s } from '@/lib/styles'
 import AppHeader from '@/app/components/AppHeader'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
+import { hasModuleAccess } from '@/lib/module-permissions'
 
 function nombreComercialCliente(c: any) {
   return String(c?.nombre_comercial || c?.nombre || '').trim()
@@ -68,7 +69,15 @@ export default function ClienteDetalle() {
       router.push('/login')
       return false
     }
-    const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
+    const { data } = await supabase
+      .from('perfiles')
+      .select('id, nombre, rol, permisos_modulos')
+      .eq('id', session.user.id)
+      .single()
+    if (!hasModuleAccess(data, 'clientes')) {
+      router.push('/dashboard')
+      return false
+    }
     setPerfil(data || null)
     return true
   }

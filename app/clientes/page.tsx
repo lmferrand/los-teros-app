@@ -7,6 +7,7 @@ import Link from 'next/link'
 import * as XLSX from 'xlsx'
 import { s } from '@/lib/styles'
 import { estandarizarNombreComercial, estandarizarNombreFiscal, limpiarTextoCliente } from '@/lib/clientes-normalizacion'
+import { hasModuleAccess } from '@/lib/module-permissions'
 
 function normalizarTextoBusqueda(valor: unknown) {
   return String(valor || '')
@@ -148,8 +149,12 @@ export default function Clientes() {
   const verificarSesion = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { router.push('/login'); return }
-    const { data } = await supabase.from('perfiles').select('*').eq('id', session.user.id).single()
-    if (data?.rol !== 'gerente' && data?.rol !== 'oficina') {
+    const { data } = await supabase
+      .from('perfiles')
+      .select('rol, permisos_modulos')
+      .eq('id', session.user.id)
+      .single()
+    if (!hasModuleAccess(data, 'clientes')) {
       router.push('/dashboard'); return
     }
   }, [router])

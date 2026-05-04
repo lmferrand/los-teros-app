@@ -3,14 +3,51 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { firstAllowedModuleHref, hasModuleAccess, moduleForPath } from '@/lib/module-permissions'
 
 const IA_HINT_KEY = 'ia-asistente-hint-v1'
 
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mostrarAyudaIA, setMostrarAyudaIA] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
   const ocultarAsistente = pathname === '/login' || pathname.startsWith('/auth/')
+
+  useEffect(() => {
+    const key = moduleForPath(pathname || '')
+    if (!key) return
+
+    let cancelled = false
+    const verificarAcceso = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!session || cancelled) return
+
+      const { data } = await supabase
+        .from('perfiles')
+        .select('rol, permisos_modulos')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (!data || cancelled) return
+      if (hasModuleAccess(data, key)) return
+
+      const destino = firstAllowedModuleHref(data.rol, data.permisos_modulos, { excludeDashboard: false })
+      if (destino && destino !== pathname) {
+        router.replace(destino)
+      } else if (pathname !== '/dashboard') {
+        router.replace('/dashboard')
+      }
+    }
+
+    void verificarAcceso()
+    return () => {
+      cancelled = true
+    }
+  }, [pathname, router])
 
   useEffect(() => {
     if (ocultarAsistente) return

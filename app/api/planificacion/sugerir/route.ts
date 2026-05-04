@@ -3,11 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { enrichPlanningWithAi } from '@/lib/planificacion/ai'
 import { optimizePlanningDeterministic } from '@/lib/planificacion/optimizer'
 import type { PlanningScope } from '@/lib/planificacion/types'
+import { hasModuleAccess } from '@/lib/module-permissions'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const ROLES_PERMITIDOS = new Set(['gerente', 'oficina', 'supervisor'])
 
 function getConfig() {
   return {
@@ -62,14 +61,14 @@ export async function POST(req: NextRequest) {
 
     const { data: perfil, error: perfilError } = await supabaseUser
       .from('perfiles')
-      .select('id, nombre, rol')
+      .select('id, nombre, rol, permisos_modulos')
       .eq('id', authData.user.id)
       .single()
 
     if (perfilError || !perfil) {
       return NextResponse.json({ error: 'No se pudo validar perfil.' }, { status: 403 })
     }
-    if (!ROLES_PERMITIDOS.has(String(perfil.rol || '').toLowerCase())) {
+    if (!hasModuleAccess(perfil, 'planificacion')) {
       return NextResponse.json({ error: 'No tienes permisos para sugerir planificación.' }, { status: 403 })
     }
 

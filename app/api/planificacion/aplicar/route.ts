@@ -1,11 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import type { RecommendedChange } from '@/lib/planificacion/types'
+import { hasModuleAccess } from '@/lib/module-permissions'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const ROLES_PERMITIDOS = new Set(['gerente', 'oficina', 'supervisor'])
 
 function getConfig() {
   return {
@@ -96,10 +95,10 @@ export async function POST(req: NextRequest) {
 
     const { data: perfil, error: perfilError } = await supabaseUser
       .from('perfiles')
-      .select('id, rol')
+      .select('id, rol, permisos_modulos')
       .eq('id', authData.user.id)
       .single()
-    if (perfilError || !perfil || !ROLES_PERMITIDOS.has(String(perfil.rol || '').toLowerCase())) {
+    if (perfilError || !perfil || !hasModuleAccess(perfil, 'planificacion')) {
       return NextResponse.json({ error: 'No tienes permisos para aplicar sugerencias.' }, { status: 403 })
     }
 

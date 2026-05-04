@@ -504,6 +504,7 @@ export type Database = {
           id: string
           nombre: string
           rol: string
+          permisos_modulos: Json
           telefono: string | null
           activo: boolean | null
           created_at: string | null
@@ -512,6 +513,7 @@ export type Database = {
           id: string
           nombre: string
           rol?: string
+          permisos_modulos?: Json
           telefono?: string | null
           activo?: boolean | null
           created_at?: string | null
@@ -520,6 +522,7 @@ export type Database = {
           id?: string
           nombre?: string
           rol?: string
+          permisos_modulos?: Json
           telefono?: string | null
           activo?: boolean | null
           created_at?: string | null

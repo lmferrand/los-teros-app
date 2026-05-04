@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { s } from '@/lib/styles'
 import AppHeader from '@/app/components/AppHeader'
+import { hasModuleAccess } from '@/lib/module-permissions'
 
 type RankingItem = {
   id: string
@@ -295,11 +296,11 @@ export default function RecordatorioServicioPage() {
 
       const { data: perfil } = await supabase
         .from('perfiles')
-        .select('rol')
+        .select('rol, permisos_modulos')
         .eq('id', session.user.id)
         .single()
 
-      const puedeVer = perfil?.rol === 'gerente' || perfil?.rol === 'oficina' || perfil?.rol === 'supervisor'
+      const puedeVer = hasModuleAccess(perfil, 'recordatorio_servicio')
       if (!puedeVer) {
         setAccesoDenegado(true)
         setLoading(false)
@@ -1001,7 +1002,7 @@ export default function RecordatorioServicioPage() {
           <div className="rounded-2xl p-5" style={s.cardStyle}>
             <p className="font-semibold mb-1" style={{ color: 'var(--text)' }}>Sin permiso</p>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              Solo gerencia, oficina o supervisor puede ver este listado.
+              Tu usuario no tiene acceso a este módulo.
             </p>
           </div>
         ) : clientesInactivos.length === 0 && clientesContactados.length === 0 ? (

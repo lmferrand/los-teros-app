@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { resolveModulePermissions, type AppModuleKey } from '@/lib/module-permissions'
 
 function diasRestantes(fecha: string | null | undefined) {
   if (!fecha) return null
@@ -383,6 +384,7 @@ export default function Dashboard() {
     setPerfil(perfilData)
     const rolPerfil = String(perfilData?.rol || '').toLowerCase()
     const esTecnicoPerfil = rolPerfil === 'tecnico' || rolPerfil === 'almacen'
+    const permisosPerfil = resolveModulePermissions(perfilData?.rol, perfilData?.permisos_modulos)
 
     const hoy = new Date()
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
@@ -444,10 +446,20 @@ export default function Dashboard() {
     const ordenesPendientes = ordenesPendientesRes.data || []
     const ordenesCompletadasSemana = ordenesCompletadasSemanaRes.data || []
     const ordenesContexto = [...ordenesPendientes, ...ordenesCompletadasSemana]
-    const contactosOficinaSemana = Number(contactosOficinaSemanaRes?.count || 0)
+    const contactosOficinaSemana = permisosPerfil.recordatorio_servicio
+      ? Number(contactosOficinaSemanaRes?.count || 0)
+      : 0
 
-    const { count: countTeros } = await (supabase.from('clientes') as any).select('*', { count: 'exact', head: true }).eq('empresa', 'teros')
-    const { count: countOlipro } = await (supabase.from('clientes') as any).select('*', { count: 'exact', head: true }).eq('empresa', 'olipro')
+    let countTeros = 0
+    let countOlipro = 0
+    if (permisosPerfil.clientes) {
+      const [{ count: teros }, { count: olipro }] = await Promise.all([
+        (supabase.from('clientes') as any).select('*', { count: 'exact', head: true }).eq('empresa', 'teros'),
+        (supabase.from('clientes') as any).select('*', { count: 'exact', head: true }).eq('empresa', 'olipro'),
+      ])
+      countTeros = Number(teros || 0)
+      countOlipro = Number(olipro || 0)
+    }
 
     const todosMateriales = materiales.data || []
     const todosEquipos = equipos.data || []
@@ -509,8 +521,8 @@ export default function Dashboard() {
       otSintecnico,
       otSinFecha,
       otSinVehiculo,
-      clientesSinServicio: prev.clientesSinServicio,
-      maxDiasSinServicio: prev.maxDiasSinServicio,
+      clientesSinServicio: permisosPerfil.recordatorio_servicio ? prev.clientesSinServicio : 0,
+      maxDiasSinServicio: permisosPerfil.recordatorio_servicio ? prev.maxDiasSinServicio : 0,
     }))
     setMisordenes(misMisordenes)
     setRecordatorioPrl(crearRecordatorioPrl(ordenesContexto))
@@ -566,6 +578,15 @@ export default function Dashboard() {
       } catch {
         // Sin persistencia disponible.
       }
+    }
+
+    if (!permisosPerfil.recordatorio_servicio) {
+      setStats((prev) => ({
+        ...prev,
+        clientesSinServicio: 0,
+        maxDiasSinServicio: 0,
+      }))
+      return
     }
 
     // Segunda fase (no bloqueante): historial global de servicios para recordatorios.
@@ -722,19 +743,20 @@ export default function Dashboard() {
     almacen: 'Almacén', supervisor: 'Supervisor',
   }
 
+  const permisos = resolveModulePermissions(perfil?.rol, perfil?.permisos_modulos)
   const esTecnico = perfil?.rol === 'tecnico' || perfil?.rol === 'almacen'
 
-  const MODULOS: Array<{ href: string; icono?: string; iconoImg?: string; titulo: string; desc: string; siempre?: boolean; soloAdmin?: boolean }> = [
-    { href: '/ordenes', icono: '\u{1F4CB}', titulo: 'Órdenes', desc: 'Crear y gestionar', siempre: true },
-    { href: '/planificacion', icono: '\u{1F4C6}', titulo: 'Planificación', desc: 'Calendario y rutas', siempre: true },
-    { href: '/inventario', icono: '\u{1F4E6}', titulo: 'Inventario y equipos', desc: 'Materiales y equipos', siempre: true },
-    { href: '/flota', icono: '\u{1F69A}', titulo: 'Flota de vehículos', desc: 'ITV, seguros y documentos', siempre: true },
-    { href: '/albaranes', icono: '\u{1F9FE}', titulo: 'Albaranes', desc: 'Con fotos y firma', siempre: true },
-    { href: '/asistente', iconoImg: '/assistant-ia-teros-clean.png', titulo: 'Asistente IA', desc: 'Pregunta a la IA', siempre: true },
-    { href: '/movimientos', icono: '\u{1F4CA}', titulo: 'Movimientos', desc: 'Historial consumos', siempre: true },
-    { href: '/sin-servicio', icono: '\u{23F1}', titulo: 'Recordatorio de servicio', desc: 'Clientes a recontactar', siempre: true },
-    { href: '/clientes', icono: '\u{1F3E2}', titulo: 'Clientes', desc: 'Fichas y contacto', soloAdmin: true },
-    { href: '/trabajadores', icono: '\u{1F477}', titulo: 'Trabajadores', desc: 'Gestión personal', soloAdmin: true },
+  const MODULOS: Array<{ key: AppModuleKey; href: string; icono?: string; iconoImg?: string; titulo: string; desc: string }> = [
+    { key: 'ordenes', href: '/ordenes', icono: '\u{1F4CB}', titulo: 'Órdenes', desc: 'Crear y gestionar' },
+    { key: 'planificacion', href: '/planificacion', icono: '\u{1F4C6}', titulo: 'Planificación', desc: 'Calendario y rutas' },
+    { key: 'inventario', href: '/inventario', icono: '\u{1F4E6}', titulo: 'Inventario y equipos', desc: 'Materiales y equipos' },
+    { key: 'flota', href: '/flota', icono: '\u{1F69A}', titulo: 'Flota de vehículos', desc: 'ITV, seguros y documentos' },
+    { key: 'albaranes', href: '/albaranes', icono: '\u{1F9FE}', titulo: 'Albaranes', desc: 'Con fotos y firma' },
+    { key: 'asistente', href: '/asistente', iconoImg: '/assistant-ia-teros-clean.png', titulo: 'Asistente IA', desc: 'Pregunta a la IA' },
+    { key: 'movimientos', href: '/movimientos', icono: '\u{1F4CA}', titulo: 'Movimientos', desc: 'Historial consumos' },
+    { key: 'recordatorio_servicio', href: '/sin-servicio', icono: '\u{23F1}', titulo: 'Recordatorio de servicio', desc: 'Clientes a recontactar' },
+    { key: 'clientes', href: '/clientes', icono: '\u{1F3E2}', titulo: 'Clientes', desc: 'Fichas y contacto' },
+    { key: 'trabajadores', href: '/trabajadores', icono: '\u{1F477}', titulo: 'Trabajadores', desc: 'Gestión personal' },
   ]
 
   const bgCard = tema === 'dark' ? '#0d1117' : '#ffffff'
@@ -761,6 +783,7 @@ export default function Dashboard() {
 
   type EstadoSemaforo = 'ok' | 'warning' | 'critical'
   type ResumenCard = {
+    key: AppModuleKey
     label: string
     valor: number
     sub: string
@@ -854,12 +877,13 @@ export default function Dashboard() {
         : 'ok'
 
   const resumenCardsBase: ResumenCard[] = [
-    { label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, href: '/ordenes', estado: 'ok' },
-    { label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', href: '/ordenes?estado=completada', estado: 'ok' },
-    { label: 'Clientes', valor: totalClientes, sub: `Teros ${stats.clientesTeros} - Olipro ${stats.clientesOlipro}`, href: '/clientes', estado: 'ok' },
-    { label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales críticos', href: '/inventario?tab=materiales', estado: estadoStock, mostrarInsignia: true },
-    { label: 'Equipos en campo', valor: stats.equiposCampo, sub: 'en cliente', href: '/inventario?tab=equipos', estado: stats.equiposCampo > 0 ? 'warning' : 'ok' },
+    { key: 'ordenes', label: 'OT Activas', valor: stats.otActivas, sub: `${stats.otPendientes} pendientes`, href: '/ordenes', estado: 'ok' },
+    { key: 'ordenes', label: 'Completadas mes', valor: stats.otMes, sub: 'este mes', href: '/ordenes?estado=completada', estado: 'ok' },
+    { key: 'clientes', label: 'Clientes', valor: totalClientes, sub: `Teros ${stats.clientesTeros} - Olipro ${stats.clientesOlipro}`, href: '/clientes', estado: 'ok' },
+    { key: 'inventario', label: 'Stock bajo', valor: stats.stockBajo, sub: 'materiales críticos', href: '/inventario?tab=materiales', estado: estadoStock, mostrarInsignia: true },
+    { key: 'inventario', label: 'Equipos en campo', valor: stats.equiposCampo, sub: 'en cliente', href: '/inventario?tab=equipos', estado: stats.equiposCampo > 0 ? 'warning' : 'ok' },
     {
+      key: 'flota',
       label: 'Flota al día',
       valor: stats.vehiculosAldia,
       sub: `${stats.vehiculosTotal} total - ${stats.vehiculosPorVencer} por vencer - ${stats.vehiculosVencidos} vencidos`,
@@ -868,6 +892,7 @@ export default function Dashboard() {
       mostrarInsignia: true,
     },
     {
+      key: 'recordatorio_servicio',
       label: 'Recordatorio servicio',
       valor: stats.clientesSinServicio,
       sub: `>1 año sin servicio - máx. ${stats.maxDiasSinServicio} días`,
@@ -876,10 +901,7 @@ export default function Dashboard() {
       mostrarInsignia: true,
     },
   ]
-  const resumenCards = (esTecnico
-    ? resumenCardsBase.filter((card) => card.label !== 'Clientes')
-    : resumenCardsBase
-  ).map((card) => {
+  const resumenCards = resumenCardsBase.filter((card) => permisos[card.key]).map((card) => {
     if (!esTecnico) return card
     if (card.label === 'OT Activas') return { ...card, href: '/ordenes?mias=1' }
     if (card.label === 'Completadas mes') return { ...card, href: '/ordenes?mias=1&estado=completada' }
@@ -1111,7 +1133,7 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {MODULOS.filter(m => m.siempre || (!esTecnico && m.soloAdmin)).map(m => {
+          {MODULOS.filter((m) => permisos[m.key]).map(m => {
             const hrefModulo = esTecnico && m.href === '/ordenes' ? '/ordenes?mias=1' : m.href
             return (
             <Link key={m.href} href={hrefModulo} className="rounded-xl p-5 block transition-all"

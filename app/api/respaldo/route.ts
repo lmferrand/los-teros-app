@@ -1,10 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { hasModuleAccess } from '@/lib/module-permissions'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const ROLES_PERMITIDOS = new Set(['gerente', 'oficina', 'supervisor'])
 
 const TABLAS_RESPALDO = [
   'clientes',
@@ -89,7 +88,7 @@ async function validarPermisos(req: NextRequest) {
 
   const { data: perfil, error: perfilError } = await supabaseUsuario
     .from('perfiles')
-    .select('id, nombre, rol')
+    .select('id, nombre, rol, permisos_modulos')
     .eq('id', userData.user.id)
     .single()
 
@@ -97,7 +96,7 @@ async function validarPermisos(req: NextRequest) {
     return { ok: false as const, status: 403, error: 'No se pudo validar el perfil del usuario.' }
   }
 
-  if (!ROLES_PERMITIDOS.has(String(perfil.rol || ''))) {
+  if (!hasModuleAccess(perfil, 'respaldo')) {
     return { ok: false as const, status: 403, error: 'No tienes permisos para generar respaldos globales.' }
   }
 
