@@ -958,9 +958,9 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 mb-6">
-          <div className="rounded-xl overflow-hidden relative" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
-            <div className="absolute left-1 md:left-2 bottom-0 w-[118px] md:w-[170px] h-[124px] md:h-[176px] overflow-hidden pointer-events-none">
+        <div className="grid grid-cols-1 gap-4 mb-6 pt-2 md:pt-3">
+          <div className="rounded-xl overflow-visible relative" style={{ background: 'rgba(6,182,212,0.10)', border: '1px solid rgba(6,182,212,0.25)' }}>
+            <div className="absolute left-1 md:left-2 bottom-0 w-[118px] md:w-[170px] h-[102px] md:h-[124px] overflow-hidden pointer-events-none">
               <Image
                 src={imagenRecordatorioSrc}
                 alt="Recordatorio para tu jornada"
