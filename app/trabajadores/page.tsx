@@ -129,7 +129,10 @@ export default function Trabajadores() {
   }
 
   async function cambiarRol(id: string, nuevoRol: string) {
-    const { error } = await supabase.from('perfiles').update({ rol: nuevoRol }).eq('id', id)
+    const { error } = await supabase
+      .from('perfiles')
+      .update({ rol: nuevoRol, permisos_modulos: {} })
+      .eq('id', id)
     if (error) {
       alert('No se pudo cambiar el rol: ' + error.message)
       return

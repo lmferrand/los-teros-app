@@ -86,7 +86,11 @@ export function resolveModulePermissions(
   rol: string | null | undefined,
   rawOverrides: unknown
 ): ModulePermissions {
-  const base = defaultsForRole(rol)
+  const role = String(rol || '').toLowerCase()
+  const base = defaultsForRole(role)
+  if (role === 'gerente' || role === 'oficina') {
+    return base
+  }
   const overrides = parseModulePermissionOverrides(rawOverrides)
   for (const key of MODULE_KEYS) {
     if (typeof overrides[key] === 'boolean') base[key] = Boolean(overrides[key])
