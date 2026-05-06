@@ -19,6 +19,14 @@ export type ModulePermissions = Record<AppModuleKey, boolean>
 
 const MODULE_KEYS = APP_MODULES.map((m) => m.key)
 
+function normalizeRole(rol: string | null | undefined) {
+  return String(rol || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
 function basePermissions(value: boolean): ModulePermissions {
   const out = {} as ModulePermissions
   for (const key of MODULE_KEYS) out[key] = value
@@ -26,7 +34,7 @@ function basePermissions(value: boolean): ModulePermissions {
 }
 
 function defaultsForRole(rol: string | null | undefined): ModulePermissions {
-  const role = String(rol || '').toLowerCase()
+  const role = normalizeRole(rol)
 
   if (role === 'gerente' || role === 'oficina') {
     return basePermissions(true)
@@ -86,7 +94,7 @@ export function resolveModulePermissions(
   rol: string | null | undefined,
   rawOverrides: unknown
 ): ModulePermissions {
-  const role = String(rol || '').toLowerCase()
+  const role = normalizeRole(rol)
   const base = defaultsForRole(role)
   if (role === 'gerente' || role === 'oficina') {
     return base
