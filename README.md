@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Los Teros — Control financiero
 
-## Getting Started
+App interna de **control financiero** para Extracciones Teros (limpieza,
+instalaciones y mantenimiento). Gestiona presupuestos aceptados como ventas y
+controla **cobros, ejecución, facturación, IVA y márgenes**, para ver de un
+vistazo el desfase entre lo vendido, lo ejecutado y lo facturado.
 
-First, run the development server:
+- **Producción:** https://app.extraccionesteros.es
+- **Stack:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · Supabase · Vercel
+
+## Puesta en marcha
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev          # http://localhost:3000
+npm run build        # build + type-check (debe quedar verde antes de push)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Variables en `.env.local`: `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` (y en Vercel además `SUPABASE_SERVICE_ROLE_KEY`,
+`GROQ_API_KEY`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Base de datos
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Ejecuta **`SQL_control_financiero.sql`** en el SQL Editor de Supabase: crea las
+tablas `ventas` y `gastos`, sus políticas RLS, el bucket `documentos-ia` y unos
+datos de ejemplo realistas para probar.
 
-## Learn More
+## Estructura
 
-To learn more about Next.js, take a look at the following resources:
+- `app/dashboard` — KPIs del mes y avisos.
+- `app/presupuestos` — lista con filtros, formulario y ficha (IVA, cronología,
+  márgenes, gastos).
+- `app/facturacion` — pivote por mes (venta/cobro/ejecución/facturación).
+- `app/margenes`, `app/alertas` — análisis de márgenes y avisos.
+- `app/documentos` — extracción de datos de documentos con IA (simulada en v1).
+- `lib/` — `tipos`, `dominio`, `calculos`, `agregados`, `db/`, `ia/`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Despliegue
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Push a `main` despliega en Vercel sobre `app.extraccionesteros.es`. Flujo:
+`npm run build` verde → commit (`tipo(ámbito): resumen`) → push.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> El código operativo anterior (clientes/órdenes/inventario) está archivado en la
+> rama `respaldo/operativa-v1` y el tag `v1-operativa`.
