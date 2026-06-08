@@ -8,33 +8,19 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://los-teros-app.vercel.app";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://app.extraccionesteros.es";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Los Teros S.L - Gestion Operativa",
-  description: "App de gestion operativa para Los Teros S.L",
+  title: "Los Teros — Control financiero",
+  description: "Control de ventas, cobros, facturación, IVA y márgenes — Extracciones Teros",
   openGraph: {
-    title: "Los Teros S.L - Gestion Operativa",
-    description: "App de gestion operativa para Los Teros S.L",
+    title: "Los Teros — Control financiero",
+    description: "Control de ventas, cobros, facturación, IVA y márgenes",
     url: siteUrl,
-    siteName: "Los Teros S.L",
-    images: [
-      {
-        url: "/logo.png",
-        width: 1200,
-        height: 1200,
-        alt: "Logo Los Teros S.L",
-      },
-    ],
+    siteName: "Los Teros",
     locale: "es_ES",
     type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Los Teros S.L - Gestion Operativa",
-    description: "App de gestion operativa para Los Teros S.L",
-    images: ["/logo.png"],
   },
 };
 
@@ -53,11 +39,11 @@ export default function RootLayout({
             try {
               var root = document.documentElement;
               root.classList.add('no-theme-transition');
-              var tema = localStorage.getItem('tema') === 'light' ? 'light' : 'dark';
-              var bg = tema === 'light' ? '#f1f5f9' : '#080b14';
+              var tema = localStorage.getItem('tema') === 'dark' ? 'dark' : 'light';
+              var bg = tema === 'dark' ? '#0b1220' : '#f5f7fa';
               root.setAttribute('data-theme', tema);
-              if (tema === 'light') root.classList.add('light');
-              else root.classList.remove('light');
+              if (tema === 'dark') root.classList.add('dark');
+              else root.classList.remove('dark');
               root.style.backgroundColor = bg;
               if (document.body) {
                 document.body.style.backgroundColor = bg;
@@ -75,7 +61,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
