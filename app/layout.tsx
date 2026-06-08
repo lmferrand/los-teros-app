@@ -14,11 +14,13 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Los Teros — Control financiero",
   description: "Control de ventas, cobros, facturación, IVA y márgenes — Extracciones Teros",
+  icons: { icon: "/logo.png", apple: "/logo.png" },
   openGraph: {
     title: "Los Teros — Control financiero",
     description: "Control de ventas, cobros, facturación, IVA y márgenes",
     url: siteUrl,
     siteName: "Los Teros",
+    images: [{ url: "/logo.png", width: 500, height: 500, alt: "Los Teros" }],
     locale: "es_ES",
     type: "website",
   },

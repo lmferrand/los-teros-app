@@ -37,17 +37,9 @@ export default function LoginPage() {
       <div className="w-full max-w-sm animar-entrada">
         {/* Marca */}
         <div className="text-center mb-8">
-          <div
-            className="mx-auto mb-4 grid place-items-center rounded-2xl marca-gradiente"
-            style={{ width: 64, height: 64, boxShadow: 'var(--shadow-md)' }}
-          >
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="white"
-              strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 3v18h18M7 14l4-4 3 3 5-6" />
-            </svg>
-          </div>
-          <h1 className="texto-gradiente font-bold text-2xl tracking-tight">Los Teros</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="Los Teros" className="mx-auto mb-2" style={{ width: 140, height: 'auto' }} />
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
             Control financiero
           </p>
         </div>

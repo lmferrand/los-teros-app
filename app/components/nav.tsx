@@ -46,7 +46,8 @@ export function Sidebar({ perfil }: { perfil: Perfil | null }) {
       style={{ background: 'var(--bg-card)', borderRight: '1px solid var(--border)' }}
     >
       <div className="px-2 mb-5">
-        <div className="texto-gradiente font-bold text-xl tracking-tight">Los Teros</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="Los Teros" style={{ width: 128, height: 'auto' }} className="mb-1" />
         <div className="text-xs mb-3" style={{ color: 'var(--text-subtle)' }}>Control financiero</div>
         <ToggleIva />
       </div>

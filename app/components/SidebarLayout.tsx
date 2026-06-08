@@ -37,7 +37,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       <header
         className="md:hidden sticky top-0 z-20 glass-header px-4 py-3 flex items-center justify-between"
       >
-        <span className="texto-gradiente font-bold text-lg tracking-tight">Los Teros</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="Los Teros" style={{ height: 34, width: 'auto' }} />
         <ToggleIva compacto />
       </header>
 
