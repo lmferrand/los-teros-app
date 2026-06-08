@@ -2,6 +2,7 @@
 
 import { useSesion } from '@/lib/sesion'
 import { Sidebar, BottomNav } from './nav'
+import ToggleIva from './ToggleIva'
 
 // Envuelve las páginas privadas con el chrome (sidebar + barra móvil) y
 // centraliza el guard de autenticación: si no hay sesión, useSesion redirige
@@ -34,9 +35,10 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
       {/* Cabecera móvil */}
       <header
-        className="md:hidden sticky top-0 z-20 glass-header px-4 py-3 flex items-center"
+        className="md:hidden sticky top-0 z-20 glass-header px-4 py-3 flex items-center justify-between"
       >
         <span className="texto-gradiente font-bold text-lg tracking-tight">Los Teros</span>
+        <ToggleIva compacto />
       </header>
 
       <main className="md:pl-64">

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cerrarSesion, type Perfil } from '@/lib/sesion'
+import ToggleIva from './ToggleIva'
 
 export interface ItemNav {
   href: string
@@ -44,9 +45,10 @@ export function Sidebar({ perfil }: { perfil: Perfil | null }) {
       className="hidden md:flex flex-col fixed inset-y-0 left-0 w-64 z-30 px-4 py-5"
       style={{ background: 'var(--bg-card)', borderRight: '1px solid var(--border)' }}
     >
-      <div className="px-2 mb-6">
+      <div className="px-2 mb-5">
         <div className="texto-gradiente font-bold text-xl tracking-tight">Los Teros</div>
-        <div className="text-xs" style={{ color: 'var(--text-subtle)' }}>Control financiero</div>
+        <div className="text-xs mb-3" style={{ color: 'var(--text-subtle)' }}>Control financiero</div>
+        <ToggleIva />
       </div>
 
       <nav className="flex flex-col gap-1 flex-1">
