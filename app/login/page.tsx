@@ -23,15 +23,21 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
     setCargando(true)
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
-    setCargando(false)
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
     if (error) {
+      setCargando(false)
       const m = (error.message || '').toLowerCase()
       if (m.includes('confirm')) setError('Tu email no está confirmado. Pide que te restablezcan la contraseña (eso lo confirma) e inténtalo de nuevo.')
       else setError('Email o contraseña incorrectos.')
       return
     }
-    router.replace('/inicio')
+    if (!data.session) {
+      setCargando(false)
+      setError('No se pudo iniciar la sesión. Inténtalo de nuevo.')
+      return
+    }
+    // Navegación forzada (evita estados de sesión obsoletos).
+    window.location.href = '/inicio'
   }
 
   return (
