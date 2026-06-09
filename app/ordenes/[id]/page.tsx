@@ -10,6 +10,7 @@ import {
   type OrdenConRefs, type MovimientoOrden,
 } from '@/lib/db/ordenes'
 import { listarTrabajadores, listarMateriales, listarEquipos, crearMovimiento, fijarStock, cambiarEstadoEquipo } from '@/lib/db/inventario'
+import { crearAlbaran, obtenerCliente, datosDesdeCliente } from '@/lib/db/albaranes'
 import type { FotoOrden, Incidencia } from '@/lib/ordenes'
 import { ESTADOS_OT, ESTADOS_OT_LISTA, PRIORIDADES, labelTipoOt } from '@/lib/ordenes'
 import type { Material, Equipo } from '@/lib/inventario'
@@ -61,6 +62,24 @@ export default function FichaOrden() {
     router.push('/ordenes')
   }
 
+  const [generandoAlb, setGenerandoAlb] = useState(false)
+  async function generarAlbaran() {
+    if (!orden) return
+    setGenerandoAlb(true)
+    try {
+      const cli = orden.cliente_id ? await obtenerCliente(orden.cliente_id) : null
+      const alb = await crearAlbaran({
+        ...datosDesdeCliente(cli),
+        orden_id: id,
+        fecha: new Date().toISOString().slice(0, 10),
+        estado: 'pendiente',
+        descripcion: orden.descripcion || null,
+        responsable: orden.perfiles?.nombre || null,
+      })
+      router.push(`/albaranes/${alb.id}`)
+    } catch { setGenerandoAlb(false) }
+  }
+
   if (cargando) return <SkeletonLista filas={4} />
   if (!orden) return <div className="card p-6 text-sm" style={{ color: 'var(--text-muted)' }}>No se encontró la OT.</div>
 
@@ -83,7 +102,8 @@ export default function FichaOrden() {
             <span style={{ color: pr?.color, fontWeight: 600 }}>Prioridad {pr?.label}</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={generarAlbaran} disabled={generandoAlb} className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-sm text-white" style={{ opacity: generandoAlb ? 0.7 : 1 }}>{generandoAlb ? 'Generando…' : 'Generar albarán'}</button>
           <button onClick={() => setEditar(true)} className="rounded-xl px-4 py-2 font-semibold text-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}>Editar</button>
           <button onClick={eliminar} className="rounded-xl px-3 py-2 font-semibold text-sm" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>Eliminar</button>
         </div>
