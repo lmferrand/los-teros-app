@@ -4,11 +4,25 @@ import type { Venta } from '../tipos'
 
 const T = (n: string) => (supabase as any).from(n)
 
-// Carga todos los clientes (incluida la columna `empresa`, no tipada).
+// Carga TODOS los clientes (incluida la columna `empresa`, no tipada).
+// Supabase devuelve máximo 1000 filas por petición, así que paginamos por lotes.
 export async function listarClientes(): Promise<Cliente[]> {
-  const { data, error } = await T('clientes').select('*').order('nombre')
-  if (error) throw error
-  return (data || []) as Cliente[]
+  const LOTE = 1000
+  const todos: Cliente[] = []
+  let desde = 0
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await T('clientes')
+      .select('*')
+      .order('nombre')
+      .range(desde, desde + LOTE - 1)
+    if (error) throw error
+    const filas = (data || []) as Cliente[]
+    todos.push(...filas)
+    if (filas.length < LOTE) break
+    desde += LOTE
+  }
+  return todos
 }
 
 export async function obtenerCliente(id: string): Promise<Cliente | null> {
