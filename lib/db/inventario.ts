@@ -76,6 +76,17 @@ export async function crearMovimiento(datos: Partial<Movimiento>): Promise<Movim
   return data as Movimiento
 }
 
+// Búsqueda manual por código de equipo o referencia de material (para el escáner).
+export async function buscarItemPorCodigo(texto: string): Promise<{ tipo: 'material'; material: Material } | { tipo: 'equipo'; equipo: Equipo } | null> {
+  const t = texto.trim()
+  if (!t) return null
+  const { data: eqs } = await T('equipos').select('*').ilike('codigo', t).limit(1)
+  if (eqs && eqs.length) return { tipo: 'equipo', equipo: eqs[0] as Equipo }
+  const { data: mats } = await T('materiales').select('*').ilike('referencia', t).limit(1)
+  if (mats && mats.length) return { tipo: 'material', material: mats[0] as Material }
+  return null
+}
+
 // ----------------- Selectores (OT y trabajadores) -----------------
 export async function listarOrdenes(): Promise<{ id: string; codigo: string | null }[]> {
   const { data } = await T('ordenes').select('id, codigo').order('codigo', { ascending: false }).limit(300)
@@ -86,7 +97,50 @@ export async function listarTrabajadores(): Promise<{ id: string; nombre: string
   return (data || []) as { id: string; nombre: string | null }[]
 }
 
+// Movimientos de un ítem concreto (para el historial en su ficha).
+export async function listarMovimientosItem(campo: 'material_id' | 'equipo_id', id: string): Promise<MovimientoConRefs[]> {
+  const { data } = await T('movimientos')
+    .select('*, ordenes(codigo), perfiles(nombre)')
+    .eq(campo, id)
+    .order('fecha', { ascending: false })
+    .limit(50)
+  return (data || []) as MovimientoConRefs[]
+}
+
+// OT (y cliente) que tiene actualmente cada equipo, según la última "salida".
+export async function otPorEquipo(): Promise<Record<string, { codigo: string | null; cliente: string | null }>> {
+  const { data } = await T('movimientos')
+    .select('equipo_id, fecha, ordenes(codigo, clientes(nombre))')
+    .eq('tipo', 'salida')
+    .not('orden_id', 'is', null)
+    .order('fecha', { ascending: false })
+  const mapa: Record<string, { codigo: string | null; cliente: string | null }> = {}
+  for (const mov of (data || []) as any[]) {
+    const eqId = String(mov?.equipo_id || '')
+    if (!eqId || mapa[eqId]) continue // la primera (más reciente) gana
+    const orden = Array.isArray(mov?.ordenes) ? mov.ordenes[0] : mov?.ordenes
+    const cli = Array.isArray(orden?.clientes) ? orden.clientes[0] : orden?.clientes
+    mapa[eqId] = { codigo: orden?.codigo ?? null, cliente: cli?.nombre ?? null }
+  }
+  return mapa
+}
+
 // ----------------- Foto de material (Storage) -----------------
+const MARCADOR_FOTO = '/storage/v1/object/public/fotos-materiales/'
+
+export function pathFotoDesdeUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+  const i = url.indexOf(MARCADOR_FOTO)
+  if (i < 0) return null
+  return url.slice(i + MARCADOR_FOTO.length).split('?')[0]
+}
+
+export async function borrarFoto(url: string | null | undefined): Promise<void> {
+  const path = pathFotoDesdeUrl(url)
+  if (!path) return
+  try { await supabase.storage.from('fotos-materiales').remove([path]) } catch { /* noop */ }
+}
+
 export async function subirFotoMaterial(blob: Blob, ext = 'jpg'): Promise<string> {
   const nombre = `materiales/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
   const { error } = await supabase.storage.from('fotos-materiales').upload(nombre, blob, {

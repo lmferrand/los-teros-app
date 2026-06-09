@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/inventario'
 import { TIPOS_MOVIMIENTO, labelUnidad, type Material, type Equipo } from '@/lib/inventario'
 import { fechaCorta } from '@/lib/dominio'
+import { exportarExcel } from '@/lib/export'
 import { EstadoVacio, SkeletonLista } from '@/app/components/ui'
 
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 10, padding: '9px 11px', fontSize: '0.9rem', width: '100%', marginTop: 3 }
@@ -22,6 +23,9 @@ export default function MovimientosPage() {
   const [error, setError] = useState('')
   const [fTipo, setFTipo] = useState('')
   const [fTrab, setFTrab] = useState('')
+  const [fItem, setFItem] = useState('')
+  const [fDesde, setFDesde] = useState('')
+  const [fHasta, setFHasta] = useState('')
   const [registrar, setRegistrar] = useState(false)
 
   async function cargar() {
@@ -38,17 +42,45 @@ export default function MovimientosPage() {
   const lista = useMemo(() => movs.filter((m) => {
     if (fTipo && m.tipo !== fTipo) return false
     if (fTrab && m.tecnico_id !== fTrab) return false
+    if (fItem) {
+      const [k, id] = fItem.split(':')
+      if (k === 'mat' && m.material_id !== id) return false
+      if (k === 'eq' && m.equipo_id !== id) return false
+    }
+    if (m.fecha) {
+      const f = m.fecha.slice(0, 10)
+      if (fDesde && f < fDesde) return false
+      if (fHasta && f > fHasta) return false
+    }
     return true
-  }), [movs, fTipo, fTrab])
+  }), [movs, fTipo, fTrab, fItem, fDesde, fHasta])
+
+  function exportar() {
+    exportarExcel('movimientos.xlsx', [{
+      nombre: 'Movimientos',
+      filas: lista.map((m) => ({
+        Fecha: m.fecha ? m.fecha.slice(0, 10) : '',
+        Tipo: TIPOS_MOVIMIENTO[m.tipo]?.label || m.tipo,
+        Objeto: m.materiales?.nombre || (m.equipos ? `Equipo ${m.equipos.codigo}` : ''),
+        Cantidad: m.cantidad ?? '',
+        OT: m.ordenes?.codigo || '',
+        Trabajador: m.perfiles?.nombre || '',
+        Observaciones: m.observaciones || '',
+      })),
+    }])
+  }
 
   return (
     <div>
       <header className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <h1 className="titulo-hero" style={{ color: 'var(--text)' }}>Movimientos</h1>
-        <button onClick={() => setRegistrar(true)} className="marca-gradiente inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-semibold" style={{ boxShadow: 'var(--shadow-sm)' }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          Registrar movimiento
-        </button>
+        <div className="flex gap-2">
+          <button onClick={exportar} className="rounded-xl px-3 py-2.5 text-sm font-semibold" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}>Excel</button>
+          <button onClick={() => setRegistrar(true)} className="marca-gradiente inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-white font-semibold" style={{ boxShadow: 'var(--shadow-sm)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            Registrar
+          </button>
+        </div>
       </header>
 
       <div className="card p-3 mb-4 flex flex-wrap gap-2 items-center">
@@ -60,7 +92,14 @@ export default function MovimientosPage() {
           <option value="">Todos los trabajadores</option>
           {trabajadores.map((t) => <option key={t.id} value={t.id}>{t.nombre || t.id.slice(0, 8)}</option>)}
         </select>
-        {(fTipo || fTrab) && <button onClick={() => { setFTipo(''); setFTrab('') }} className="text-sm px-2 py-2" style={{ color: 'var(--text-subtle)' }}>Limpiar</button>}
+        <select value={fItem} onChange={(e) => setFItem(e.target.value)} className="rounded-lg px-2.5 py-2 text-sm" style={{ background: 'var(--bg)', border: `1px solid ${fItem ? 'var(--brand-1)' : 'var(--border)'}`, color: 'var(--text)' }}>
+          <option value="">Todos los ítems</option>
+          <optgroup label="Materiales">{materiales.map((m) => <option key={m.id} value={`mat:${m.id}`}>{m.nombre}</option>)}</optgroup>
+          <optgroup label="Equipos">{equipos.map((eq) => <option key={eq.id} value={`eq:${eq.id}`}>{eq.codigo}</option>)}</optgroup>
+        </select>
+        <input type="date" value={fDesde} onChange={(e) => setFDesde(e.target.value)} title="Desde" className="rounded-lg px-2 py-2 text-sm" style={{ background: 'var(--bg)', border: `1px solid ${fDesde ? 'var(--brand-1)' : 'var(--border)'}`, color: 'var(--text)' }} />
+        <input type="date" value={fHasta} onChange={(e) => setFHasta(e.target.value)} title="Hasta" className="rounded-lg px-2 py-2 text-sm" style={{ background: 'var(--bg)', border: `1px solid ${fHasta ? 'var(--brand-1)' : 'var(--border)'}`, color: 'var(--text)' }} />
+        {(fTipo || fTrab || fItem || fDesde || fHasta) && <button onClick={() => { setFTipo(''); setFTrab(''); setFItem(''); setFDesde(''); setFHasta('') }} className="text-sm px-2 py-2" style={{ color: 'var(--text-subtle)' }}>Limpiar</button>}
       </div>
 
       {error && <div className="card p-4 mb-4 text-sm" style={{ color: 'var(--red)' }}>{error}</div>}

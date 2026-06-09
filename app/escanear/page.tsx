@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { obtenerMaterial, obtenerEquipo, fijarStock, crearMovimiento, cambiarEstadoEquipo } from '@/lib/db/inventario'
+import { obtenerMaterial, obtenerEquipo, fijarStock, crearMovimiento, cambiarEstadoEquipo, buscarItemPorCodigo } from '@/lib/db/inventario'
 import { labelUnidad, labelTipoEquipo, ESTADOS_EQUIPO, type Material, type Equipo } from '@/lib/inventario'
 
 type Resultado =
@@ -14,7 +14,15 @@ export default function EscanearPage() {
   const [estado, setEstado] = useState<'idle' | 'escaneando' | 'resultado'>('idle')
   const [resultado, setResultado] = useState<Resultado>(null)
   const [error, setError] = useState('')
+  const [manual, setManual] = useState('')
   const scannerRef = useRef<any>(null)
+
+  async function buscarManual() {
+    setError('')
+    const r = await buscarItemPorCodigo(manual)
+    if (r) { setResultado(r); setEstado('resultado'); setManual('') }
+    else setError('No se encontró ningún ítem con ese código/referencia.')
+  }
 
   async function pararScanner() {
     const sc = scannerRef.current
@@ -90,6 +98,16 @@ export default function EscanearPage() {
           <div className="font-semibold" style={{ color: 'var(--text)' }}>Abrir cámara</div>
           <div className="text-sm" style={{ color: 'var(--text-muted)' }}>Apunta al QR del material o equipo</div>
         </button>
+      )}
+
+      {estado === 'idle' && (
+        <div className="card p-4 mt-3">
+          <div className="text-xs font-medium mb-2" style={{ color: 'var(--text-subtle)' }}>¿Sin cámara o QR dañado? Busca por código de equipo o referencia de material:</div>
+          <div className="flex gap-2">
+            <input value={manual} onChange={(e) => setManual(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscarManual() }} placeholder="Código / referencia" className="flex-1 rounded-lg px-3 py-2 text-sm" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }} />
+            <button onClick={buscarManual} className="marca-gradiente rounded-lg px-4 py-2 text-white text-sm font-semibold">Buscar</button>
+          </div>
+        </div>
       )}
 
       {estado === 'escaneando' && (
