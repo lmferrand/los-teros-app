@@ -84,9 +84,16 @@ function SeccionColapsable({ sec, pathname, onNav }: { sec: { titulo: string; it
   )
 }
 
+const IconoInicio = Ico('M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10')
+
 function Enlaces({ pathname, onNav }: { pathname: string; onNav?: () => void }) {
+  const inicioOn = activo(pathname, '/inicio')
   return (
     <nav className="flex flex-col gap-3 flex-1 overflow-y-auto">
+      <Link href="/inicio" onClick={onNav} className={`nav-item ${inicioOn ? 'nav-item-activo' : ''}`}>
+        <IconoInicio />
+        <span>Inicio</span>
+      </Link>
       {SECCIONES.map((sec) => (
         <SeccionColapsable key={sec.titulo} sec={sec} pathname={pathname} onNav={onNav} />
       ))}

@@ -9,7 +9,7 @@ export default function Home() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      router.replace(data.user ? '/dashboard' : '/login')
+      router.replace(data.user ? '/inicio' : '/login')
     })
   }, [router])
 

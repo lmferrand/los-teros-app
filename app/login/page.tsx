@@ -15,7 +15,7 @@ export default function LoginPage() {
   // Si ya hay sesión, ir directo al dashboard.
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) router.replace('/dashboard')
+      if (data.user) router.replace('/inicio')
     })
   }, [router])
 
@@ -29,7 +29,7 @@ export default function LoginPage() {
       setError('Email o contraseña incorrectos.')
       return
     }
-    router.replace('/dashboard')
+    router.replace('/inicio')
   }
 
   return (
