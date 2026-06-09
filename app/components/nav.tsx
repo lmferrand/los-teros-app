@@ -29,6 +29,7 @@ const FINANCIERO: ItemNav[] = [
 ]
 
 const OPERACIONES: ItemNav[] = [
+  { href: '/clientes', label: 'Clientes', icono: Ico('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75') },
   { href: '/inventario', label: 'Inventario', icono: Ico('M21 8V6a2 2 0 0 0-2-2h-3M3 8V6a2 2 0 0 1 2-2h3m-5 8v6a2 2 0 0 0 2 2h3m13-8v6a2 2 0 0 1-2 2h-3M8 12h8') },
   { href: '/movimientos', label: 'Movimientos', icono: Ico('M7 16V4m0 0L3 8m4-4 4 4m6 0v12m0 0 4-4m-4 4-4-4') },
   { href: '/escanear', label: 'Escanear', icono: Ico('M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10') },
