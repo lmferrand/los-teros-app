@@ -11,7 +11,7 @@ export interface OrdenConRefs extends Orden {
 
 export async function listarOrdenes(): Promise<OrdenConRefs[]> {
   const { data, error } = await T('ordenes')
-    .select('*, clientes(nombre), perfiles(nombre)')
+    .select('*, clientes(nombre), perfiles!tecnico_id(nombre)')
     .order('fecha_programada', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -19,7 +19,7 @@ export async function listarOrdenes(): Promise<OrdenConRefs[]> {
 }
 
 export async function obtenerOrden(id: string): Promise<OrdenConRefs | null> {
-  const { data } = await T('ordenes').select('*, clientes(nombre), perfiles(nombre)').eq('id', id).maybeSingle()
+  const { data } = await T('ordenes').select('*, clientes(nombre), perfiles!tecnico_id(nombre)').eq('id', id).maybeSingle()
   return (data as OrdenConRefs) || null
 }
 
