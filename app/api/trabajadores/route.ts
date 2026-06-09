@@ -38,7 +38,9 @@ export async function PUT(req: Request) {
   const { id, password } = body || {}
   if (!id || !password) return NextResponse.json({ error: 'Faltan id o contraseña' }, { status: 400 })
   const sb = admin()
-  const { error } = await sb.auth.admin.updateUserById(id, { password: String(password) })
+  // Cambiar contraseña y, de paso, confirmar el email (por si era un usuario
+  // antiguo sin confirmar, que no podría iniciar sesión).
+  const { error } = await sb.auth.admin.updateUserById(id, { password: String(password), email_confirm: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true })
 }

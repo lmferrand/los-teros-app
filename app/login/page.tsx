@@ -26,7 +26,9 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     setCargando(false)
     if (error) {
-      setError('Email o contraseña incorrectos.')
+      const m = (error.message || '').toLowerCase()
+      if (m.includes('confirm')) setError('Tu email no está confirmado. Pide que te restablezcan la contraseña (eso lo confirma) e inténtalo de nuevo.')
+      else setError('Email o contraseña incorrectos.')
       return
     }
     router.replace('/inicio')
