@@ -40,7 +40,7 @@ export default function LoginPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Los Teros" className="mx-auto mb-2" style={{ width: 140, height: 'auto' }} />
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Control financiero
+            Gestión de empresa
           </p>
         </div>
 

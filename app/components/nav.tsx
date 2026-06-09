@@ -46,25 +46,49 @@ function activo(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/')
 }
 
+function seccionContieneActivo(sec: { items: ItemNav[] }, pathname: string) {
+  return sec.items.some((it) => activo(pathname, it.href))
+}
+
+function SeccionColapsable({ sec, pathname, onNav }: { sec: { titulo: string; items: ItemNav[] }; pathname: string; onNav?: () => void }) {
+  const [abierta, setAbierta] = useState(() => seccionContieneActivo(sec, pathname))
+  useEffect(() => { if (seccionContieneActivo(sec, pathname)) setAbierta(true) }, [pathname, sec])
+  return (
+    <div>
+      <button
+        onClick={() => setAbierta((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg"
+        style={{ color: 'var(--text-subtle)' }}
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-wide">{sec.titulo}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          style={{ transform: abierta ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 160ms ease' }}>
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </button>
+      {abierta && (
+        <div className="flex flex-col gap-1 mt-1">
+          {sec.items.map((it) => {
+            const Icono = it.icono
+            const on = activo(pathname, it.href)
+            return (
+              <Link key={it.href} href={it.href} onClick={onNav} className={`nav-item ${on ? 'nav-item-activo' : ''}`}>
+                <Icono />
+                <span>{it.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Enlaces({ pathname, onNav }: { pathname: string; onNav?: () => void }) {
   return (
-    <nav className="flex flex-col gap-4 flex-1 overflow-y-auto">
+    <nav className="flex flex-col gap-3 flex-1 overflow-y-auto">
       {SECCIONES.map((sec) => (
-        <div key={sec.titulo}>
-          <div className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-subtle)' }}>{sec.titulo}</div>
-          <div className="flex flex-col gap-1">
-            {sec.items.map((it) => {
-              const Icono = it.icono
-              const on = activo(pathname, it.href)
-              return (
-                <Link key={it.href} href={it.href} onClick={onNav} className={`nav-item ${on ? 'nav-item-activo' : ''}`}>
-                  <Icono />
-                  <span>{it.label}</span>
-                </Link>
-              )
-            })}
-          </div>
-        </div>
+        <SeccionColapsable key={sec.titulo} sec={sec} pathname={pathname} onNav={onNav} />
       ))}
     </nav>
   )
@@ -100,7 +124,7 @@ export function Sidebar({ perfil }: { perfil: Perfil | null }) {
       <div className="px-2 mb-5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="Los Teros" style={{ width: 128, height: 'auto' }} className="mb-1" />
-        <div className="text-xs mb-3" style={{ color: 'var(--text-subtle)' }}>Control financiero</div>
+        <div className="text-xs mb-3" style={{ color: 'var(--text-subtle)' }}>Gestión de empresa</div>
         <ToggleIva />
       </div>
       <Enlaces pathname={pathname} />
@@ -127,7 +151,7 @@ export function MobileMenu({ perfil }: { perfil: Perfil | null }) {
               <div>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logo.png" alt="Los Teros" style={{ width: 120, height: 'auto' }} className="mb-1" />
-                <div className="text-xs" style={{ color: 'var(--text-subtle)' }}>Control financiero</div>
+                <div className="text-xs" style={{ color: 'var(--text-subtle)' }}>Gestión de empresa</div>
               </div>
               <button onClick={() => setAbierto(false)} className="text-2xl leading-none px-2" style={{ color: 'var(--text-subtle)' }}>×</button>
             </div>

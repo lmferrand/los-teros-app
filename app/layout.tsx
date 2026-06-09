@@ -16,11 +16,11 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Los Teros — Control financiero",
-  description: "Control de ventas, cobros, facturación, IVA y márgenes — Extracciones Teros",
+  title: "Los Teros — Gestión",
+  description: "App de gestión integral de Extracciones Teros: financiero, clientes, órdenes de trabajo, inventario y más.",
   openGraph: {
-    title: "Los Teros — Control financiero",
-    description: "Control de ventas, cobros, facturación, IVA y márgenes",
+    title: "Los Teros — Gestión",
+    description: "Gestión integral de la empresa: financiero, clientes, órdenes, inventario y más.",
     url: siteUrl,
     siteName: "Los Teros",
     images: [{ url: "/logo.png", width: 500, height: 500, alt: "Los Teros" }],
