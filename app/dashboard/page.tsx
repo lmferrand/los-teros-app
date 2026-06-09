@@ -9,7 +9,7 @@ import {
   esMargenBajo, esSobrecoste, esCobradoNoProgramado, esTerminadoNoFacturado,
   esTurbinaSinDevolver, esBloqueado, esPendienteEjecutar, esListoFacturar,
 } from '@/lib/agregados'
-import { eur, pct, etiquetaMes, colorMargen } from '@/lib/dominio'
+import { eur, pct, etiquetaMes, colorMargen, nivelMargen } from '@/lib/dominio'
 import { SkeletonLista } from '@/app/components/ui'
 
 function sumarMes(clave: string, meses: number): string {
@@ -70,6 +70,39 @@ export default function DashboardPage() {
         <SkeletonLista filas={4} />
       ) : (
         <>
+          {/* TARJETA CLAVE — cómo va el mes de verdad (al margen del desfase) */}
+          {(() => {
+            const keyPct = margenRealPct ?? margenEstPct
+            const nivel = nivelMargen(keyPct)
+            const color = colorMargen(keyPct)
+            const sinVentas = resumen.ventasAceptadas <= 0
+            const veredicto = sinVentas ? 'Aún sin ventas aceptadas este mes'
+              : nivel === 'correcto' ? 'Mes saludable' : nivel === 'preventivo' ? 'Margen ajustado, a vigilar' : 'Margen bajo este mes'
+            return (
+              <div className="card p-5 md:p-6 mb-4" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--brand-1) 9%, var(--bg-card)), color-mix(in srgb, var(--teal) 7%, var(--bg-card)))', border: '1px solid color-mix(in srgb, var(--brand-1) 28%, var(--border))', boxShadow: 'var(--shadow-md)' }}>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-1)' }}>Negocio cerrado · {etiquetaMes(clave)}</div>
+                    <div className="font-bold mt-1" style={{ color: 'var(--text)', fontSize: 'clamp(2rem, 5vw, 3rem)', lineHeight: 1.05 }}>{eur(resumen.ventasAceptadas)}</div>
+                    <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{resumen.ventasAceptadasCount} presupuesto{resumen.ventasAceptadasCount === 1 ? '' : 's'} aceptado{resumen.ventasAceptadasCount === 1 ? '' : 's'} este mes</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="rounded-2xl px-4 py-3" style={{ background: `color-mix(in srgb, ${color} 16%, var(--bg-card))`, border: `1px solid ${color}` }}>
+                      <div className="text-[11px] font-semibold uppercase" style={{ color }}>Margen real</div>
+                      <div className="font-bold" style={{ color, fontSize: '1.9rem', lineHeight: 1.1 }}>{pct(keyPct)}</div>
+                      <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{eur(resumen.margenReal)}</div>
+                    </div>
+                    <div className="text-sm font-semibold mt-2" style={{ color }}>{veredicto}</div>
+                  </div>
+                </div>
+                <div className="text-xs mt-3 pt-3" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
+                  Refleja lo realmente vendido este mes, al margen de cuándo se cobre o facture.
+                  {resumen.ventasFuturaFacturacion > 0 && <> De esto, <b style={{ color: 'var(--text)' }}>{eur(resumen.ventasFuturaFacturacion)}</b> se facturará en meses posteriores.</>}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* KPIs del mes */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
             <Kpi label="Ventas aceptadas" valor={eur(resumen.ventasAceptadas)} sub={`${resumen.ventasAceptadasCount} presup.`} color="var(--brand-1)" />
