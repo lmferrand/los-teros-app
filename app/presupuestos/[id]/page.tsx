@@ -6,6 +6,7 @@ import Link from 'next/link'
 import type { Venta, Gasto } from '@/lib/tipos'
 import { obtenerVenta, borrarVenta } from '@/lib/db/ventas'
 import { listarGastos } from '@/lib/db/gastos'
+import { crearOrden } from '@/lib/db/ordenes'
 import { calcularVenta } from '@/lib/calculos'
 import {
   eur, pct, fechaCorta, labelTipoTrabajo, nivelMargen, colorMargen, labelMargen,
@@ -25,6 +26,7 @@ export default function FichaPresupuesto() {
   const [gastos, setGastos] = useState<Gasto[]>([])
   const [cargando, setCargando] = useState(true)
   const [borrando, setBorrando] = useState(false)
+  const [generando, setGenerando] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -42,6 +44,29 @@ export default function FichaPresupuesto() {
     setBorrando(true)
     await borrarVenta(id)
     router.push('/presupuestos')
+  }
+
+  function tipoOtDesde(t: string | null): string {
+    if (t === 'sustitucion_turbina') return 'sustitucion'
+    if (t === 'reparacion') return 'mantenimiento'
+    if (t === 'limpieza' || t === 'instalacion') return t
+    return 'otro'
+  }
+  async function generarOT() {
+    if (!venta) return
+    setGenerando(true)
+    try {
+      const o = await crearOrden({
+        cliente_id: venta.cliente_id,
+        tipo: tipoOtDesde(venta.tipo_trabajo),
+        estado: 'pendiente',
+        prioridad: '2',
+        fecha_programada: venta.fecha_prevista_ejecucion ? new Date(venta.fecha_prevista_ejecucion).toISOString() : null,
+        descripcion: `Desde presupuesto ${venta.numero || ''} — ${venta.cliente || ''}`.trim(),
+        observaciones: venta.observaciones || null,
+      })
+      router.push(`/ordenes/${o.id}`)
+    } catch { setGenerando(false) }
   }
 
   if (cargando) return <SkeletonLista filas={4} />
@@ -66,6 +91,9 @@ export default function FichaPresupuesto() {
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={generarOT} disabled={generando} className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-sm text-white" style={{ opacity: generando ? 0.7 : 1 }}>
+            {generando ? 'Generando…' : 'Generar OT'}
+          </button>
           <Link href={`/presupuestos/${id}/editar`} className="rounded-xl px-4 py-2 font-semibold text-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}>
             Editar
           </Link>
