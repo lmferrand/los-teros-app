@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useSesion } from '@/lib/sesion'
-import { listarPerfiles, actualizarPerfil, crearTrabajador, eliminarTrabajador } from '@/lib/db/trabajadores'
+import { listarPerfiles, actualizarPerfil, crearTrabajador, eliminarTrabajador, listarEmails, restablecerPassword } from '@/lib/db/trabajadores'
 import { ROLES, labelRol, colorRol, generarPassword, type Trabajador } from '@/lib/trabajadores'
 import { EstadoVacio, SkeletonLista } from '@/app/components/ui'
 
@@ -12,13 +12,18 @@ const PUEDE_GESTIONAR = ['gerente', 'oficina', 'supervisor']
 export default function TrabajadoresPage() {
   const { perfil } = useSesion()
   const [trabajadores, setTrabajadores] = useState<Trabajador[]>([])
+  const [emails, setEmails] = useState<Record<string, string | undefined>>({})
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
   const [nuevo, setNuevo] = useState(false)
   const [editar, setEditar] = useState<Trabajador | null>(null)
+  const [reset, setReset] = useState<Trabajador | null>(null)
 
   async function cargar() {
-    try { setTrabajadores(await listarPerfiles()) }
+    try {
+      const [ps, em] = await Promise.all([listarPerfiles(), listarEmails()])
+      setTrabajadores(ps); setEmails(em)
+    }
     catch (e: any) { setError(e.message || 'Error') }
     finally { setCargando(false) }
   }
@@ -64,7 +69,9 @@ export default function TrabajadoresPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-semibold truncate" style={{ color: 'var(--text)' }}>{t.nombre}</div>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{t.telefono || 'Sin teléfono'}{t.activo === false ? ' · inactivo' : ''}</div>
+                <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                  {emails[t.id] || 'sin email'}{t.telefono ? ` · ${t.telefono}` : ''}{t.activo === false ? ' · inactivo' : ''}
+                </div>
               </div>
               {gestor ? (
                 <select value={t.rol || ''} onChange={(e) => cambiarRol(t.id, e.target.value)} className="text-xs rounded-lg px-2 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>
@@ -75,6 +82,7 @@ export default function TrabajadoresPage() {
               )}
               {gestor && (
                 <div className="flex gap-1.5">
+                  <button onClick={() => setReset(t)} className="text-xs font-semibold rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--brand-1)' }} title="Restablecer contraseña">🔑</button>
                   <button onClick={() => setEditar(t)} className="text-xs font-semibold rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>Editar</button>
                   <button onClick={() => eliminar(t)} className="text-xs font-semibold rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--red)' }}>×</button>
                 </div>
@@ -86,7 +94,45 @@ export default function TrabajadoresPage() {
 
       {nuevo && <NuevoForm onCerrar={() => setNuevo(false)} onCreado={() => { setNuevo(false); cargar() }} />}
       {editar && <EditarForm trabajador={editar} onCerrar={() => setEditar(null)} onGuardado={() => { setEditar(null); cargar() }} />}
+      {reset && <ResetForm trabajador={reset} email={emails[reset.id]} onCerrar={() => setReset(null)} />}
     </div>
+  )
+}
+
+function ResetForm({ trabajador, email, onCerrar }: { trabajador: Trabajador; email?: string; onCerrar: () => void }) {
+  const [password, setPassword] = useState(generarPassword())
+  const [guardando, setGuardando] = useState(false)
+  const [hecho, setHecho] = useState(false)
+  const [err, setErr] = useState('')
+  async function aplicar() {
+    setGuardando(true); setErr('')
+    try { await restablecerPassword(trabajador.id, password); setHecho(true) }
+    catch (e: any) { setErr(e.message); setGuardando(false) }
+  }
+  return (
+    <Modal titulo={`Contraseña · ${trabajador.nombre}`} onCerrar={onCerrar}>
+      {err && <div className="text-sm mb-3 rounded-lg px-3 py-2" style={{ background: 'color-mix(in srgb, var(--red) 10%, transparent)', color: 'var(--red)' }}>{err}</div>}
+      <div className="rounded-xl p-3 mb-3" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+        <div className="text-sm" style={{ color: 'var(--text)' }}><b>Usuario:</b> {email || '—'}</div>
+      </div>
+      <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>La contraseña actual no se puede ver (está cifrada). Aquí puedes ponerle una nueva y compartirla.</p>
+      {hecho ? (
+        <div className="rounded-xl p-3 mb-4" style={{ background: 'color-mix(in srgb, var(--green) 8%, var(--bg))', border: '1px solid var(--green)' }}>
+          <div className="text-sm font-semibold mb-1" style={{ color: 'var(--green)' }}>Contraseña actualizada ✓</div>
+          <div className="text-sm" style={{ color: 'var(--text)' }}><b>Usuario:</b> {email || '—'}</div>
+          <div className="text-sm" style={{ color: 'var(--text)' }}><b>Nueva contraseña:</b> <span style={{ fontFamily: 'monospace' }}>{password}</span></div>
+        </div>
+      ) : (
+        <div className="flex gap-2 mb-2">
+          <input value={password} onChange={(e) => setPassword(e.target.value)} style={{ ...inp, fontFamily: 'monospace', marginTop: 0 }} />
+          <button type="button" onClick={() => setPassword(generarPassword())} className="rounded-lg px-3 text-sm font-semibold whitespace-nowrap" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--brand-1)' }}>Generar</button>
+        </div>
+      )}
+      <div className="flex gap-3 justify-end mt-4">
+        <button onClick={onCerrar} className="rounded-xl px-4 py-2 font-semibold" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>{hecho ? 'Cerrar' : 'Cancelar'}</button>
+        {!hecho && <button onClick={aplicar} disabled={guardando} className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-white" style={{ opacity: guardando ? 0.7 : 1 }}>{guardando ? 'Aplicando…' : 'Restablecer'}</button>}
+      </div>
+    </Modal>
   )
 }
 

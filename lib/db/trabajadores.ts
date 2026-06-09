@@ -22,6 +22,18 @@ export async function crearTrabajador(payload: { email: string; password: string
   return data
 }
 
+export async function listarEmails(): Promise<Record<string, string | undefined>> {
+  const res = await fetch('/api/trabajadores', { method: 'GET' })
+  const data = await res.json().catch(() => ({ emails: {} }))
+  return data.emails || {}
+}
+
+export async function restablecerPassword(id: string, password: string) {
+  const res = await fetch('/api/trabajadores', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, password }) })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'No se pudo restablecer la contraseña')
+}
+
 export async function eliminarTrabajador(id: string) {
   const res = await fetch('/api/trabajadores', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
   const data = await res.json().catch(() => ({}))

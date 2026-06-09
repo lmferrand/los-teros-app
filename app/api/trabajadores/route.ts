@@ -9,6 +9,40 @@ function admin() {
   })
 }
 
+// Lista de emails por id (el email vive en Auth, no en perfiles).
+export async function GET() {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ emails: {} })
+  }
+  const sb = admin()
+  const emails: Record<string, string | undefined> = {}
+  let page = 1
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await sb.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) break
+    for (const u of data.users) emails[u.id] = u.email ?? undefined
+    if (data.users.length < 1000) break
+    page++
+  }
+  return NextResponse.json({ emails })
+}
+
+// Restablecer la contraseña de un trabajador (pone una nueva).
+export async function PUT(req: Request) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return NextResponse.json({ error: 'SUPABASE_SERVICE_ROLE_KEY no configurada' }, { status: 501 })
+  }
+  let body: any
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 }) }
+  const { id, password } = body || {}
+  if (!id || !password) return NextResponse.json({ error: 'Faltan id o contraseña' }, { status: 400 })
+  const sb = admin()
+  const { error } = await sb.auth.admin.updateUserById(id, { password: String(password) })
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true })
+}
+
 // Crear trabajador con contraseña.
 export async function POST(req: Request) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
