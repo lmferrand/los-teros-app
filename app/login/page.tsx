@@ -28,7 +28,8 @@ export default function LoginPage() {
       setCargando(false)
       const m = (error.message || '').toLowerCase()
       if (m.includes('confirm')) setError('Tu email no está confirmado. Pide que te restablezcan la contraseña (eso lo confirma) e inténtalo de nuevo.')
-      else setError('Email o contraseña incorrectos.')
+      else if (m.includes('invalid login')) setError('Email o contraseña incorrectos.')
+      else setError(`No se pudo entrar: ${error.message}`)
       return
     }
     if (!data.session) {
