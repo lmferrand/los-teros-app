@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSesion } from '@/lib/sesion'
 import { listarPerfiles, actualizarPerfil, crearTrabajador, eliminarTrabajador, listarEmails, restablecerPassword } from '@/lib/db/trabajadores'
 import { ROLES, labelRol, colorRol, generarPassword, type Trabajador } from '@/lib/trabajadores'
+import { MODULOS, esAdmin, tienePermisosPersonalizados } from '@/lib/acceso'
 import { EstadoVacio, SkeletonLista } from '@/app/components/ui'
 
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 10, padding: '9px 11px', fontSize: '0.9rem', width: '100%', marginTop: 3 }
@@ -18,6 +19,7 @@ export default function TrabajadoresPage() {
   const [nuevo, setNuevo] = useState(false)
   const [editar, setEditar] = useState<Trabajador | null>(null)
   const [reset, setReset] = useState<Trabajador | null>(null)
+  const [permisos, setPermisos] = useState<Trabajador | null>(null)
 
   async function cargar() {
     try {
@@ -82,6 +84,7 @@ export default function TrabajadoresPage() {
               )}
               {gestor && (
                 <div className="flex gap-1.5">
+                  <button onClick={() => setPermisos(t)} className="text-xs font-semibold rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }} title="Permisos / accesos">Accesos</button>
                   <button onClick={() => setReset(t)} className="text-xs font-semibold rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--brand-1)' }} title="Restablecer contraseña">🔑</button>
                   <button onClick={() => setEditar(t)} className="text-xs font-semibold rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>Editar</button>
                   <button onClick={() => eliminar(t)} className="text-xs font-semibold rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--red)' }}>×</button>
@@ -95,7 +98,64 @@ export default function TrabajadoresPage() {
       {nuevo && <NuevoForm onCerrar={() => setNuevo(false)} onCreado={() => { setNuevo(false); cargar() }} />}
       {editar && <EditarForm trabajador={editar} onCerrar={() => setEditar(null)} onGuardado={() => { setEditar(null); cargar() }} />}
       {reset && <ResetForm trabajador={reset} email={emails[reset.id]} onCerrar={() => setReset(null)} />}
+      {permisos && <PermisosForm trabajador={permisos} onCerrar={() => setPermisos(null)} onGuardado={() => { setPermisos(null); cargar() }} />}
     </div>
+  )
+}
+
+function PermisosForm({ trabajador, onCerrar, onGuardado }: { trabajador: Trabajador; onCerrar: () => void; onGuardado: () => void }) {
+  const admin = esAdmin(trabajador.rol)
+  const [total, setTotal] = useState(!tienePermisosPersonalizados(trabajador))
+  const [perms, setPerms] = useState<Record<string, boolean>>(() => {
+    const base: Record<string, boolean> = {}
+    const actual = trabajador.permisos_modulos || {}
+    const custom = tienePermisosPersonalizados(trabajador)
+    for (const m of MODULOS) base[m.modulo] = custom ? actual[m.modulo] === true : true
+    return base
+  })
+  const [guardando, setGuardando] = useState(false)
+  const toggle = (m: string) => setPerms((p) => ({ ...p, [m]: !p[m] }))
+
+  async function guardar() {
+    setGuardando(true)
+    try {
+      // Acceso total → sin restricciones (null). Si no, guarda el mapa explícito.
+      const valor = total ? null : MODULOS.reduce((acc, m) => { acc[m.modulo] = !!perms[m.modulo]; return acc }, {} as Record<string, boolean>)
+      await actualizarPerfil(trabajador.id, { permisos_modulos: valor as any })
+      onGuardado()
+    } catch { setGuardando(false) }
+  }
+
+  const secciones: ('Financiero' | 'Operaciones')[] = ['Financiero', 'Operaciones']
+  return (
+    <Modal titulo={`Accesos · ${trabajador.nombre}`} onCerrar={onCerrar}>
+      {admin && <div className="text-xs mb-3 rounded-lg px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}>Es {labelRol(trabajador.rol)}: tiene acceso a todo igualmente.</div>}
+      <label className="flex items-center gap-2 mb-3 cursor-pointer">
+        <input type="checkbox" checked={total} onChange={(e) => setTotal(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--brand-1)' }} />
+        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Acceso total (todos los módulos)</span>
+      </label>
+      {!total && (
+        <div className="flex flex-col gap-3 max-h-[50vh] overflow-y-auto pr-1">
+          {secciones.map((sec) => (
+            <div key={sec}>
+              <div className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-subtle)' }}>{sec}</div>
+              <div className="flex flex-col gap-1">
+                {MODULOS.filter((m) => m.seccion === sec).map((m) => (
+                  <label key={m.modulo} className="flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer" style={{ background: 'var(--bg)' }}>
+                    <input type="checkbox" checked={!!perms[m.modulo]} onChange={() => toggle(m.modulo)} style={{ width: 16, height: 16, accentColor: 'var(--brand-1)' }} />
+                    <span className="text-sm" style={{ color: 'var(--text)' }}>{m.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-3 justify-end mt-5">
+        <button onClick={onCerrar} className="rounded-xl px-4 py-2 font-semibold" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)' }}>Cancelar</button>
+        <button onClick={guardar} disabled={guardando} className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-white" style={{ opacity: guardando ? 0.7 : 1 }}>{guardando ? 'Guardando…' : 'Guardar'}</button>
+      </div>
+    </Modal>
   )
 }
 

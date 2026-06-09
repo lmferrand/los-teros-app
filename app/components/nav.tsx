@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { cerrarSesion, type Perfil } from '@/lib/sesion'
+import { tieneAcceso } from '@/lib/acceso'
 import ToggleIva from './ToggleIva'
 
 export interface ItemNav {
@@ -49,13 +50,15 @@ function activo(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(href + '/')
 }
 
-function seccionContieneActivo(sec: { items: ItemNav[] }, pathname: string) {
-  return sec.items.some((it) => activo(pathname, it.href))
+function seccionContieneActivo(items: ItemNav[], pathname: string) {
+  return items.some((it) => activo(pathname, it.href))
 }
 
-function SeccionColapsable({ sec, pathname, onNav }: { sec: { titulo: string; items: ItemNav[] }; pathname: string; onNav?: () => void }) {
-  const [abierta, setAbierta] = useState(() => seccionContieneActivo(sec, pathname))
-  useEffect(() => { if (seccionContieneActivo(sec, pathname)) setAbierta(true) }, [pathname, sec])
+function SeccionColapsable({ sec, pathname, perfil, onNav }: { sec: { titulo: string; items: ItemNav[] }; pathname: string; perfil: Perfil | null; onNav?: () => void }) {
+  const items = sec.items.filter((it) => tieneAcceso(perfil, it.href.slice(1)))
+  const [abierta, setAbierta] = useState(() => seccionContieneActivo(items, pathname))
+  useEffect(() => { if (seccionContieneActivo(items, pathname)) setAbierta(true) }, [pathname, items])
+  if (items.length === 0) return null
   return (
     <div>
       <button
@@ -77,7 +80,7 @@ function SeccionColapsable({ sec, pathname, onNav }: { sec: { titulo: string; it
               <ToggleIva />
             </div>
           )}
-          {sec.items.map((it) => {
+          {items.map((it) => {
             const Icono = it.icono
             const on = activo(pathname, it.href)
             return (
@@ -95,7 +98,7 @@ function SeccionColapsable({ sec, pathname, onNav }: { sec: { titulo: string; it
 
 const IconoInicio = Ico('M3 12l9-9 9 9M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10')
 
-function Enlaces({ pathname, onNav }: { pathname: string; onNav?: () => void }) {
+function Enlaces({ pathname, perfil, onNav }: { pathname: string; perfil: Perfil | null; onNav?: () => void }) {
   const inicioOn = activo(pathname, '/inicio')
   return (
     <nav className="flex flex-col gap-3 flex-1 overflow-y-auto">
@@ -104,7 +107,7 @@ function Enlaces({ pathname, onNav }: { pathname: string; onNav?: () => void }) 
         <span>Inicio</span>
       </Link>
       {SECCIONES.map((sec) => (
-        <SeccionColapsable key={sec.titulo} sec={sec} pathname={pathname} onNav={onNav} />
+        <SeccionColapsable key={sec.titulo} sec={sec} pathname={pathname} perfil={perfil} onNav={onNav} />
       ))}
     </nav>
   )
@@ -142,7 +145,7 @@ export function Sidebar({ perfil }: { perfil: Perfil | null }) {
         <img src="/logo.png" alt="Los Teros" style={{ width: 128, height: 'auto' }} className="mb-1" />
         <div className="text-xs" style={{ color: 'var(--text-subtle)' }}>Gestión de empresa</div>
       </div>
-      <Enlaces pathname={pathname} />
+      <Enlaces pathname={pathname} perfil={perfil} />
       <PieUsuario perfil={perfil} />
     </aside>
   )
@@ -170,7 +173,7 @@ export function MobileMenu({ perfil }: { perfil: Perfil | null }) {
               </div>
               <button onClick={() => setAbierto(false)} className="text-2xl leading-none px-2" style={{ color: 'var(--text-subtle)' }}>×</button>
             </div>
-            <Enlaces pathname={pathname} onNav={() => setAbierto(false)} />
+            <Enlaces pathname={pathname} perfil={perfil} onNav={() => setAbierto(false)} />
             <PieUsuario perfil={perfil} onNav={() => setAbierto(false)} />
           </div>
         </div>

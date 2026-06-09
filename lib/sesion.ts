@@ -9,6 +9,7 @@ export interface Perfil {
   id: string
   nombre: string | null
   rol: string | null
+  permisos_modulos?: Record<string, boolean> | null
 }
 
 interface EstadoSesion {
@@ -44,7 +45,7 @@ export function useSesion(): EstadoSesion {
 
       let perfil: Perfil | null = null
       const { data: filaPerfil } = await (supabase.from('perfiles') as any)
-        .select('id, nombre, rol')
+        .select('id, nombre, rol, permisos_modulos')
         .eq('id', user.id)
         .maybeSingle()
       if (filaPerfil) perfil = filaPerfil as Perfil

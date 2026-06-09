@@ -1,6 +1,9 @@
 'use client'
 
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useSesion } from '@/lib/sesion'
+import { tieneAcceso } from '@/lib/acceso'
 import { Sidebar, MobileMenu } from './nav'
 
 // Envuelve las páginas privadas con el chrome (sidebar en escritorio, menú
@@ -8,6 +11,9 @@ import { Sidebar, MobileMenu } from './nav'
 // sesión, useSesion redirige a /login.
 export default function SidebarLayout({ children }: { children: React.ReactNode }) {
   const { user, perfil, cargando } = useSesion()
+  const pathname = usePathname()
+  const modulo = pathname.split('/')[1] || 'inicio'
+  const permitido = tieneAcceso(perfil, modulo)
 
   if (cargando || !user) {
     return (
@@ -36,7 +42,16 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
       <main className="md:pl-64">
         <div className="mx-auto w-full max-w-6xl px-4 md:px-8 py-6 pb-10 animar-entrada">
-          {children}
+          {permitido ? children : (
+            <div className="card p-10 text-center flex flex-col items-center gap-3 mt-6">
+              <div className="grid place-items-center rounded-2xl" style={{ width: 56, height: 56, background: 'var(--bg-subtle)' }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-subtle)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+              </div>
+              <div className="font-semibold" style={{ color: 'var(--text)' }}>Sin acceso a esta sección</div>
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>No tienes permiso para ver este módulo. Habla con tu gestor.</div>
+              <Link href="/inicio" className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-white text-sm mt-1">Ir al inicio</Link>
+            </div>
+          )}
         </div>
       </main>
     </div>

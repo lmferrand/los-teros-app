@@ -6,6 +6,7 @@ export interface Trabajador {
   rol: string
   telefono: string | null
   activo: boolean | null
+  permisos_modulos?: Record<string, boolean> | null
 }
 
 export const ROLES: { valor: string; label: string; color: string }[] = [

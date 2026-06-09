@@ -4,7 +4,7 @@ import type { Trabajador } from '../trabajadores'
 const T = () => (supabase as any).from('perfiles')
 
 export async function listarPerfiles(): Promise<Trabajador[]> {
-  const { data, error } = await T().select('id, nombre, rol, telefono, activo').order('nombre')
+  const { data, error } = await T().select('id, nombre, rol, telefono, activo, permisos_modulos').order('nombre')
   if (error) throw error
   return (data || []) as Trabajador[]
 }
