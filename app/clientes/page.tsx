@@ -73,12 +73,9 @@ export default function ClientesPage() {
           <div className="flex flex-col gap-2">
             {visibles.map((c, i) => (
               <Link key={c.id} href={`/clientes/${c.id}`} className="card card-hover p-3.5 flex items-center gap-3">
-                <span className="shrink-0 text-sm tabular-nums text-right" style={{ width: 44, color: 'var(--text-subtle)' }}>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-right" style={{ width: 48, color: 'var(--text-subtle)' }}>
                   {paginaSegura * POR_PAGINA + i + 1}
                 </span>
-                <div className="grid place-items-center rounded-full shrink-0 font-semibold" style={{ width: 40, height: 40, background: 'var(--bg-subtle)', color: 'var(--brand-1)' }}>
-                  {(c.nombre || '?').charAt(0).toUpperCase()}
-                </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold truncate" style={{ color: 'var(--text)' }}>{c.nombre}</span>
