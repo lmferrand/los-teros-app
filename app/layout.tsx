@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "./components/ThemeProvider";
@@ -10,11 +10,14 @@ const inter = Inter({
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://app.extraccionesteros.es";
 
+export const viewport: Viewport = {
+  themeColor: "#0ea5e9",
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Los Teros — Control financiero",
   description: "Control de ventas, cobros, facturación, IVA y márgenes — Extracciones Teros",
-  icons: { icon: "/logo.png", apple: "/logo.png" },
   openGraph: {
     title: "Los Teros — Control financiero",
     description: "Control de ventas, cobros, facturación, IVA y márgenes",
