@@ -141,7 +141,11 @@ html.no-theme-transition body {
   to { opacity: 1; transform: translateY(0); }
 }
 .animar-entrada {
-  animation: animar-entrada 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  /* 'backwards' (no 'forwards'/'both'): no deja un transform residual al
+     terminar. Si quedara, el contenedor se volvería el marco de referencia de
+     los position:fixed y los modales se posicionarían dentro de la página en
+     vez de sobre la pantalla. */
+  animation: animar-entrada 360ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* Skeleton shimmer */
