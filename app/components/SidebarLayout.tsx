@@ -2,7 +2,6 @@
 
 import { useSesion } from '@/lib/sesion'
 import { Sidebar, MobileMenu } from './nav'
-import ToggleIva from './ToggleIva'
 
 // Envuelve las páginas privadas con el chrome (sidebar en escritorio, menú
 // deslizante en móvil) y centraliza el guard de autenticación: si no hay
@@ -29,11 +28,10 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       <Sidebar perfil={perfil} />
 
       {/* Cabecera móvil */}
-      <header className="md:hidden sticky top-0 z-20 glass-header px-3 py-2.5 flex items-center justify-between gap-2">
+      <header className="md:hidden sticky top-0 z-20 glass-header px-3 py-2.5 flex items-center gap-3">
         <MobileMenu perfil={perfil} />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="Los Teros" style={{ height: 30, width: 'auto' }} />
-        <ToggleIva compacto />
       </header>
 
       <main className="md:pl-64">

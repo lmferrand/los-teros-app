@@ -68,6 +68,12 @@ function SeccionColapsable({ sec, pathname, onNav }: { sec: { titulo: string; it
       </button>
       {abierta && (
         <div className="flex flex-col gap-1 mt-1">
+          {sec.titulo === 'Financiero' && (
+            <div className="px-3 pb-1.5 flex items-center justify-between">
+              <span className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>Importes</span>
+              <ToggleIva />
+            </div>
+          )}
           {sec.items.map((it) => {
             const Icono = it.icono
             const on = activo(pathname, it.href)
@@ -131,8 +137,7 @@ export function Sidebar({ perfil }: { perfil: Perfil | null }) {
       <div className="px-2 mb-5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="Los Teros" style={{ width: 128, height: 'auto' }} className="mb-1" />
-        <div className="text-xs mb-3" style={{ color: 'var(--text-subtle)' }}>Gestión de empresa</div>
-        <ToggleIva />
+        <div className="text-xs" style={{ color: 'var(--text-subtle)' }}>Gestión de empresa</div>
       </div>
       <Enlaces pathname={pathname} />
       <PieUsuario perfil={perfil} />
@@ -162,7 +167,6 @@ export function MobileMenu({ perfil }: { perfil: Perfil | null }) {
               </div>
               <button onClick={() => setAbierto(false)} className="text-2xl leading-none px-2" style={{ color: 'var(--text-subtle)' }}>×</button>
             </div>
-            <div className="px-2 mb-3"><ToggleIva /></div>
             <Enlaces pathname={pathname} onNav={() => setAbierto(false)} />
             <PieUsuario perfil={perfil} onNav={() => setAbierto(false)} />
           </div>
