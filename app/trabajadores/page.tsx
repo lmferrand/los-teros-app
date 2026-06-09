@@ -121,6 +121,7 @@ function ResetForm({ trabajador, email, onCerrar }: { trabajador: Trabajador; em
           <div className="text-sm font-semibold mb-1" style={{ color: 'var(--green)' }}>Contraseña actualizada ✓</div>
           <div className="text-sm" style={{ color: 'var(--text)' }}><b>Usuario:</b> {email || '—'}</div>
           <div className="text-sm" style={{ color: 'var(--text)' }}><b>Nueva contraseña:</b> <span style={{ fontFamily: 'monospace' }}>{password}</span></div>
+          <BotonCopiar texto={`Usuario: ${email || ''}\nContraseña: ${password}`} />
         </div>
       ) : (
         <div className="flex gap-2 mb-2">
@@ -137,6 +138,18 @@ function ResetForm({ trabajador, email, onCerrar }: { trabajador: Trabajador; em
 }
 
 const L = ({ children }: { children: React.ReactNode }) => <span className="text-xs font-medium" style={{ color: 'var(--text-subtle)' }}>{children}</span>
+
+function BotonCopiar({ texto }: { texto: string }) {
+  const [copiado, setCopiado] = useState(false)
+  async function copiar() {
+    try { await navigator.clipboard.writeText(texto); setCopiado(true); setTimeout(() => setCopiado(false), 1800) } catch { /* noop */ }
+  }
+  return (
+    <button onClick={copiar} className="text-xs font-semibold rounded-lg px-3 py-1.5 mt-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: copiado ? 'var(--green)' : 'var(--brand-1)' }}>
+      {copiado ? 'Copiado ✓' : 'Copiar credenciales'}
+    </button>
+  )
+}
 function Modal({ titulo, children, onCerrar }: { titulo: string; children: React.ReactNode; onCerrar: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={onCerrar}>
@@ -171,6 +184,7 @@ function NuevoForm({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: () 
         <div className="rounded-xl p-3 mb-4" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
           <div className="text-sm" style={{ color: 'var(--text)' }}><b>Email:</b> {hecho.email}</div>
           <div className="text-sm mt-1" style={{ color: 'var(--text)' }}><b>Contraseña:</b> <span style={{ fontFamily: 'monospace' }}>{hecho.password}</span></div>
+          <BotonCopiar texto={`Usuario: ${hecho.email}\nContraseña: ${hecho.password}`} />
         </div>
         <div className="flex justify-end">
           <button onClick={onCreado} className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-white">Hecho</button>
