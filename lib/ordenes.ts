@@ -6,6 +6,7 @@ export interface Orden {
   codigo: string
   tipo: string
   cliente_id: string | null
+  venta_id: string | null
   tecnico_id: string | null
   tecnicos_ids: string[] | null
   estado: string | null

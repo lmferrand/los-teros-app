@@ -58,6 +58,7 @@ export default function FichaPresupuesto() {
     try {
       const o = await crearOrden({
         cliente_id: venta.cliente_id,
+        venta_id: venta.id,
         tipo: tipoOtDesde(venta.tipo_trabajo),
         estado: 'pendiente',
         prioridad: '2',

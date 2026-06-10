@@ -111,6 +111,7 @@ export function OrdenForm({ orden, tecnicos, onCerrar, onGuardado }: { orden: Or
     tipo: orden?.tipo ?? 'limpieza',
     cliente_id: orden?.cliente_id ?? '',
     clienteNombre: '',
+    venta_id: orden?.venta_id ?? '',
     estado: orden?.estado ?? 'pendiente',
     prioridad: orden?.prioridad ?? '2',
     fecha_programada: orden?.fecha_programada ? new Date(orden.fecha_programada).toISOString().slice(0, 16) : '',
@@ -125,14 +126,32 @@ export function OrdenForm({ orden, tecnicos, onCerrar, onGuardado }: { orden: Or
   const [sug, setSug] = useState<{ id: string; nombre: string }[]>([])
   const [abierto, setAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  const [busqV, setBusqV] = useState('')
+  const [vLabel, setVLabel] = useState('')
+  const [sugV, setSugV] = useState<{ id: string; numero: string | null; cliente: string | null }[]>([])
+  const [abiertoV, setAbiertoV] = useState(false)
   const set = (k: string, v: any) => setD((p) => ({ ...p, [k]: v }))
 
-  // Carga el nombre del cliente actual al editar.
+  // Carga el nombre del cliente y del presupuesto actuales al editar.
   useEffect(() => {
     if (orden?.cliente_id) {
       (supabase as any).from('clientes').select('nombre').eq('id', orden.cliente_id).maybeSingle().then(({ data }: any) => { if (data) setD((p) => ({ ...p, clienteNombre: data.nombre })) })
     }
+    if (orden?.venta_id) {
+      (supabase as any).from('ventas').select('numero, cliente').eq('id', orden.venta_id).maybeSingle().then(({ data }: any) => { if (data) setVLabel(`${data.numero || ''} · ${data.cliente || ''}`) })
+    }
   }, [orden])
+
+  useEffect(() => {
+    const t = busqV.trim()
+    if (t.length < 2 || d.venta_id) { setSugV([]); return }
+    let activo = true
+    const tid = setTimeout(async () => {
+      const { data } = await (supabase as any).from('ventas').select('id, numero, cliente').or(`numero.ilike.%${t}%,cliente.ilike.%${t}%`).limit(8)
+      if (activo) setSugV((data || []) as { id: string; numero: string | null; cliente: string | null }[])
+    }, 220)
+    return () => { activo = false; clearTimeout(tid) }
+  }, [busqV, d.venta_id])
 
   useEffect(() => {
     const t = busqueda.trim()
@@ -160,6 +179,10 @@ export function OrdenForm({ orden, tecnicos, onCerrar, onGuardado }: { orden: Or
       tecnicos_ids: d.tecnicos_ids, tecnico_id: d.tecnicos_ids[0] || null,
       fecha_cierre: d.estado === 'completada' ? (orden?.fecha_cierre || new Date().toISOString()) : null,
     }
+    // Solo enviar venta_id si hay vínculo o si se quita uno existente (evita
+    // referenciar la columna antes de ejecutar el SQL si no se usa).
+    if (d.venta_id) payload.venta_id = d.venta_id
+    else if (orden?.venta_id) payload.venta_id = null
     try {
       if (orden) await actualizarOrden(orden.id, payload)
       else await crearOrden(payload)
@@ -187,6 +210,22 @@ export function OrdenForm({ orden, tecnicos, onCerrar, onGuardado }: { orden: Or
                 {sug.map((c) => (
                   <button key={c.id} type="button" onMouseDown={(e) => { e.preventDefault(); set('cliente_id', c.id); set('clienteNombre', c.nombre); setAbierto(false) }} className="block w-full text-left px-3 py-2 text-sm hover:bg-[var(--bg-subtle)]" style={{ color: 'var(--text)' }}>{c.nombre}</button>
                 ))}
+              </div>
+            )}
+          </div>
+          {/* Presupuesto vinculado */}
+          <div className="col-span-2 relative">
+            <L>Presupuesto vinculado (opcional)</L>
+            <input
+              value={d.venta_id ? vLabel : busqV}
+              onChange={(e) => { set('venta_id', ''); setVLabel(''); setBusqV(e.target.value); setAbiertoV(true) }}
+              onFocus={() => setAbiertoV(true)} onBlur={() => setTimeout(() => setAbiertoV(false), 150)}
+              placeholder="Buscar por nº o cliente…" style={inp}
+            />
+            {d.venta_id && <button type="button" onClick={() => { set('venta_id', ''); setVLabel(''); setBusqV('') }} className="absolute right-2 top-7 text-xs" style={{ color: 'var(--text-subtle)' }}>quitar</button>}
+            {abiertoV && sugV.length > 0 && !d.venta_id && (
+              <div className="absolute z-20 mt-1 w-full rounded-xl overflow-hidden" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}>
+                {sugV.map((v) => <button key={v.id} type="button" onMouseDown={(e) => { e.preventDefault(); set('venta_id', v.id); setVLabel(`${v.numero || ''} · ${v.cliente || ''}`); setAbiertoV(false) }} className="block w-full text-left px-3 py-2 text-sm hover:bg-[var(--bg-subtle)]" style={{ color: 'var(--text)' }}>{v.numero || '—'} · {v.cliente || ''}</button>)}
               </div>
             )}
           </div>
