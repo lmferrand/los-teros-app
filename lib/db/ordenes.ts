@@ -23,6 +23,15 @@ export async function obtenerOrden(id: string): Promise<OrdenConRefs | null> {
   return (data as OrdenConRefs) || null
 }
 
+// OT vinculada a un presupuesto (si existe). Tolerante si aún no hay columna venta_id.
+export async function ordenPorVenta(ventaId: string): Promise<{ id: string; codigo: string } | null> {
+  try {
+    const { data, error } = await T('ordenes').select('id, codigo').eq('venta_id', ventaId).order('created_at', { ascending: false })
+    if (error) return null
+    return data && data[0] ? data[0] : null
+  } catch { return null }
+}
+
 async function generarCodigo(): Promise<string> {
   const { count } = await T('ordenes').select('*', { count: 'exact', head: true })
   return `OT-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(4, '0')}`

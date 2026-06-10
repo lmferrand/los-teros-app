@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { Venta, Gasto } from '@/lib/tipos'
-import { obtenerVenta, borrarVenta } from '@/lib/db/ventas'
+import { obtenerVenta, borrarVenta, actualizarVenta } from '@/lib/db/ventas'
 import { listarGastos } from '@/lib/db/gastos'
-import { crearOrden } from '@/lib/db/ordenes'
+import { crearOrden, ordenPorVenta } from '@/lib/db/ordenes'
 import { calcularVenta } from '@/lib/calculos'
 import {
   eur, pct, fechaCorta, labelTipoTrabajo, nivelMargen, colorMargen, labelMargen,
@@ -27,12 +27,13 @@ export default function FichaPresupuesto() {
   const [cargando, setCargando] = useState(true)
   const [borrando, setBorrando] = useState(false)
   const [generando, setGenerando] = useState(false)
+  const [otVinc, setOtVinc] = useState<{ id: string; codigo: string } | null>(null)
 
   useEffect(() => {
     let activo = true
-    Promise.all([obtenerVenta(id), listarGastos(id)]).then(([v, g]) => {
+    Promise.all([obtenerVenta(id), listarGastos(id), ordenPorVenta(id)]).then(([v, g, ot]) => {
       if (!activo) return
-      setVenta(v); setGastos(g); setCargando(false)
+      setVenta(v); setGastos(g); setOtVinc(ot); setCargando(false)
     })
     return () => { activo = false }
   }, [id])
@@ -66,6 +67,8 @@ export default function FichaPresupuesto() {
         descripcion: `Desde presupuesto ${venta.numero || ''} — ${venta.cliente || ''}`.trim(),
         observaciones: venta.observaciones || null,
       })
+      // Programar el presupuesto al generar la OT.
+      try { await actualizarVenta(id, { estado: 'programado' }) } catch { /* noop */ }
       router.push(`/ordenes/${o.id}`)
     } catch { setGenerando(false) }
   }
@@ -92,9 +95,15 @@ export default function FichaPresupuesto() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={generarOT} disabled={generando} className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-sm text-white" style={{ opacity: generando ? 0.7 : 1 }}>
-            {generando ? 'Generando…' : 'Generar OT'}
-          </button>
+          {otVinc ? (
+            <Link href={`/ordenes/${otVinc.id}`} className="rounded-xl px-4 py-2 font-semibold text-sm" style={{ background: 'color-mix(in srgb, var(--teal) 14%, transparent)', color: 'var(--teal)' }}>
+              Ver OT {otVinc.codigo}
+            </Link>
+          ) : (
+            <button onClick={generarOT} disabled={generando} className="marca-gradiente rounded-xl px-4 py-2 font-semibold text-sm text-white" style={{ opacity: generando ? 0.7 : 1 }}>
+              {generando ? 'Generando…' : 'Programar (generar OT)'}
+            </button>
+          )}
           <Link href={`/presupuestos/${id}/editar`} className="rounded-xl px-4 py-2 font-semibold text-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text)' }}>
             Editar
           </Link>
