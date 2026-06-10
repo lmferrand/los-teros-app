@@ -82,9 +82,9 @@ export default function DashboardPage() {
               <div className="card p-5 md:p-6 mb-4" style={{ background: 'linear-gradient(135deg, color-mix(in srgb, var(--brand-1) 9%, var(--bg-card)), color-mix(in srgb, var(--teal) 7%, var(--bg-card)))', border: '1px solid color-mix(in srgb, var(--brand-1) 28%, var(--border))', boxShadow: 'var(--shadow-md)' }}>
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-1)' }}>Negocio cerrado · {etiquetaMes(clave)}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-1)' }}>Ventas aprobadas · {etiquetaMes(clave)}</div>
                     <div className="font-bold mt-1" style={{ color: 'var(--text)', fontSize: 'clamp(2rem, 5vw, 3rem)', lineHeight: 1.05 }}>{eur(resumen.ventasAceptadas)}</div>
-                    <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{resumen.ventasAceptadasCount} presupuesto{resumen.ventasAceptadasCount === 1 ? '' : 's'} aceptado{resumen.ventasAceptadasCount === 1 ? '' : 's'} este mes</div>
+                    <div className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{resumen.ventasAceptadasCount} presupuesto{resumen.ventasAceptadasCount === 1 ? '' : 's'} aprobado{resumen.ventasAceptadasCount === 1 ? '' : 's'} este mes · cobrado o no</div>
                   </div>
                   <div className="text-right shrink-0">
                     <div className="rounded-2xl px-4 py-3" style={{ background: `color-mix(in srgb, ${color} 16%, var(--bg-card))`, border: `1px solid ${color}` }}>
@@ -96,7 +96,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-xs mt-3 pt-3" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
-                  Refleja lo realmente vendido este mes, al margen de cuándo se cobre o facture.
+                  Es el total de presupuestos aprobados este mes (por fecha de aceptación), aunque aún no se hayan cobrado ni facturado.
                   {resumen.ventasFuturaFacturacion > 0 && <> De esto, <b style={{ color: 'var(--text)' }}>{eur(resumen.ventasFuturaFacturacion)}</b> se facturará en meses posteriores.</>}
                 </div>
               </div>
