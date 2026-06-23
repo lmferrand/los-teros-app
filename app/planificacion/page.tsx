@@ -7,7 +7,9 @@ import { listarOrdenes, type OrdenConRefs } from '@/lib/db/ordenes'
 import { listarTrabajadores } from '@/lib/db/inventario'
 import { listarTareas, crearTarea, actualizarTarea, borrarTarea } from '@/lib/db/tareas'
 import { PRIORIDADES_TAREA, type Tarea } from '@/lib/tareas'
-import { labelTipoOt } from '@/lib/ordenes'
+import { labelTipoOt, esMiOrden } from '@/lib/ordenes'
+import { useSesion } from '@/lib/sesion'
+import { esRestringido } from '@/lib/acceso'
 import { useDatosFinancieros } from '@/lib/useDatos'
 import { esTerminadoNoFacturado } from '@/lib/agregados'
 import { ChipEstadoOt } from '@/app/ordenes/page'
@@ -33,6 +35,8 @@ export default function PlanificacionPage() {
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string | null }[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
+  const { user, perfil } = useSesion()
+  const soloMias = esRestringido(perfil?.rol)
   const { datos } = useDatosFinancieros()
 
   const hoy = new Date()
@@ -43,7 +47,8 @@ export default function PlanificacionPage() {
   async function cargar() {
     try {
       const [o, t, tr] = await Promise.all([listarOrdenes(), listarTareas(), listarTrabajadores()])
-      setOrdenes(o); setTareas(t); setTecnicos(tr)
+      setOrdenes(soloMias ? o.filter((x) => esMiOrden(x, user?.id)) : o)
+      setTareas(t); setTecnicos(tr)
     } catch (e: any) { setError(e.message || 'Error') }
     finally { setCargando(false) }
   }
@@ -118,7 +123,7 @@ export default function PlanificacionPage() {
           <Aviso n={sinFecha.length} label="OTs sin fecha" href="/ordenes" color="var(--amber)" />
           <Aviso n={sinTecnico.length} label="OTs sin técnico" href="/ordenes" color="var(--amber)" />
           <Aviso n={vencidas.length} label="Tareas vencidas" color="var(--red)" />
-          <Aviso n={sinFacturar.length} label="Terminadas sin facturar" href="/alertas" color="var(--amber)" />
+          {!soloMias && <Aviso n={sinFacturar.length} label="Terminadas sin facturar" href="/alertas" color="var(--amber)" />}
         </div>
       )}
 

@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabase'
 import { listarOrdenes, crearOrden, actualizarOrden, type OrdenConRefs } from '@/lib/db/ordenes'
 import { listarTrabajadores } from '@/lib/db/inventario'
 import {
-  TIPOS_OT, ESTADOS_OT, ESTADOS_OT_LISTA, PRIORIDADES, DURACIONES, labelTipoOt, type Orden,
+  TIPOS_OT, ESTADOS_OT, ESTADOS_OT_LISTA, PRIORIDADES, DURACIONES, labelTipoOt, esMiOrden, type Orden,
 } from '@/lib/ordenes'
+import { useSesion } from '@/lib/sesion'
+import { esRestringido } from '@/lib/acceso'
 import { fechaCorta } from '@/lib/dominio'
 import { EstadoVacio, SkeletonLista } from '@/app/components/ui'
 
@@ -19,6 +21,8 @@ export function ChipEstadoOt({ estado }: { estado: string | null }) {
 }
 
 export default function OrdenesPage() {
+  const { user, perfil } = useSesion()
+  const soloMias = esRestringido(perfil?.rol)
   const [ordenes, setOrdenes] = useState<OrdenConRefs[]>([])
   const [tecnicos, setTecnicos] = useState<{ id: string; nombre: string | null }[]>([])
   const [cargando, setCargando] = useState(true)
@@ -40,12 +44,13 @@ export default function OrdenesPage() {
   const lista = useMemo(() => {
     const t = q.trim().toLowerCase()
     return ordenes.filter((o) => {
+      if (soloMias && !esMiOrden(o, user?.id)) return false
       if (fEstado && o.estado !== fEstado) return false
       if (fPrioridad && (o.prioridad || '2') !== fPrioridad) return false
       if (t && !`${o.codigo} ${o.clientes?.nombre || ''}`.toLowerCase().includes(t)) return false
       return true
     })
-  }, [ordenes, q, fEstado, fPrioridad])
+  }, [ordenes, q, fEstado, fPrioridad, soloMias, user])
 
   return (
     <div>

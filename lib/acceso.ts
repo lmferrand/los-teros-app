@@ -35,6 +35,9 @@ export const ROLES_RESTRINGIDOS = ['tecnico']
 // Módulos confidenciales (con precios/finanzas/documentos/usuarios).
 export const MODULOS_CONFIDENCIALES = ['dashboard', 'presupuestos', 'facturacion', 'margenes', 'alertas', 'documentos', 'trabajadores']
 
+// Acceso por defecto de un técnico (solo lo necesario para su trabajo).
+export const MODULOS_TECNICO_DEFAULT = ['ordenes', 'planificacion', 'inventario', 'escanear', 'albaranes']
+
 export function esAdmin(rol: string | null | undefined): boolean {
   return ROLES_ADMIN.includes(rol || '')
 }
@@ -51,11 +54,19 @@ export function puedeVerFinanzas(perfil: PerfilAcceso | null | undefined): boole
 export function tieneAcceso(perfil: PerfilAcceso | null | undefined, modulo: string): boolean {
   if (modulo === 'inicio') return true
   if (esAdmin(perfil?.rol)) return true
-  // Bloqueo duro de módulos confidenciales para roles restringidos (técnicos).
-  if (esRestringido(perfil?.rol) && MODULOS_CONFIDENCIALES.includes(modulo)) return false
   const p = perfil?.permisos_modulos
-  if (p && typeof p === 'object' && Object.keys(p).length > 0) return p[modulo] === true
-  return true // sin permisos definidos → acceso total por defecto
+  const tienePermisos = !!p && typeof p === 'object' && Object.keys(p).length > 0
+
+  if (esRestringido(perfil?.rol)) {
+    // Confidencial: bloqueo duro, ni con permisos.
+    if (MODULOS_CONFIDENCIALES.includes(modulo)) return false
+    // Permisos personalizados si los hay; si no, el mínimo del técnico.
+    if (tienePermisos) return p![modulo] === true
+    return MODULOS_TECNICO_DEFAULT.includes(modulo)
+  }
+
+  if (tienePermisos) return p![modulo] === true
+  return true // resto de roles sin permisos definidos → acceso total por defecto
 }
 
 // ¿Tiene permisos personalizados definidos?

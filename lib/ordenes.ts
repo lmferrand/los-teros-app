@@ -73,6 +73,12 @@ export const DURACIONES = [
 export function labelTipoOt(v: string | null | undefined) {
   return TIPOS_OT.find((t) => t.valor === v)?.label || (v || '—')
 }
+// ¿La OT está asignada a este usuario (técnico)?
+export function esMiOrden(o: { tecnico_id?: string | null; tecnicos_ids?: string[] | null }, userId: string | null | undefined): boolean {
+  if (!userId) return false
+  return o.tecnico_id === userId || !!(o.tecnicos_ids && o.tecnicos_ids.includes(userId))
+}
+
 export function normalizarPrioridad(v: string | null | undefined): string {
   if (v === 'baja' || v === '1') return '1'
   if (v === 'alta' || v === 'urgente' || v === '3') return '3'

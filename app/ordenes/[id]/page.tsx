@@ -12,7 +12,7 @@ import {
 import { listarTrabajadores, listarMateriales, listarEquipos, crearMovimiento, fijarStock, cambiarEstadoEquipo } from '@/lib/db/inventario'
 import { crearAlbaran, obtenerCliente, datosDesdeCliente } from '@/lib/db/albaranes'
 import type { FotoOrden, Incidencia } from '@/lib/ordenes'
-import { ESTADOS_OT, ESTADOS_OT_LISTA, PRIORIDADES, labelTipoOt } from '@/lib/ordenes'
+import { ESTADOS_OT, ESTADOS_OT_LISTA, PRIORIDADES, labelTipoOt, esMiOrden } from '@/lib/ordenes'
 import type { Material, Equipo } from '@/lib/inventario'
 import { labelUnidad } from '@/lib/inventario'
 import { fechaCorta } from '@/lib/dominio'
@@ -21,14 +21,14 @@ import { Campo, SkeletonLista } from '@/app/components/ui'
 import { OrdenForm, ChipEstadoOt } from '../page'
 import GastosSeccion from '@/app/presupuestos/[id]/GastosSeccion'
 import { useSesion } from '@/lib/sesion'
-import { puedeVerFinanzas } from '@/lib/acceso'
+import { puedeVerFinanzas, esRestringido } from '@/lib/acceso'
 
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 10, padding: '8px 10px', fontSize: '0.9rem', width: '100%', marginTop: 3 }
 
 export default function FichaOrden() {
   const id = useParams<{ id: string }>().id
   const router = useRouter()
-  const { perfil } = useSesion()
+  const { user, perfil } = useSesion()
   const verFinanzas = puedeVerFinanzas(perfil)
   const [orden, setOrden] = useState<OrdenConRefs | null>(null)
   const [fotos, setFotos] = useState<FotoOrden[]>([])
@@ -87,6 +87,9 @@ export default function FichaOrden() {
 
   if (cargando) return <SkeletonLista filas={4} />
   if (!orden) return <div className="card p-6 text-sm" style={{ color: 'var(--text-muted)' }}>No se encontró la OT.</div>
+  if (esRestringido(perfil?.rol) && !esMiOrden(orden, user?.id)) {
+    return <div className="card p-8 text-center" style={{ color: 'var(--text-muted)' }}>Esta orden no está asignada a ti.</div>
+  }
 
   const pr = PRIORIDADES[orden.prioridad || '2']
 

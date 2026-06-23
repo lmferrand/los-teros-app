@@ -8,13 +8,14 @@ import { resumenMensual, mesActualClave, esMargenBajo, esTerminadoNoFacturado, e
 import { listarOrdenes, type OrdenConRefs } from '@/lib/db/ordenes'
 import { listarMateriales } from '@/lib/db/inventario'
 import { stockBajo, type Material } from '@/lib/inventario'
+import { esMiOrden } from '@/lib/ordenes'
 import { eur, pct, colorMargen } from '@/lib/dominio'
-import { puedeVerFinanzas } from '@/lib/acceso'
+import { puedeVerFinanzas, esRestringido } from '@/lib/acceso'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 
 export default function InicioPage() {
-  const { perfil } = useSesion()
+  const { user, perfil } = useSesion()
   const { datos, gastos } = useDatosFinancieros()
   const [ordenes, setOrdenes] = useState<OrdenConRefs[]>([])
   const [materiales, setMateriales] = useState<Material[]>([])
@@ -27,8 +28,9 @@ export default function InicioPage() {
   const resumen = useMemo(() => resumenMensual(datos, gastos, mesActualClave()), [datos, gastos])
   const margenRealPct = resumen.ventasAceptadas > 0 ? (resumen.margenReal / resumen.ventasAceptadas) * 100 : null
 
-  const otPendientes = ordenes.filter((o) => o.estado === 'pendiente' || o.estado === 'en_curso')
-  const otHoy = ordenes.filter((o) => (o.fecha_programada || '').slice(0, 10) === hoyISO())
+  const misOrdenes = esRestringido(perfil?.rol) ? ordenes.filter((o) => esMiOrden(o, user?.id)) : ordenes
+  const otPendientes = misOrdenes.filter((o) => o.estado === 'pendiente' || o.estado === 'en_curso')
+  const otHoy = misOrdenes.filter((o) => (o.fecha_programada || '').slice(0, 10) === hoyISO())
   const bajos = materiales.filter(stockBajo)
   const margenBajo = datos.filter(esMargenBajo)
   const sinFacturar = datos.filter(esTerminadoNoFacturado)
