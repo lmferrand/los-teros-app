@@ -55,6 +55,7 @@ export interface Venta {
   total_con_iva: number | null
   importe_cobrado: number | null
   fecha_cobro: string | null
+  fecha_limite_cobro: string | null
   forma_cobro: string | null
   ref_bancaria: string | null
 

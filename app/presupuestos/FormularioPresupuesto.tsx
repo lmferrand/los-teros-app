@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Venta, VentaInput } from '@/lib/tipos'
 import { crearVenta, actualizarVenta } from '@/lib/db/ventas'
+import { asegurarOtAlProgramar } from '@/lib/db/ordenes'
 import { derivarIva } from '@/lib/calculos'
 import { ESTADOS, ESTADO_LABEL, TIPOS_TRABAJO, FORMAS_COBRO, eur } from '@/lib/dominio'
 
@@ -27,6 +28,7 @@ function aDatos(v?: Venta | null): Datos {
     iva_porcentaje: v?.iva_porcentaje ?? 21,
     importe_cobrado: v?.importe_cobrado ?? null,
     fecha_cobro: v?.fecha_cobro ?? '',
+    fecha_limite_cobro: v?.fecha_limite_cobro ?? '',
     forma_cobro: v?.forma_cobro ?? '',
     ref_bancaria: v?.ref_bancaria ?? '',
     fecha_aceptacion: v?.fecha_aceptacion ?? '',
@@ -72,6 +74,8 @@ export default function FormularioPresupuesto({ venta }: { venta?: Venta | null 
       iva_importe: ivaImporte,
       total_con_iva: totalConIva,
     }
+    // No referenciar fecha_limite_cobro si no se usa (por si falta la columna).
+    if (!d.fecha_limite_cobro && !venta?.fecha_limite_cobro) delete (payload as any).fecha_limite_cobro
     try {
       if (!edicion) {
         const { data } = await supabase.auth.getUser()
@@ -80,6 +84,8 @@ export default function FormularioPresupuesto({ venta }: { venta?: Venta | null 
       const res = edicion
         ? await actualizarVenta(venta!.id, payload)
         : await crearVenta(payload)
+      // Al programar, crea la OT automáticamente si no existe.
+      await asegurarOtAlProgramar(res)
       router.push(`/presupuestos/${res.id}`)
     } catch (err: any) {
       setError(err.message || 'Error al guardar')
@@ -126,6 +132,7 @@ export default function FormularioPresupuesto({ venta }: { venta?: Venta | null 
           <Numero label="% IVA" v={d.iva_porcentaje} on={(x) => set('iva_porcentaje', x)} />
           <Numero label="Importe cobrado" v={d.importe_cobrado} on={(x) => set('importe_cobrado', x)} />
           <FechaF label="Fecha de cobro" v={d.fecha_cobro} on={(x) => set('fecha_cobro', x)} />
+          <FechaF label="Plazo de cobro (fecha límite)" v={d.fecha_limite_cobro} on={(x) => set('fecha_limite_cobro', x)} />
           <SelectF label="Forma de cobro" v={d.forma_cobro} on={(x) => set('forma_cobro', x)}
             ops={FORMAS_COBRO.map((f) => ({ v: f, l: f }))} permitirVacio />
           <Texto label="Referencia bancaria" v={d.ref_bancaria} on={(x) => set('ref_bancaria', x)} />

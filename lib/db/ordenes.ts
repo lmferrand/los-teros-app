@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import type { Orden, FotoOrden, Incidencia } from '../ordenes'
+import type { Venta } from '../tipos'
 
 const T = (n: string) => (supabase as any).from(n)
 const BUCKET = 'fotos-ordenes'
@@ -21,6 +22,37 @@ export async function listarOrdenes(): Promise<OrdenConRefs[]> {
 export async function obtenerOrden(id: string): Promise<OrdenConRefs | null> {
   const { data } = await T('ordenes').select('*, clientes(nombre), perfiles!tecnico_id(nombre)').eq('id', id).maybeSingle()
   return (data as OrdenConRefs) || null
+}
+
+function tipoOtDesdeVenta(t: string | null): string {
+  if (t === 'sustitucion_turbina') return 'sustitucion'
+  if (t === 'reparacion') return 'mantenimiento'
+  if (t === 'limpieza' || t === 'instalacion') return t
+  return 'otro'
+}
+
+// Crea la OT a partir de un presupuesto (mapeo estándar).
+export async function crearOtDesdePresupuesto(venta: Venta): Promise<Orden> {
+  return crearOrden({
+    cliente_id: venta.cliente_id,
+    venta_id: venta.id,
+    tipo: tipoOtDesdeVenta(venta.tipo_trabajo),
+    estado: 'pendiente',
+    prioridad: '2',
+    fecha_programada: venta.fecha_prevista_ejecucion ? new Date(venta.fecha_prevista_ejecucion).toISOString() : null,
+    descripcion: `Desde presupuesto ${venta.numero || ''} — ${venta.cliente || ''}`.trim(),
+    observaciones: venta.observaciones || null,
+  })
+}
+
+// Si el presupuesto está en "programado" y no tiene OT, la crea. Tolerante si
+// aún no existe la columna venta_id (no rompe nada).
+export async function asegurarOtAlProgramar(venta: Venta): Promise<void> {
+  if (venta.estado !== 'programado') return
+  try {
+    const existe = await ordenPorVenta(venta.id)
+    if (!existe) await crearOtDesdePresupuesto(venta)
+  } catch { /* sin columna venta_id aún: se ignora */ }
 }
 
 // OT vinculada a un presupuesto (si existe). Tolerante si aún no hay columna venta_id.

@@ -140,6 +140,10 @@ export default function FichaPresupuesto() {
           <Cifra label="Total con IVA" valor={eur(calc.totalConIva)} destacado />
           <Cifra label="Cobrado" valor={eur(calc.importeCobrado)} color="var(--green)" />
           <Cifra label="Pendiente de cobro" valor={eur(calc.pendienteCobro)} color={calc.pendienteCobro > 0 ? 'var(--amber)' : 'var(--text)'} />
+          {(calc.pendienteCobro > 0 || venta.fecha_limite_cobro) && (() => {
+            const vencido = calc.pendienteCobro > 0 && !!venta.fecha_limite_cobro && venta.fecha_limite_cobro.slice(0, 10) < new Date().toISOString().slice(0, 10)
+            return <Cifra label={vencido ? 'Plazo de cobro · VENCIDO' : 'Plazo de cobro'} valor={fechaCorta(venta.fecha_limite_cobro)} color={vencido ? 'var(--red)' : 'var(--text)'} />
+          })()}
           <Cifra label="Pendiente de facturar" valor={eur(calc.pendienteFacturar)} color={calc.pendienteFacturar > 0 ? 'var(--amber)' : 'var(--text)'} />
           <Cifra label="Gastos estimados" valor={eur(conIva ? calc.gastosEstConIva : calc.gastosEstSinIva)} />
           <Cifra label="Gastos reales" valor={eur(conIva ? calc.gastosRealConIva : calc.gastosRealSinIva)} color={calc.sobrecoste ? 'var(--red)' : 'var(--text)'} />

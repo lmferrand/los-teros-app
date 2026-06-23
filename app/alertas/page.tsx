@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useDatosFinancieros } from '@/lib/useDatos'
 import {
   esMargenBajo, esSobrecoste, esCobradoNoProgramado, esTerminadoNoFacturado,
-  esTurbinaSinDevolver, type VentaCalc,
+  esTurbinaSinDevolver, esCobroVencido, type VentaCalc,
 } from '@/lib/agregados'
 import { eur, pct, fechaCorta } from '@/lib/dominio'
 import { EstadoChip, SkeletonLista } from '@/app/components/ui'
@@ -16,6 +16,7 @@ export default function AlertasPage() {
   const grupos = useMemo(() => [
     { titulo: 'Margen inferior al 30%', color: 'var(--red)', items: datos.filter(esMargenBajo), detalle: (d: VentaCalc) => pct(d.calc.margenRealPct ?? d.calc.margenEstPct) },
     { titulo: 'Gastos reales por encima de lo previsto', color: 'var(--red)', items: datos.filter(esSobrecoste), detalle: (d: VentaCalc) => `+${eur(d.calc.desviacionGastos)}` },
+    { titulo: 'Cobro pendiente fuera de plazo', color: 'var(--red)', items: datos.filter(esCobroVencido), detalle: (d: VentaCalc) => `Falta ${eur(d.calc.pendienteCobro)} · venció ${fechaCorta(d.v.fecha_limite_cobro)}` },
     { titulo: 'Cobrados pero no programados', color: 'var(--amber)', items: datos.filter(esCobradoNoProgramado), detalle: (d: VentaCalc) => `Cobrado ${eur(d.calc.importeCobrado)}` },
     { titulo: 'Trabajos terminados sin facturar', color: 'var(--amber)', items: datos.filter(esTerminadoNoFacturado), detalle: (d: VentaCalc) => `Pdte. facturar ${eur(d.calc.pendienteFacturar)}` },
     { titulo: 'Turbina pendiente de devolver', color: 'var(--violet)', items: datos.filter(esTurbinaSinDevolver), detalle: () => 'Instalada · no devuelta' },

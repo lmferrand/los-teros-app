@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useSesion } from '@/lib/sesion'
 import { useDatosFinancieros } from '@/lib/useDatos'
-import { resumenMensual, mesActualClave, esMargenBajo, esTerminadoNoFacturado } from '@/lib/agregados'
+import { resumenMensual, mesActualClave, esMargenBajo, esTerminadoNoFacturado, esCobroVencido } from '@/lib/agregados'
 import { listarOrdenes, type OrdenConRefs } from '@/lib/db/ordenes'
 import { listarMateriales } from '@/lib/db/inventario'
 import { stockBajo, type Material } from '@/lib/inventario'
@@ -31,6 +31,7 @@ export default function InicioPage() {
   const bajos = materiales.filter(stockBajo)
   const margenBajo = datos.filter(esMargenBajo)
   const sinFacturar = datos.filter(esTerminadoNoFacturado)
+  const cobrosVencidos = datos.filter(esCobroVencido)
 
   const hoyTxt = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -66,6 +67,7 @@ export default function InicioPage() {
       {/* Atención */}
       <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Requiere atención</h2>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        <Tile n={cobrosVencidos.length} label="Cobros fuera de plazo" href="/alertas" color="var(--red)" />
         <Tile n={otHoy.length} label="Órdenes de hoy" href="/ordenes" color="var(--brand-1)" />
         <Tile n={otPendientes.length} label="Órdenes pendientes" href="/ordenes" color="var(--amber)" />
         <Tile n={bajos.length} label="Materiales con stock bajo" href="/inventario" color="var(--red)" />

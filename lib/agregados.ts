@@ -44,6 +44,11 @@ export function esTurbinaSinDevolver({ v }: VentaCalc): boolean {
 export function esBloqueado({ v }: VentaCalc): boolean {
   return v.estado === 'pendiente_cierre'
 }
+// Queda dinero por cobrar y ya pasó el plazo de cobro.
+export function esCobroVencido({ v, calc }: VentaCalc): boolean {
+  if (calc.pendienteCobro <= 0 || !v.fecha_limite_cobro) return false
+  return v.fecha_limite_cobro.slice(0, 10) < new Date().toISOString().slice(0, 10)
+}
 export function esPendienteEjecutar({ v }: VentaCalc): boolean {
   const pendientes: EstadoVenta[] = ['presupuesto_aceptado', 'cobrado_parcial', 'cobrado_total', 'pendiente_programar', 'programado']
   return pendientes.includes(v.estado)
