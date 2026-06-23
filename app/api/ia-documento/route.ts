@@ -17,6 +17,7 @@ Usa solo las claves que realmente encuentres en el documento. Claves posibles:
 - empresa_local: empresa o local
 - fecha_aceptacion: fecha del presupuesto en formato YYYY-MM-DD
 - tipo_trabajo: uno de [limpieza, instalacion, reparacion, sustitucion_turbina, otro]
+- descripcion: descripción DETALLADA y clara de lo que se va a realizar (el concepto del presupuesto: tareas, partidas, ubicaciones, equipos). Resume bien el trabajo para que un técnico sepa qué hacer.
 - base_imponible: importe sin IVA (solo el número, sin símbolos)
 - iva_porcentaje: porcentaje de IVA (solo el número, p.ej. 21)
 - total_con_iva: total con IVA (solo el número)

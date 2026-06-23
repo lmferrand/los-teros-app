@@ -9,6 +9,7 @@ import { listarOrdenes, type OrdenConRefs } from '@/lib/db/ordenes'
 import { listarMateriales } from '@/lib/db/inventario'
 import { stockBajo, type Material } from '@/lib/inventario'
 import { eur, pct, colorMargen } from '@/lib/dominio'
+import { puedeVerFinanzas } from '@/lib/acceso'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 
@@ -33,6 +34,7 @@ export default function InicioPage() {
   const sinFacturar = datos.filter(esTerminadoNoFacturado)
   const cobrosVencidos = datos.filter(esCobroVencido)
 
+  const verFin = puedeVerFinanzas(perfil)
   const hoyTxt = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
 
   const accesos = [
@@ -52,27 +54,31 @@ export default function InicioPage() {
         <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Tu empresa de un vistazo.</p>
       </header>
 
-      {/* Este mes */}
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="font-semibold" style={{ color: 'var(--text)' }}>Este mes</h2>
-        <Link href="/dashboard" className="text-sm font-semibold" style={{ color: 'var(--brand-1)' }}>Ver dashboard →</Link>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        <Kpi label="Ventas aceptadas" valor={eur(resumen.ventasAceptadas)} color="var(--brand-1)" />
-        <Kpi label="Cobros" valor={eur(resumen.cobros)} color="var(--green)" />
-        <Kpi label="Facturado" valor={eur(resumen.facturacionEmitida)} color="var(--teal)" />
-        <Kpi label="Margen real" valor={pct(margenRealPct)} color={colorMargen(margenRealPct)} />
-      </div>
+      {/* Este mes (solo quien puede ver finanzas) */}
+      {verFin && (
+        <>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-semibold" style={{ color: 'var(--text)' }}>Este mes</h2>
+            <Link href="/dashboard" className="text-sm font-semibold" style={{ color: 'var(--brand-1)' }}>Ver dashboard →</Link>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <Kpi label="Ventas aceptadas" valor={eur(resumen.ventasAceptadas)} color="var(--brand-1)" />
+            <Kpi label="Cobros" valor={eur(resumen.cobros)} color="var(--green)" />
+            <Kpi label="Facturado" valor={eur(resumen.facturacionEmitida)} color="var(--teal)" />
+            <Kpi label="Margen real" valor={pct(margenRealPct)} color={colorMargen(margenRealPct)} />
+          </div>
+        </>
+      )}
 
       {/* Atención */}
       <h2 className="font-semibold mb-2" style={{ color: 'var(--text)' }}>Requiere atención</h2>
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        <Tile n={cobrosVencidos.length} label="Cobros fuera de plazo" href="/alertas" color="var(--red)" />
         <Tile n={otHoy.length} label="Órdenes de hoy" href="/ordenes" color="var(--brand-1)" />
         <Tile n={otPendientes.length} label="Órdenes pendientes" href="/ordenes" color="var(--amber)" />
         <Tile n={bajos.length} label="Materiales con stock bajo" href="/inventario" color="var(--red)" />
-        <Tile n={sinFacturar.length} label="Terminados sin facturar" href="/alertas" color="var(--amber)" />
-        <Tile n={margenBajo.length} label="Margen inferior al 30%" href="/alertas" color="var(--red)" />
+        {verFin && <Tile n={cobrosVencidos.length} label="Cobros fuera de plazo" href="/alertas" color="var(--red)" />}
+        {verFin && <Tile n={sinFacturar.length} label="Terminados sin facturar" href="/alertas" color="var(--amber)" />}
+        {verFin && <Tile n={margenBajo.length} label="Margen inferior al 30%" href="/alertas" color="var(--red)" />}
       </div>
 
       {/* Accesos rápidos */}

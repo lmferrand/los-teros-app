@@ -29,13 +29,30 @@ export const MODULOS: { modulo: string; label: string; seccion: 'Financiero' | '
 
 export const ROLES_ADMIN = ['gerente', 'oficina']
 
+// Roles que NUNCA ven información confidencial (precios, finanzas, documentos).
+export const ROLES_RESTRINGIDOS = ['tecnico']
+
+// Módulos confidenciales (con precios/finanzas/documentos/usuarios).
+export const MODULOS_CONFIDENCIALES = ['dashboard', 'presupuestos', 'facturacion', 'margenes', 'alertas', 'documentos', 'trabajadores']
+
 export function esAdmin(rol: string | null | undefined): boolean {
   return ROLES_ADMIN.includes(rol || '')
+}
+
+export function esRestringido(rol: string | null | undefined): boolean {
+  return ROLES_RESTRINGIDOS.includes(rol || '')
+}
+
+// ¿Puede ver importes/finanzas (precios de presupuestos, márgenes…)?
+export function puedeVerFinanzas(perfil: PerfilAcceso | null | undefined): boolean {
+  return !esRestringido(perfil?.rol)
 }
 
 export function tieneAcceso(perfil: PerfilAcceso | null | undefined, modulo: string): boolean {
   if (modulo === 'inicio') return true
   if (esAdmin(perfil?.rol)) return true
+  // Bloqueo duro de módulos confidenciales para roles restringidos (técnicos).
+  if (esRestringido(perfil?.rol) && MODULOS_CONFIDENCIALES.includes(modulo)) return false
   const p = perfil?.permisos_modulos
   if (p && typeof p === 'object' && Object.keys(p).length > 0) return p[modulo] === true
   return true // sin permisos definidos → acceso total por defecto

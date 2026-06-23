@@ -6,7 +6,7 @@ import Link from 'next/link'
 import type { Venta, Gasto } from '@/lib/tipos'
 import { obtenerVenta, borrarVenta, actualizarVenta } from '@/lib/db/ventas'
 import { listarGastos } from '@/lib/db/gastos'
-import { crearOrden, ordenPorVenta } from '@/lib/db/ordenes'
+import { crearOtDesdePresupuesto, ordenPorVenta } from '@/lib/db/ordenes'
 import { calcularVenta } from '@/lib/calculos'
 import {
   eur, pct, fechaCorta, labelTipoTrabajo, nivelMargen, colorMargen, labelMargen,
@@ -47,26 +47,11 @@ export default function FichaPresupuesto() {
     router.push('/presupuestos')
   }
 
-  function tipoOtDesde(t: string | null): string {
-    if (t === 'sustitucion_turbina') return 'sustitucion'
-    if (t === 'reparacion') return 'mantenimiento'
-    if (t === 'limpieza' || t === 'instalacion') return t
-    return 'otro'
-  }
   async function generarOT() {
     if (!venta) return
     setGenerando(true)
     try {
-      const o = await crearOrden({
-        cliente_id: venta.cliente_id,
-        venta_id: venta.id,
-        tipo: tipoOtDesde(venta.tipo_trabajo),
-        estado: 'pendiente',
-        prioridad: '2',
-        fecha_programada: venta.fecha_prevista_ejecucion ? new Date(venta.fecha_prevista_ejecucion).toISOString() : null,
-        descripcion: `Desde presupuesto ${venta.numero || ''} — ${venta.cliente || ''}`.trim(),
-        observaciones: venta.observaciones || null,
-      })
+      const o = await crearOtDesdePresupuesto(venta)
       // Programar el presupuesto al generar la OT.
       try { await actualizarVenta(id, { estado: 'programado' }) } catch { /* noop */ }
       router.push(`/ordenes/${o.id}`)

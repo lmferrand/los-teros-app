@@ -20,12 +20,16 @@ import { comprimirImagen } from '@/lib/imagen'
 import { Campo, SkeletonLista } from '@/app/components/ui'
 import { OrdenForm, ChipEstadoOt } from '../page'
 import GastosSeccion from '@/app/presupuestos/[id]/GastosSeccion'
+import { useSesion } from '@/lib/sesion'
+import { puedeVerFinanzas } from '@/lib/acceso'
 
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', borderRadius: 10, padding: '8px 10px', fontSize: '0.9rem', width: '100%', marginTop: 3 }
 
 export default function FichaOrden() {
   const id = useParams<{ id: string }>().id
   const router = useRouter()
+  const { perfil } = useSesion()
+  const verFinanzas = puedeVerFinanzas(perfil)
   const [orden, setOrden] = useState<OrdenConRefs | null>(null)
   const [fotos, setFotos] = useState<FotoOrden[]>([])
   const [incidencias, setIncidencias] = useState<Incidencia[]>([])
@@ -143,8 +147,8 @@ export default function FichaOrden() {
       {/* Consumos */}
       <ConsumosSeccion ordenId={id} movs={movs} onCambio={cargar} />
 
-      {/* Gastos del presupuesto vinculado */}
-      {orden.venta_id && (
+      {/* Gastos del presupuesto vinculado (oculto a técnicos) */}
+      {orden.venta_id && verFinanzas && (
         <div>
           <Link href={`/presupuestos/${orden.venta_id}`} className="inline-flex items-center gap-1.5 text-sm font-semibold mb-2" style={{ color: 'var(--brand-1)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12h6m-6 4h6m-6-8h6M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" /></svg>

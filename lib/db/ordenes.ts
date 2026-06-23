@@ -40,8 +40,11 @@ export async function crearOtDesdePresupuesto(venta: Venta): Promise<Orden> {
     estado: 'pendiente',
     prioridad: '2',
     fecha_programada: venta.fecha_prevista_ejecucion ? new Date(venta.fecha_prevista_ejecucion).toISOString() : null,
-    descripcion: `Desde presupuesto ${venta.numero || ''} — ${venta.cliente || ''}`.trim(),
-    observaciones: venta.observaciones || null,
+    // La descripción de la OT detalla QUÉ se va a realizar (concepto del presupuesto).
+    descripcion: (venta.observaciones && venta.observaciones.trim())
+      ? venta.observaciones
+      : `${venta.tipo_trabajo || 'Trabajo'} para ${venta.cliente || 'cliente'}`.trim(),
+    observaciones: `Generado desde el presupuesto ${venta.numero || ''}`.trim(),
   })
 }
 
