@@ -21,7 +21,7 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
   return (
     <>
       {publica ? children : <SidebarLayout>{children}</SidebarLayout>}
-      <BotonTema />
+      {publica && <BotonTema />}
     </>
   )
 }

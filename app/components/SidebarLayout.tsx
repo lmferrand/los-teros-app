@@ -1,10 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useSesion } from '@/lib/sesion'
 import { tieneAcceso } from '@/lib/acceso'
 import { Sidebar, MobileMenu } from './nav'
+import BotonPerfil from './BotonPerfil'
+import AyudaContextual from './AyudaContextual'
+import Tutorial from './Tutorial'
 
 // Envuelve las páginas privadas con el chrome (sidebar en escritorio, menú
 // deslizante en móvil) y centraliza el guard de autenticación: si no hay
@@ -14,6 +18,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname()
   const modulo = pathname.split('/')[1] || 'inicio'
   const permitido = tieneAcceso(perfil, modulo)
+  const [tutorial, setTutorial] = useState(false)
 
   if (cargando || !user) {
     return (
@@ -32,6 +37,8 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   return (
     <div className="min-h-screen">
       <Sidebar perfil={perfil} />
+      <BotonPerfil perfil={perfil} onVerTutorial={() => setTutorial(true)} />
+      {tutorial && <Tutorial onCerrar={() => setTutorial(false)} />}
 
       {/* Cabecera móvil */}
       <header className="md:hidden sticky top-0 z-20 glass-header px-3 py-2.5 flex items-center gap-3">
@@ -42,6 +49,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
 
       <main className="md:pl-64">
         <div className="mx-auto w-full max-w-6xl px-4 md:px-8 py-6 pb-10 animar-entrada">
+          {permitido && <AyudaContextual modulo={modulo} />}
           {permitido ? children : (
             <div className="card p-10 text-center flex flex-col items-center gap-3 mt-6">
               <div className="grid place-items-center rounded-2xl" style={{ width: 56, height: 56, background: 'var(--bg-subtle)' }}>
